@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.movie.backend.mapper.RatingMapper">
+
+    <resultMap id="BaseResultMap" type="com.movie.backend.entity.Rating">
+        <result column="user_id" property="userId" />
+        <result column="movie_id" property="movieId" />
+        <result column="rating" property="rating" />
+        <result column="rating_time" property="ratingTime" />
+    </resultMap>
+
+    <insert id="insert" parameterType="com.movie.backend.entity.Rating">
+        INSERT INTO ratings (user_id, movie_id, rating, rating_time)
+        VALUES (#{userId}, #{movieId}, #{rating}, #{ratingTime})
+    </insert>
+
+    <update id="updateByUserAndMovie">
+        UPDATE ratings 
+        SET rating = #{rating}, rating_time = #{ratingTime}
+        WHERE user_id = #{userId} AND movie_id = #{movieId}
+    </update>
+
+    <select id="selectByUserAndMovie" resultMap="BaseResultMap">
+        SELECT rating_id, user_id, movie_id, rating, rating_time
+        FROM ratings
+        WHERE user_id = #{userId} AND movie_id = #{movieId}
+    </select>
+
+    <select id="selectByUserId" resultMap="BaseResultMap">
+        SELECT rating_id, user_id, movie_id, rating, rating_time
+        FROM ratings
+        WHERE user_id = #{userId}
+        ORDER BY rating_time DESC
+    </select>
+
+    <select id="selectByMovieId" resultMap="BaseResultMap">
+        SELECT rating_id, user_id, movie_id, rating, rating_time
+        FROM ratings
+        WHERE movie_id = #{movieId}
+    </select>
+
+    <select id="selectVOByUserId" resultType="com.movie.backend.dto.MyRatingVO">
+        SELECT 
+            r.movie_id as id,
+            r.movie_id as movieId,
+            m.name as movieName,
+            m.cover as posterUrl,
+            r.rating as rating,
+            r.rating_time as ratingTime,
+            m.storyline as description
+        FROM ratings r
+        JOIN movies m ON r.movie_id = m.movie_id
+        WHERE r.user_id = #{userId}
+        ORDER BY r.rating_time DESC
+    </select>
+
+    <delete id="deleteByUserId">
+        DELETE FROM ratings WHERE user_id = #{userId}
+    </delete>
+
+    <delete id="deleteBatch">
+        DELETE FROM ratings 
+        WHERE user_id = #{userId} 
+        AND movie_id IN 
+        <foreach collection="movieIds" item="movieId" open="(" separator="," close=")">
+            #{movieId}
+        </foreach>
+    </delete>
+</mapper>

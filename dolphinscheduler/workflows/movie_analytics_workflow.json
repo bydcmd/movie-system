@@ -1,0 +1,335 @@
+{
+  "processDefinition": {
+    "name": "Movie_Analytics_Daily",
+    "description": "电影数据分析每日工作流 - 包含热度计算和评分融合",
+    "globalParams": [
+      {
+        "prop": "calc_date",
+        "value": "${system.biz.date}",
+        "type": "VARCHAR",
+        "direct": "IN"
+      },
+      {
+        "prop": "jdbc_url",
+        "value": "jdbc:mysql://localhost:3306/movie_db?useSSL=false",
+        "type": "VARCHAR",
+        "direct": "IN"
+      },
+      {
+        "prop": "db_user",
+        "value": "root",
+        "type": "VARCHAR",
+        "direct": "IN"
+      },
+      {
+        "prop": "db_password",
+        "value": "${movie_db_password}",
+        "type": "VARCHAR",
+        "direct": "IN"
+      },
+      {
+        "prop": "hive_db",
+        "value": "ods_movie_db",
+        "type": "VARCHAR",
+        "direct": "IN"
+      }
+    ],
+    "tasks": [
+      {
+        "name": "Data_Quality_Check",
+        "description": "数据质量检查 - 检查ODS层数据是否就绪",
+        "taskType": "SQL",
+        "taskParams": {
+          "type": "HIVE",
+          "datasource": 1,
+          "sql": "SELECT COUNT(*) as cnt FROM ${hive_db}.ods_ratings WHERE dt = '${calc_date}'",
+          "udfs": "",
+          "sqlType": 0,
+          "title": "检查评分数据",
+          "receivers": "",
+          "receiversCc": "",
+          "showType": "TABLE",
+          "localParams": [],
+          "resourceList": [],
+          "dependence": {}
+        },
+        "flag": "YES",
+        "taskPriority": "MEDIUM",
+        "workerGroup": "default",
+        "failRetryTimes": 3,
+        "failRetryInterval": 5,
+        "timeoutFlag": "OPEN",
+        "timeoutNotifyStrategy": ["WARN"],
+        "timeout": 300
+      },
+      {
+        "name": "Hot_Movies_Calc",
+        "description": "电影热度计算 - 计算日/周/月热度榜",
+        "taskType": "SPARK",
+        "taskParams": {
+          "programType": "PYTHON",
+          "mainClass": "",
+          "mainJar": {
+            "id": null,
+            "res": "spark/jobs/hot_movies_calc.py"
+          },
+          "deployMode": "cluster",
+          "resourceList": [
+            {
+              "id": null,
+              "res": "spark/jobs/hot_movies_calc.py"
+            }
+          ],
+          "localParams": [
+            {
+              "prop": "--calc-date",
+              "value": "${calc_date}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            },
+            {
+              "prop": "--jdbc-url",
+              "value": "${jdbc_url}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            },
+            {
+              "prop": "--db-user",
+              "value": "${db_user}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            },
+            {
+              "prop": "--db-password",
+              "value": "${db_password}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            },
+            {
+              "prop": "--hive-db",
+              "value": "${hive_db}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            }
+          ],
+          "dependence": {
+            "relation": "AND",
+            "dependTaskList": [
+              {
+                "depTaskCode": "Data_Quality_Check",
+                "depTaskVersion": 1
+              }
+            ]
+          },
+          "sparkVersion": "SPARK2",
+          "driverCores": 1,
+          "driverMemory": "2G",
+          "numExecutors": 2,
+          "executorMemory": "2G",
+          "executorCores": 1,
+          "others": "--conf spark.sql.adaptive.enabled=true --conf spark.sql.adaptive.coalescePartitions.enabled=true"
+        },
+        "flag": "YES",
+        "taskPriority": "HIGH",
+        "workerGroup": "default",
+        "failRetryTimes": 2,
+        "failRetryInterval": 10,
+        "timeoutFlag": "OPEN",
+        "timeoutNotifyStrategy": ["WARN", "FAILED"],
+        "timeout": 1800
+      },
+      {
+        "name": "Rating_Sync",
+        "description": "评分融合 - 融合豆瓣和本站评分",
+        "taskType": "SPARK",
+        "taskParams": {
+          "programType": "PYTHON",
+          "mainClass": "",
+          "mainJar": {
+            "id": null,
+            "res": "spark/jobs/rating_sync.py"
+          },
+          "deployMode": "cluster",
+          "resourceList": [
+            {
+              "id": null,
+              "res": "spark/jobs/rating_sync.py"
+            }
+          ],
+          "localParams": [
+            {
+              "prop": "--jdbc-url",
+              "value": "${jdbc_url}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            },
+            {
+              "prop": "--db-user",
+              "value": "${db_user}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            },
+            {
+              "prop": "--db-password",
+              "value": "${db_password}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            },
+            {
+              "prop": "--hive-db",
+              "value": "${hive_db}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            },
+            {
+              "prop": "--min-votes",
+              "value": "10",
+              "direct": "IN",
+              "type": "VARCHAR"
+            },
+            {
+              "prop": "--smooth-k",
+              "value": "50",
+              "direct": "IN",
+              "type": "VARCHAR"
+            }
+          ],
+          "dependence": {
+            "relation": "AND",
+            "dependTaskList": [
+              {
+                "depTaskCode": "Data_Quality_Check",
+                "depTaskVersion": 1
+              }
+            ]
+          },
+          "sparkVersion": "SPARK2",
+          "driverCores": 1,
+          "driverMemory": "2G",
+          "numExecutors": 2,
+          "executorMemory": "2G",
+          "executorCores": 1,
+          "others": "--conf spark.sql.adaptive.enabled=true"
+        },
+        "flag": "YES",
+        "taskPriority": "HIGH",
+        "workerGroup": "default",
+        "failRetryTimes": 2,
+        "failRetryInterval": 10,
+        "timeoutFlag": "OPEN",
+        "timeoutNotifyStrategy": ["WARN", "FAILED"],
+        "timeout": 1800
+      },
+      {
+        "name": "Data_Validation",
+        "description": "结果验证 - 检查计算结果是否正确写入",
+        "taskType": "SQL",
+        "taskParams": {
+          "type": "MYSQL",
+          "datasource": 2,
+          "sql": "SELECT period_type, COUNT(*) as cnt FROM stats_hot_movies WHERE calc_date = '${calc_date}' GROUP BY period_type",
+          "udfs": "",
+          "sqlType": 0,
+          "title": "验证热度统计结果",
+          "receivers": "data-team@movie.com",
+          "receiversCc": "",
+          "showType": "TABLE",
+          "localParams": [],
+          "resourceList": [],
+          "dependence": {
+            "relation": "AND",
+            "dependTaskList": [
+              {
+                "depTaskCode": "Hot_Movies_Calc",
+                "depTaskVersion": 1
+              },
+              {
+                "depTaskCode": "Rating_Sync",
+                "depTaskVersion": 1
+              }
+            ]
+          }
+        },
+        "flag": "YES",
+        "taskPriority": "MEDIUM",
+        "workerGroup": "default",
+        "failRetryTimes": 3,
+        "failRetryInterval": 5,
+        "timeoutFlag": "OPEN",
+        "timeoutNotifyStrategy": ["WARN"],
+        "timeout": 300
+      },
+      {
+        "name": "Send_Success_Notification",
+        "description": "发送成功通知",
+        "taskType": "HTTP",
+        "taskParams": {
+          "httpParams": [
+            {
+              "prop": "Content-Type",
+              "httpParametersType": "BODY",
+              "value": "application/json"
+            }
+          ],
+          "url": "https://oapi.dingtalk.com/robot/send?access_token=xxx",
+          "httpMethod": "POST",
+          "httpCheckCondition": "STATUS_CODE_DEFAULT",
+          "condition": "",
+          "localParams": [],
+          "resourceList": [],
+          "dependence": {
+            "relation": "AND",
+            "dependTaskList": [
+              {
+                "depTaskCode": "Data_Validation",
+                "depTaskVersion": 1
+              }
+            ]
+          },
+          "requestBody": "{\"msgtype\": \"text\", \"text\": {\"content\": \"【电影数据分析】每日工作流执行成功！日期: ${calc_date}\"}}"
+        },
+        "flag": "YES",
+        "taskPriority": "LOW",
+        "workerGroup": "default",
+        "failRetryTimes": 0,
+        "failRetryInterval": 0,
+        "timeoutFlag": "CLOSE"
+      }
+    ],
+    "taskRelation": [
+      {
+        "name": "Data_Quality_Check",
+        "preTaskCode": 0,
+        "postTaskCode": "Hot_Movies_Calc"
+      },
+      {
+        "name": "Data_Quality_Check",
+        "preTaskCode": 0,
+        "postTaskCode": "Rating_Sync"
+      },
+      {
+        "name": "Hot_Movies_Calc",
+        "preTaskCode": "Data_Quality_Check",
+        "postTaskCode": "Data_Validation"
+      },
+      {
+        "name": "Rating_Sync",
+        "preTaskCode": "Data_Quality_Check",
+        "postTaskCode": "Data_Validation"
+      },
+      {
+        "name": "Data_Validation",
+        "preTaskCode": "Hot_Movies_Calc",
+        "postTaskCode": "Send_Success_Notification"
+      }
+    ],
+    "tenantId": 1,
+    "timeout": 0
+  },
+  "schedule": {
+    "crontab": "0 2 * * * ?",
+    "startTime": "2026-02-12 00:00:00",
+    "endTime": "2099-12-31 23:59:59",
+    "timezoneId": "Asia/Shanghai"
+  }
+}

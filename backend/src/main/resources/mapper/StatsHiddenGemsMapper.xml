@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.movie.backend.mapper.StatsHiddenGemsMapper">
+
+    <resultMap id="BaseResultMap" type="com.movie.backend.entity.StatsHiddenGems">
+        <id column="id" property="id" />
+        <result column="movie_id" property="movieId" />
+        <result column="reason" property="reason" />
+        <result column="calc_date" property="calcDate" />
+    </resultMap>
+
+    <resultMap id="MovieWithReasonResultMap" type="com.movie.backend.entity.Movie">
+        <id column="movie_id" property="id" />
+        <result column="name" property="name" />
+        <result column="alias" property="alias" />
+        <result column="actors" property="actors" typeHandler="com.movie.backend.config.JsonTypeHandler" />
+        <result column="cover" property="cover" />
+        <result column="directors" property="directors" typeHandler="com.movie.backend.config.JsonTypeHandler" />
+        <result column="douban_score" property="doubanScore" />
+        <result column="score" property="score" />
+        <result column="douban_votes" property="doubanVotes" />
+        <result column="votes" property="votes" />
+        <result column="genres" property="genres" />
+        <result column="imdb_id" property="imdbId" />
+        <result column="languages" property="languages" />
+        <result column="mins" property="mins" />
+        <result column="regions" property="regions" />
+        <result column="release_date" property="releaseDate" />
+        <result column="storyline" property="storyline" />
+        <result column="year" property="year" />
+        <result column="writers" property="writers" typeHandler="com.movie.backend.config.JsonTypeHandler" />
+        <result column="reason" property="reason" />
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, movie_id, reason, calc_date
+    </sql>
+
+    <insert id="insert" parameterType="com.movie.backend.entity.StatsHiddenGems">
+        INSERT INTO stats_hidden_gems (movie_id, reason, calc_date)
+        VALUES (#{movieId}, #{reason}, #{calcDate})
+    </insert>
+
+    <insert id="batchInsert">
+        INSERT INTO stats_hidden_gems (movie_id, reason, calc_date)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.movieId}, #{item.reason}, #{item.calcDate})
+        </foreach>
+    </insert>
+
+    <select id="selectByDateWithReason" resultMap="MovieWithReasonResultMap">
+        SELECT 
+            m.movie_id, m.name, m.alias, m.actors, m.cover, m.directors, 
+            m.douban_score, m.douban_votes, m.genres, m.imdb_id, m.languages, 
+            m.mins, m.regions, m.release_date, m.storyline, m.year, m.writers,
+            s.reason
+        FROM stats_hidden_gems s
+        INNER JOIN movies m ON s.movie_id = m.movie_id
+        WHERE s.calc_date = #{calcDate}
+        ORDER BY m.douban_score DESC, m.douban_votes ASC
+        LIMIT #{limit}
+    </select>
+
+    <select id="selectLatestWithReason" resultMap="MovieWithReasonResultMap">
+        SELECT 
+            m.movie_id, m.name, m.alias, m.actors, m.cover, m.directors, 
+            m.douban_score, m.douban_votes, m.genres, m.imdb_id, m.languages, 
+            m.mins, m.regions, m.release_date, m.storyline, m.year, m.writers,
+            s.reason
+        FROM stats_hidden_gems s
+        INNER JOIN movies m ON s.movie_id = m.movie_id
+        WHERE s.calc_date = (
+            SELECT MAX(calc_date) FROM stats_hidden_gems
+        )
+        ORDER BY m.douban_score DESC, m.douban_votes ASC
+        LIMIT #{limit}
+    </select>
+
+    <select id="selectLatestCalcDate" resultType="java.time.LocalDate">
+        SELECT MAX(calc_date) FROM stats_hidden_gems
+    </select>
+
+    <delete id="deleteByDate">
+        DELETE FROM stats_hidden_gems WHERE calc_date = #{calcDate}
+    </delete>
+
+</mapper>

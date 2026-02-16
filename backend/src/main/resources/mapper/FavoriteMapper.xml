@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.movie.backend.mapper.FavoriteMapper">
+
+    <insert id="insert" parameterType="com.movie.backend.entity.Favorite">
+        INSERT INTO favorites (user_id, movie_id, folder_id, create_time)
+        VALUES (#{userId}, #{movieId}, #{folderId}, #{createTime})
+    </insert>
+
+    <delete id="deleteByUserAndMovie">
+        DELETE FROM favorites WHERE user_id = #{userId} AND movie_id = #{movieId}
+    </delete>
+
+    <delete id="deleteBatchByUserAndMovies">
+        DELETE FROM favorites
+        WHERE user_id = #{userId}
+        AND movie_id IN
+        <foreach collection="movieIds" item="movieId" open="(" separator="," close=")">
+            #{movieId}
+        </foreach>
+    </delete>
+
+    <delete id="deleteAllByUserId">
+        DELETE FROM favorites WHERE user_id = #{userId}
+    </delete>
+
+    <delete id="deleteByFolderId">
+        DELETE FROM favorites WHERE folder_id = #{folderId}
+    </delete>
+
+    <select id="selectByUserAndMovie" resultType="com.movie.backend.entity.Favorite">
+        SELECT user_id as userId, movie_id as movieId, folder_id as folderId, create_time as createTime
+        FROM favorites WHERE user_id = #{userId} AND movie_id = #{movieId}
+        LIMIT 1
+    </select>
+
+    <select id="selectAllByUserAndMovie" resultType="com.movie.backend.entity.Favorite">
+        SELECT user_id as userId, movie_id as movieId, folder_id as folderId, create_time as createTime
+        FROM favorites WHERE user_id = #{userId} AND movie_id = #{movieId}
+    </select>
+
+    <select id="selectBatchByUserAndMovies" resultType="com.movie.backend.entity.Favorite">
+        SELECT user_id as userId, movie_id as movieId, folder_id as folderId, create_time as createTime
+        FROM favorites
+        WHERE user_id = #{userId}
+        AND movie_id IN
+        <foreach collection="movieIds" item="movieId" open="(" separator="," close=")">
+            #{movieId}
+        </foreach>
+    </select>
+
+    <select id="selectFavoriteMoviesByUserId" resultMap="com.movie.backend.mapper.MovieMapper.BaseResultMap">
+        SELECT m.* FROM movies m
+                            JOIN favorites f ON m.movie_id = f.movie_id
+        WHERE f.user_id = #{userId}
+        ORDER BY f.create_time DESC
+    </select>
+
+    <resultMap id="MyFavoriteVOMap" type="com.movie.backend.dto.MyFavoriteVO">
+        <result column="movie_id" property="movieId" />
+        <result column="name" property="movieName" />
+        <result column="cover" property="cover" />
+        <result column="score" property="score" />
+        <result column="votes" property="votes" />
+        <result column="genres" property="genres" />
+        <result column="year" property="year" />
+        <result column="directors" property="directors" typeHandler="com.movie.backend.config.JsonTypeHandler" />
+        <result column="actors" property="actors" typeHandler="com.movie.backend.config.JsonTypeHandler" />
+        <result column="regions" property="regions" />
+        <result column="mins" property="mins" />
+        <result column="storyline" property="storyline" />
+        <result column="favorite_time" property="favoriteTime" />
+    </resultMap>
+
+    <select id="selectMyFavoritesByUserId" resultMap="MyFavoriteVOMap">
+        SELECT
+            m.movie_id,
+            m.name,
+            m.cover,
+            m.douban_score as score,
+            m.douban_votes as votes,
+            m.genres,
+            m.year,
+            m.directors,
+            m.actors,
+            m.regions,
+            m.mins,
+            m.storyline,
+            DATE_FORMAT(f.create_time, '%Y-%m-%d %H:%i:%s') as favorite_time
+        FROM movies m
+        JOIN favorites f ON m.movie_id = f.movie_id
+        WHERE f.user_id = #{userId}
+        ORDER BY f.create_time DESC
+    </select>
+
+    <select id="countByUserId" resultType="int">
+        SELECT COUNT(*) FROM favorites WHERE user_id = #{userId}
+    </select>
+
+    <select id="selectByFolderId" resultMap="MyFavoriteVOMap">
+        SELECT
+            m.movie_id,
+            m.name,
+            m.cover,
+            m.douban_score as score,
+            m.douban_votes as votes,
+            m.genres,
+            m.year,
+            m.directors,
+            m.actors,
+            m.regions,
+            m.mins,
+            m.storyline,
+            DATE_FORMAT(f.create_time, '%Y-%m-%d %H:%i:%s') as favorite_time
+        FROM movies m
+        JOIN favorites f ON m.movie_id = f.movie_id
+        WHERE f.user_id = #{userId} 
+        AND f.folder_id = #{folderId}
+        ORDER BY f.create_time DESC
+    </select>
+
+    <delete id="deleteByUserMovieAndFolder">
+        DELETE FROM favorites 
+        WHERE user_id = #{userId} 
+        AND movie_id = #{movieId} 
+        AND folder_id = #{folderId}
+    </delete>
+
+    <select id="selectByUserMovieAndFolder" resultType="com.movie.backend.entity.Favorite">
+        SELECT user_id as userId, movie_id as movieId, folder_id as folderId, create_time as createTime
+        FROM favorites 
+        WHERE user_id = #{userId} 
+        AND movie_id = #{movieId} 
+        AND folder_id = #{folderId}
+        LIMIT 1
+    </select>
+</mapper>

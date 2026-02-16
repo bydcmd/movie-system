@@ -1,0 +1,5847 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Movie Review System API",
+    "description": "Backend API for Movie Review Website",
+    "version": "v1.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:9090",
+      "description": "Generated server url"
+    }
+  ],
+  "security": [
+    {
+      "BearerAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "收藏夹管理",
+      "description": "用户自定义收藏夹相关接口"
+    },
+    {
+      "name": "评论管理",
+      "description": "电影评论的发布、查询、点赞及修改"
+    },
+    {
+      "name": "浏览历史管理",
+      "description": "用户浏览历史相关接口"
+    },
+    {
+      "name": "数据分析与榜单",
+      "description": "基于 Hive/Spark 的数据分析接口"
+    },
+    {
+      "name": "影人库",
+      "description": "查询演员、导演、编剧的详细资料"
+    },
+    {
+      "name": "文件管理",
+      "description": "图片上传及静态资源访问"
+    },
+    {
+      "name": "收藏管理",
+      "description": "电影收藏夹相关接口"
+    },
+    {
+      "name": "后台管理",
+      "description": "管理员专属接口，包含数据统计及各类资源的增删改查"
+    },
+    {
+      "name": "电影管理",
+      "description": "电影查询、搜索、推荐等相关接口"
+    },
+    {
+      "name": "用户管理",
+      "description": "用户登录、注册、个人信息管理相关接口"
+    }
+  ],
+  "paths": {
+    "/user/avatar": {
+      "put": {
+        "tags": [
+          "用户管理"
+        ],
+        "summary": "更新用户头像",
+        "description": "更新当前登录用户的头像 URL",
+        "operationId": "updateAvatar",
+        "parameters": [
+          {
+            "name": "avatarUrl",
+            "in": "query",
+            "description": "头像图片的访问 URL",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/User"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/folder/update": {
+      "put": {
+        "tags": [
+          "收藏夹管理"
+        ],
+        "summary": "更新收藏夹",
+        "description": "修改收藏夹的名称、描述或公开状态",
+        "operationId": "updateFolder",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "dto": {
+                    "$ref": "#/components/schemas/FavoriteFolderDTO"
+                  },
+                  "user": {
+                    "$ref": "#/components/schemas/User"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/region/update": {
+      "put": {
+        "tags": [
+          "后台管理"
+        ],
+        "summary": "更新地区",
+        "description": "修改电影地区信息，自动清除缓存",
+        "operationId": "updateRegion",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Region"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/person/update": {
+      "put": {
+        "tags": [
+          "后台管理"
+        ],
+        "summary": "更新影人信息",
+        "description": "修改影人资料",
+        "operationId": "updatePerson",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Person"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/movie/update": {
+      "put": {
+        "tags": [
+          "后台管理"
+        ],
+        "summary": "更新电影信息",
+        "description": "修改已存在的电影数据",
+        "operationId": "updateMovie",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Movie"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/genre/update": {
+      "put": {
+        "tags": [
+          "后台管理"
+        ],
+        "summary": "更新类型",
+        "description": "修改电影类型信息，自动清除缓存",
+        "operationId": "updateGenre",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Genre"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user/register": {
+      "post": {
+        "tags": [
+          "用户管理"
+        ],
+        "summary": "用户注册",
+        "description": "注册新用户，需要提供账号、密码、昵称等信息",
+        "operationId": "register",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterDTO"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user/refresh": {
+      "post": {
+        "tags": [
+          "用户管理"
+        ],
+        "summary": "刷新 Token",
+        "description": "使用 Refresh Token 换取新的 Access Token",
+        "operationId": "refreshToken",
+        "parameters": [
+          {
+            "name": "refreshToken",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user/logout": {
+      "post": {
+        "tags": [
+          "用户管理"
+        ],
+        "summary": "用户注销",
+        "description": "注销当前用户，将 Token 加入黑名单",
+        "operationId": "logout",
+        "parameters": [
+          {
+            "name": "refreshToken",
+            "in": "query",
+            "description": "Refresh Token",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user/login": {
+      "post": {
+        "tags": [
+          "用户管理"
+        ],
+        "summary": "用户登录",
+        "description": "使用账号和密码登录，成功返回 Token 和用户信息",
+        "operationId": "login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginDTO"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultUserVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user/change-password": {
+      "post": {
+        "tags": [
+          "用户管理"
+        ],
+        "summary": "修改密码",
+        "description": "修改当前用户密码，修改后所有旧 Token 将失效",
+        "operationId": "changePassword",
+        "parameters": [
+          {
+            "name": "oldPassword",
+            "in": "query",
+            "description": "旧密码",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "newPassword",
+            "in": "query",
+            "description": "新密码",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "refreshToken",
+            "in": "query",
+            "description": "Refresh Token",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/User"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user/cancel": {
+      "post": {
+        "tags": [
+          "用户管理"
+        ],
+        "summary": "注销账号",
+        "description": "用户自行注销账号（软删除），保留历史评论和评分，但无法再登录",
+        "operationId": "cancelAccount",
+        "parameters": [
+          {
+            "name": "refreshToken",
+            "in": "query",
+            "description": "Refresh Token",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/User"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rating/update": {
+      "post": {
+        "tags": [
+          "Rating Management"
+        ],
+        "summary": "Update Rating",
+        "operationId": "updateRating",
+        "parameters": [
+          {
+            "name": "movieId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "rating",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/User"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rating/submit": {
+      "post": {
+        "tags": [
+          "Rating Management"
+        ],
+        "summary": "Submit Rating",
+        "operationId": "submitRating",
+        "parameters": [
+          {
+            "name": "movieId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "rating",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/User"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/movie/search": {
+      "post": {
+        "tags": [
+          "电影管理"
+        ],
+        "summary": "高级搜索（分页）",
+        "description": "支持关键词、类型、评分、年份等多条件组合搜索，返回分页结果。用于复杂搜索场景。",
+        "operationId": "search",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MovieSearchDTO"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultPageInfoMovie"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/folder/create": {
+      "post": {
+        "tags": [
+          "收藏夹管理"
+        ],
+        "summary": "创建收藏夹",
+        "description": "创建一个新的自定义收藏夹",
+        "operationId": "createFolder",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "dto": {
+                    "$ref": "#/components/schemas/FavoriteFolderDTO"
+                  },
+                  "user": {
+                    "$ref": "#/components/schemas/User"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultFavoriteFolder"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/favorite/add": {
+      "post": {
+        "tags": [
+          "收藏管理"
+        ],
+        "summary": "添加收藏",
+        "description": "将电影加入用户的收藏夹",
+        "operationId": "addFavorite",
+        "parameters": [
+          {
+            "name": "movieId",
+            "in": "query",
+            "description": "电影ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "folderId",
+            "in": "query",
+            "description": "收藏夹ID，不传则加入默认收藏夹",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/User"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/common/upload": {
+      "post": {
+        "tags": [
+          "文件管理"
+        ],
+        "summary": "上传图片",
+        "description": "支持 JPG/PNG/GIF/WEBP 格式，最大 5MB。返回相对路径 URL。",
+        "operationId": "upload",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "required": [
+                  "file"
+                ],
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "description": "选择图片文件",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/comment/update": {
+      "post": {
+        "tags": [
+          "评论管理"
+        ],
+        "summary": "修改评论及评分",
+        "description": "同时更新评论内容和评分分值",
+        "operationId": "updateComment",
+        "parameters": [
+          {
+            "name": "movieId",
+            "in": "query",
+            "description": "电影ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "content",
+            "in": "query",
+            "description": "新的评论内容",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rating",
+            "in": "query",
+            "description": "新的评分 (1-5)",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/User"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/comment/update-long": {
+      "post": {
+        "tags": [
+          "评论管理"
+        ],
+        "summary": "修改长评",
+        "description": "修改已发布的长评标题和富文本内容",
+        "operationId": "updateLongReview",
+        "parameters": [
+          {
+            "name": "movieId",
+            "in": "query",
+            "description": "电影ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "title",
+            "in": "query",
+            "description": "新的标题",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "content",
+            "in": "query",
+            "description": "新的富文本内容",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/User"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/comment/update-content": {
+      "post": {
+        "tags": [
+          "评论管理"
+        ],
+        "summary": "仅修改评论内容",
+        "description": "只更新文字评论，不改变原有评分",
+        "operationId": "updateCommentContent",
+        "parameters": [
+          {
+            "name": "movieId",
+            "in": "query",
+            "description": "电影ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "content",
+            "in": "query",
+            "description": "新的评论内容",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/User"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/comment/submit": {
+      "post": {
+        "tags": [
+          "评论管理"
+        ],
+        "summary": "发布评论",
+        "description": "对指定电影发布评论，每人每部电影仅限一条",
+        "operationId": "submitComment",
+        "parameters": [
+          {
+            "name": "movieId",
+            "in": "query",
+            "description": "电影ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "content",
+            "in": "query",
+            "description": "评论内容",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/User"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/comment/submit-long": {
+      "post": {
+        "tags": [
+          "评论管理"
+        ],
+        "summary": "发布长评 (图文)",
+        "description": "发布带有标题和富文本内容的长评。图片请先调用 /file/upload 接口上传，获取URL后嵌入content中。",
+        "operationId": "submitLongReview",
+        "parameters": [
+          {
+            "name": "movieId",
+            "in": "query",
+            "description": "电影ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "title",
+            "in": "query",
+            "description": "标题",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "content",
+            "in": "query",
+            "description": "富文本内容(HTML)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/User"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/comment/like": {
+      "post": {
+        "tags": [
+          "评论管理"
+        ],
+        "summary": "点赞/取消点赞评论",
+        "description": "对某条评论进行点赞或取消点赞操作，返回当前是否点赞的状态",
+        "operationId": "toggleLike",
+        "parameters": [
+          {
+            "name": "commentId",
+            "in": "query",
+            "description": "评论ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/User"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultBoolean"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/comment/delete": {
+      "post": {
+        "tags": [
+          "评论管理"
+        ],
+        "summary": "删除评论",
+        "description": "用户删除自己发布的评论",
+        "operationId": "deleteComment",
+        "parameters": [
+          {
+            "name": "commentId",
+            "in": "query",
+            "description": "评论ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/User"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/region/add": {
+      "post": {
+        "tags": [
+          "后台管理"
+        ],
+        "summary": "新增地区",
+        "description": "添加新的电影地区，自动清除缓存",
+        "operationId": "addRegion",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Region"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/person/add": {
+      "post": {
+        "tags": [
+          "后台管理"
+        ],
+        "summary": "新增影人",
+        "description": "录入新的影人资料",
+        "operationId": "addPerson",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Person"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/movie/add": {
+      "post": {
+        "tags": [
+          "后台管理"
+        ],
+        "summary": "新增电影",
+        "description": "录入新的电影数据",
+        "operationId": "addMovie",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Movie"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/genre/add": {
+      "post": {
+        "tags": [
+          "后台管理"
+        ],
+        "summary": "新增类型",
+        "description": "添加新的电影类型，自动清除缓存",
+        "operationId": "addGenre",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Genre"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user/public/{userId}": {
+      "get": {
+        "tags": [
+          "用户管理"
+        ],
+        "summary": "获取公开用户信息",
+        "description": "根据用户ID获取公开的用户信息（不包含敏感信息如邮箱、角色等）",
+        "operationId": "getPublicUserInfo",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "description": "用户ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultPublicUserVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user/info": {
+      "get": {
+        "tags": [
+          "用户管理"
+        ],
+        "summary": "获取当前用户信息",
+        "description": "根据请求头中的 Token 获取当前登录用户的详细信息",
+        "operationId": "getInfo",
+        "parameters": [
+          {
+            "name": "user",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultUserVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rating/my": {
+      "get": {
+        "tags": [
+          "Rating Management"
+        ],
+        "summary": "Get My Ratings",
+        "operationId": "getMyRatings",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            }
+          },
+          {
+            "name": "user",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultPageInfoMyRatingVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rating/get": {
+      "get": {
+        "tags": [
+          "Rating Management"
+        ],
+        "summary": "Get User Rating",
+        "operationId": "getUserRating",
+        "parameters": [
+          {
+            "name": "movieId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "user",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultRating"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/person/{id}/movies": {
+      "get": {
+        "tags": [
+          "影人库"
+        ],
+        "summary": "获取影人相关电影",
+        "description": "查找该影人参与（导演或出演）的所有电影",
+        "operationId": "getMovies",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "影人ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultListMovie"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/person/list": {
+      "get": {
+        "tags": [
+          "影人库"
+        ],
+        "summary": "搜索影人列表",
+        "description": "支持按中英文名模糊搜索，分页返回",
+        "operationId": "getList",
+        "parameters": [
+          {
+            "name": "keyword",
+            "in": "query",
+            "description": "关键词",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": ""
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "页码",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "description": "每页数量",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultPageInfoPerson"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/person/detail/{id}": {
+      "get": {
+        "tags": [
+          "影人库"
+        ],
+        "summary": "获取影人详情",
+        "description": "包含生平简介、出生地、职业等详细信息",
+        "operationId": "getDetail",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "影人ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "example": 1054521
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultPerson"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/movie/years": {
+      "get": {
+        "tags": [
+          "电影管理"
+        ],
+        "summary": "获取所有上映年份列表",
+        "description": "返回数据库中存在的所有上映年份，按倒序排列",
+        "operationId": "getAllYears",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultListInteger"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/movie/year/{year}": {
+      "get": {
+        "tags": [
+          "电影管理"
+        ],
+        "summary": "按年份筛选电影（分页）",
+        "description": "根据上映年份筛选电影，支持分页",
+        "operationId": "getMoviesByYear",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "path",
+            "description": "上映年份",
+            "required": true,
+            "schema": {
+              "minimum": 1900,
+              "type": "integer",
+              "format": "int32"
+            },
+            "example": 2023
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "页码，从1开始",
+            "required": false,
+            "schema": {
+              "minimum": 1,
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            },
+            "example": 1
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "description": "每页数量",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            },
+            "example": 10
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultPageInfoMovie"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/movie/regions": {
+      "get": {
+        "tags": [
+          "电影管理"
+        ],
+        "summary": "获取所有地区列表",
+        "description": "返回数据库中存在的所有制片地区，用于前端分类展示",
+        "operationId": "getAllRegions",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultListString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/movie/recommended": {
+      "get": {
+        "tags": [
+          "电影管理"
+        ],
+        "summary": "获取高分推荐电影",
+        "description": "根据评分（score）排序，返回高分推荐电影列表",
+        "operationId": "getRecommendedMovies",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "返回数量，默认10条，最多100条",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            },
+            "example": 10
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultListMovie"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/movie/latest": {
+      "get": {
+        "tags": [
+          "电影管理"
+        ],
+        "summary": "获取最新电影（分页）",
+        "description": "按上映时间倒序排列，获取最新上映的电影",
+        "operationId": "getLatestMovies",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "页码，从1开始",
+            "required": false,
+            "schema": {
+              "minimum": 1,
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            },
+            "example": 1
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "description": "每页数量",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            },
+            "example": 10
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultPageInfoMovie"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/movie/hot": {
+      "get": {
+        "tags": [
+          "电影管理"
+        ],
+        "summary": "获取热门电影",
+        "description": "根据观看人数（votes）排序，返回当前最热门的电影列表",
+        "operationId": "getHotMovies",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "返回数量，默认10条，最多100条",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            },
+            "example": 10
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultListMovie"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/movie/genres": {
+      "get": {
+        "tags": [
+          "电影管理"
+        ],
+        "summary": "获取所有电影类型列表",
+        "description": "返回数据库中存在的所有电影类型，用于前端分类展示",
+        "operationId": "getAllGenres",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultListString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/movie/genre/{genre}": {
+      "get": {
+        "tags": [
+          "电影管理"
+        ],
+        "summary": "按类型筛选电影（分页）",
+        "description": "根据电影类型（如动作、喜剧、爱情等）筛选电影，支持分页",
+        "operationId": "getMoviesByGenre",
+        "parameters": [
+          {
+            "name": "genre",
+            "in": "path",
+            "description": "电影类型",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "动作"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "页码，从1开始",
+            "required": false,
+            "schema": {
+              "minimum": 1,
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            },
+            "example": 1
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "description": "每页数量",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            },
+            "example": 10
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultPageInfoMovie"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/movie/filter/metadata": {
+      "get": {
+        "tags": [
+          "电影管理"
+        ],
+        "summary": "获取筛选分段元数据",
+        "description": "返回评分、年份等分段筛选的配置，方便前端渲染筛选菜单",
+        "operationId": "getFilterMetadata",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultMapStringObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/movie/detail/{id}": {
+      "get": {
+        "tags": [
+          "电影管理"
+        ],
+        "summary": "获取电影详情",
+        "description": "根据电影ID获取详细信息，包括评分、类型、简介等完整数据。登录用户会自动记录浏览历史。",
+        "operationId": "getDetail_1",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "电影ID",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "type": "integer",
+              "format": "int64"
+            },
+            "example": 1
+          },
+          {
+            "name": "user",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultMovie"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/movie/cold-gems": {
+      "get": {
+        "tags": [
+          "电影管理"
+        ],
+        "summary": "获取冷门佳作",
+        "description": "筛选评分 \u003E 8.0 但评价人数较少（冷门）的优质电影。",
+        "operationId": "getColdGems",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "返回数量",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            },
+            "example": 10
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultListMovie"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/movie/catalog": {
+      "get": {
+        "tags": [
+          "电影管理"
+        ],
+        "summary": "电影目录筛选（GET，分页）",
+        "description": "用于浏览页面的简单目录筛选，支持类型、地区、评分、年代等维度的多选筛选。与POST /search分离，使用GET请求更符合RESTful规范。",
+        "operationId": "getCatalog",
+        "parameters": [
+          {
+            "name": "catalogQuery",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/CatalogQueryDTO"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultPageInfoMovie"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/history/my": {
+      "get": {
+        "tags": [
+          "浏览历史管理"
+        ],
+        "summary": "获取我的浏览历史",
+        "description": "分页获取当前用户的浏览历史记录",
+        "operationId": "getMyHistory",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "页码",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "description": "每页数量",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            }
+          },
+          {
+            "name": "user",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultPageInfoMyFavoriteVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/history/count": {
+      "get": {
+        "tags": [
+          "浏览历史管理"
+        ],
+        "summary": "获取浏览历史总数",
+        "description": "统计当前用户的浏览历史总数",
+        "operationId": "getHistoryCount",
+        "parameters": [
+          {
+            "name": "user",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultInteger"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/folder/{folderId}": {
+      "get": {
+        "tags": [
+          "收藏夹管理"
+        ],
+        "summary": "获取收藏夹详情",
+        "description": "根据ID获取收藏夹的详细信息",
+        "operationId": "getFolderById",
+        "parameters": [
+          {
+            "name": "folderId",
+            "in": "path",
+            "description": "收藏夹ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultFavoriteFolder"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/folder/my": {
+      "get": {
+        "tags": [
+          "收藏夹管理"
+        ],
+        "summary": "获取我的收藏夹列表",
+        "description": "获取当前用户的所有收藏夹",
+        "operationId": "getMyFolders",
+        "parameters": [
+          {
+            "name": "user",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultListFavoriteFolderVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/folder/count": {
+      "get": {
+        "tags": [
+          "收藏夹管理"
+        ],
+        "summary": "统计收藏夹数量",
+        "description": "获取用户的收藏夹总数",
+        "operationId": "countFolders",
+        "parameters": [
+          {
+            "name": "user",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultInteger"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/favorite/status": {
+      "get": {
+        "tags": [
+          "收藏管理"
+        ],
+        "summary": "查询收藏状态",
+        "description": "查询当前用户是否收藏了某部电影",
+        "operationId": "isFavorited",
+        "parameters": [
+          {
+            "name": "movieId",
+            "in": "query",
+            "description": "电影ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "user",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultBoolean"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/favorite/my": {
+      "get": {
+        "tags": [
+          "收藏管理"
+        ],
+        "summary": "获取我的收藏列表",
+        "description": "分页获取当前用户收藏的所有电影，包含收藏时间",
+        "operationId": "getMyFavorites",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "页码",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "description": "每页数量",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            }
+          },
+          {
+            "name": "user",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultPageInfoMyFavoriteVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/favorite/folder/{folderId}": {
+      "get": {
+        "tags": [
+          "收藏管理"
+        ],
+        "summary": "获取收藏夹内电影",
+        "description": "分页获取指定收藏夹内的电影列表",
+        "operationId": "getFolderMovies",
+        "parameters": [
+          {
+            "name": "folderId",
+            "in": "path",
+            "description": "收藏夹ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "页码",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "description": "每页数量",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            }
+          },
+          {
+            "name": "user",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultPageInfoMyFavoriteVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/favorite/count": {
+      "get": {
+        "tags": [
+          "收藏管理"
+        ],
+        "summary": "获取收藏总数",
+        "description": "统计当前用户的收藏电影总数",
+        "operationId": "getFavoritesCount",
+        "parameters": [
+          {
+            "name": "user",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultInteger"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/comment/my": {
+      "get": {
+        "tags": [
+          "评论管理"
+        ],
+        "summary": "获取我的评论历史",
+        "description": "分页获取当前登录用户发布过的所有评论",
+        "operationId": "getMyComments",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "页码",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "description": "每页数量",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            }
+          },
+          {
+            "name": "user",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultPageInfoComment"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/comment/list": {
+      "get": {
+        "tags": [
+          "评论管理"
+        ],
+        "summary": "获取电影评论列表 (基础版)",
+        "description": "分页获取指定电影的评论列表，不包含当前用户的点赞状态",
+        "operationId": "getCommentsByMovie",
+        "parameters": [
+          {
+            "name": "movieId",
+            "in": "query",
+            "description": "电影ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "页码",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "description": "每页数量",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultPageInfoComment"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/comment/list-with-rating": {
+      "get": {
+        "tags": [
+          "评论管理"
+        ],
+        "summary": "获取电影评论列表 (完整版)",
+        "description": "分页获取指定电影的评论列表，包含评论者的用户信息、评分以及当前登录用户的点赞状态",
+        "operationId": "getCommentsWithRatingByMovie",
+        "parameters": [
+          {
+            "name": "movieId",
+            "in": "query",
+            "description": "电影ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "页码",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "description": "每页数量",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            }
+          },
+          {
+            "name": "user",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultPageInfoCommentVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/comment/list-by-type": {
+      "get": {
+        "tags": [
+          "评论管理"
+        ],
+        "summary": "获取评论列表 (区分类型)",
+        "description": "type=1为短评，type=2为长评",
+        "operationId": "getCommentsByType",
+        "parameters": [
+          {
+            "name": "movieId",
+            "in": "query",
+            "description": "电影ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "description": "类型: 1-短评, 2-长评",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "页码",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "description": "每页数量",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            }
+          },
+          {
+            "name": "user",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultPageInfoCommentVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/comment/get": {
+      "get": {
+        "tags": [
+          "评论管理"
+        ],
+        "summary": "获取我的单条评论",
+        "description": "获取当前登录用户对某部电影的评论内容",
+        "operationId": "getUserComment",
+        "parameters": [
+          {
+            "name": "movieId",
+            "in": "query",
+            "description": "电影ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "user",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultComment"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analytics/trending": {
+      "get": {
+        "tags": [
+          "数据分析与榜单"
+        ],
+        "summary": "获取趋势榜单",
+        "description": "获取今日、本周、本月的热门电影。底层基于 Hive/Spark 计算。",
+        "operationId": "getTrendingMovies",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "query",
+            "description": "周期类型: DAILY, WEEKLY, MONTHLY",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultListMovie"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/user/list": {
+      "get": {
+        "tags": [
+          "后台管理"
+        ],
+        "summary": "用户列表管理",
+        "description": "分页查询所有注册用户",
+        "operationId": "getUserList",
+        "parameters": [
+          {
+            "name": "keyword",
+            "in": "query",
+            "description": "搜索关键词 (ID或昵称)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": ""
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "页码",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "description": "每页数量",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultPageInfoUser"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/region/list": {
+      "get": {
+        "tags": [
+          "后台管理"
+        ],
+        "summary": "获取所有地区（完整对象）",
+        "description": "返回所有电影地区的完整信息",
+        "operationId": "getRegionList",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultListRegion"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/person/list": {
+      "get": {
+        "tags": [
+          "后台管理"
+        ],
+        "summary": "影人列表管理",
+        "description": "分页查询所有演员/导演/编剧",
+        "operationId": "getPersonList",
+        "parameters": [
+          {
+            "name": "keyword",
+            "in": "query",
+            "description": "关键词 (中英文名)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": ""
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "页码",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "description": "每页数量",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultPageInfoPerson"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/movie/list": {
+      "get": {
+        "tags": [
+          "后台管理"
+        ],
+        "summary": "电影列表管理",
+        "description": "后台查询电影列表 (无视上下架状态)",
+        "operationId": "getMovieList",
+        "parameters": [
+          {
+            "name": "keyword",
+            "in": "query",
+            "description": "关键词",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": ""
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "页码",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "description": "每页数量",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultPageInfoMovie"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/genre/list": {
+      "get": {
+        "tags": [
+          "后台管理"
+        ],
+        "summary": "获取所有类型（完整对象）",
+        "description": "返回所有电影类型的完整信息",
+        "operationId": "getGenreList",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultListGenre"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/dashboard/stats": {
+      "get": {
+        "tags": [
+          "后台管理"
+        ],
+        "summary": "获取仪表盘统计数据",
+        "description": "返回系统总用户数、总电影数等统计指标",
+        "operationId": "getStats",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultMapStringObject"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/comment/list": {
+      "get": {
+        "tags": [
+          "后台管理"
+        ],
+        "summary": "评论列表管理",
+        "description": "查看所有用户发布的评论，用于内容审核",
+        "operationId": "getCommentList",
+        "parameters": [
+          {
+            "name": "keyword",
+            "in": "query",
+            "description": "关键词 (评论内容)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": ""
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "页码",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "description": "每页数量",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultPageInfoComment"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rating/clear": {
+      "delete": {
+        "tags": [
+          "Rating Management"
+        ],
+        "summary": "Clear All My Ratings",
+        "operationId": "clearMyRatings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/User"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rating/batch": {
+      "delete": {
+        "tags": [
+          "Rating Management"
+        ],
+        "summary": "Batch Delete Ratings",
+        "operationId": "deleteRatingsBatch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "movieIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "format": "int64"
+                    }
+                  },
+                  "user": {
+                    "$ref": "#/components/schemas/User"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/history/delete": {
+      "delete": {
+        "tags": [
+          "浏览历史管理"
+        ],
+        "summary": "删除单条浏览历史",
+        "description": "删除指定的浏览历史记录",
+        "operationId": "deleteHistory",
+        "parameters": [
+          {
+            "name": "historyId",
+            "in": "query",
+            "description": "历史记录ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/User"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/history/clear": {
+      "delete": {
+        "tags": [
+          "浏览历史管理"
+        ],
+        "summary": "清空浏览历史",
+        "description": "清空当前用户的所有浏览历史",
+        "operationId": "clearHistory",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/User"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/history/batch": {
+      "delete": {
+        "tags": [
+          "浏览历史管理"
+        ],
+        "summary": "批量删除浏览历史",
+        "description": "批量删除多条浏览历史记录",
+        "operationId": "deleteBatchHistory",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "historyIds": {
+                    "type": "array",
+                    "description": "历史记录ID列表",
+                    "items": {
+                      "type": "integer",
+                      "format": "int64"
+                    }
+                  },
+                  "user": {
+                    "$ref": "#/components/schemas/User"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/folder/delete/{folderId}": {
+      "delete": {
+        "tags": [
+          "收藏夹管理"
+        ],
+        "summary": "删除收藏夹",
+        "description": "删除收藏夹及其下的所有收藏记录",
+        "operationId": "deleteFolder",
+        "parameters": [
+          {
+            "name": "folderId",
+            "in": "path",
+            "description": "收藏夹ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/User"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/favorite/remove": {
+      "delete": {
+        "tags": [
+          "收藏管理"
+        ],
+        "summary": "取消收藏",
+        "description": "将电影从用户的收藏夹移除",
+        "operationId": "removeFavorite",
+        "parameters": [
+          {
+            "name": "movieId",
+            "in": "query",
+            "description": "电影ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "folderId",
+            "in": "query",
+            "description": "收藏夹ID，指定则只从该收藏夹移除",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/User"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/favorite/clear": {
+      "delete": {
+        "tags": [
+          "收藏管理"
+        ],
+        "summary": "清空收藏夹",
+        "description": "清空当前用户的所有收藏",
+        "operationId": "clearMyFavorites",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/User"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/favorite/batch": {
+      "delete": {
+        "tags": [
+          "收藏管理"
+        ],
+        "summary": "批量删除收藏",
+        "description": "批量移除收藏夹中的多部电影",
+        "operationId": "deleteFavoritesBatch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "movieIds": {
+                    "type": "array",
+                    "description": "电影ID列表",
+                    "items": {
+                      "type": "integer",
+                      "format": "int64"
+                    }
+                  },
+                  "user": {
+                    "$ref": "#/components/schemas/User"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/user/delete/{id}": {
+      "delete": {
+        "tags": [
+          "后台管理"
+        ],
+        "summary": "删除用户",
+        "description": "根据ID注销用户账号",
+        "operationId": "deleteUser",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "用户ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/region/delete/{id}": {
+      "delete": {
+        "tags": [
+          "后台管理"
+        ],
+        "summary": "删除地区",
+        "description": "删除电影地区，自动清除缓存",
+        "operationId": "deleteRegion",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "地区ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/person/delete/{id}": {
+      "delete": {
+        "tags": [
+          "后台管理"
+        ],
+        "summary": "删除影人",
+        "description": "删除影人记录",
+        "operationId": "deletePerson",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "影人ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/movie/delete/{id}": {
+      "delete": {
+        "tags": [
+          "后台管理"
+        ],
+        "summary": "删除电影",
+        "description": "根据ID物理删除电影记录",
+        "operationId": "deleteMovie",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "电影ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/genre/delete/{id}": {
+      "delete": {
+        "tags": [
+          "后台管理"
+        ],
+        "summary": "删除类型",
+        "description": "删除电影类型，自动清除缓存",
+        "operationId": "deleteGenre",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "类型ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/comment/delete/{id}": {
+      "delete": {
+        "tags": [
+          "后台管理"
+        ],
+        "summary": "删除评论",
+        "description": "管理员强制删除违规评论",
+        "operationId": "deleteComment_1",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "评论ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultString"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "用户ID (唯一账号)",
+            "example": "movie_fan_01"
+          },
+          "nickname": {
+            "type": "string",
+            "description": "用户昵称",
+            "example": "电影狂热者"
+          },
+          "avatar": {
+            "type": "string",
+            "description": "用户头像 URL",
+            "example": "http://localhost:8080/images/default_avatar.png"
+          },
+          "url": {
+            "type": "string",
+            "description": "个人主页/豆瓣链接",
+            "example": "https://www.douban.com/people/xxxx"
+          },
+          "email": {
+            "type": "string",
+            "description": "电子邮箱",
+            "example": "user@example.com"
+          },
+          "role": {
+            "type": "integer",
+            "description": "用户角色 (0:管理员, 1:普通用户)",
+            "format": "int32",
+            "example": 1
+          },
+          "status": {
+            "type": "integer",
+            "description": "账号状态 (0:正常, 1:被禁用/冻结)",
+            "format": "int32",
+            "example": 0
+          },
+          "passwordVersion": {
+            "type": "integer",
+            "description": "密码版本号，用于失效旧 Token（修改密码后递增）",
+            "format": "int32",
+            "example": 1
+          },
+          "createTime": {
+            "type": "string",
+            "description": "账号创建时间",
+            "format": "date-time"
+          },
+          "updateTime": {
+            "type": "string",
+            "description": "最后更新时间",
+            "format": "date-time"
+          }
+        },
+        "description": "用户实体"
+      },
+      "ResultString": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "状态码 (200表示成功，其他为错误码)",
+            "format": "int32",
+            "example": 200
+          },
+          "message": {
+            "type": "string",
+            "description": "响应消息",
+            "example": "Success"
+          },
+          "data": {
+            "type": "string",
+            "description": "业务数据载荷"
+          }
+        },
+        "description": "统一 API 响应结构"
+      },
+      "FavoriteFolderDTO": {
+        "required": [
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "收藏夹ID（更新时需要）",
+            "format": "int64",
+            "example": 1
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 0,
+            "type": "string",
+            "description": "收藏夹名称",
+            "example": "我的科幻电影"
+          },
+          "description": {
+            "maxLength": 500,
+            "minLength": 0,
+            "type": "string",
+            "description": "收藏夹描述",
+            "example": "收藏各种科幻题材的电影"
+          },
+          "isPublic": {
+            "type": "integer",
+            "description": "是否公开：0-私密, 1-公开",
+            "format": "int32",
+            "example": 0
+          }
+        },
+        "description": "创建/更新收藏夹请求参数"
+      },
+      "Region": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "地区ID",
+            "format": "int32",
+            "example": 1
+          },
+          "name": {
+            "type": "string",
+            "description": "地区名称",
+            "example": "中国大陆"
+          },
+          "nameEn": {
+            "type": "string",
+            "description": "英文名称",
+            "example": "China Mainland"
+          },
+          "description": {
+            "type": "string",
+            "description": "地区描述",
+            "example": "中国大陆地区制作的电影"
+          },
+          "createTime": {
+            "type": "string",
+            "description": "创建时间",
+            "format": "date-time"
+          }
+        },
+        "description": "电影地区实体"
+      },
+      "Person": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "影人ID",
+            "format": "int64",
+            "example": 1054521
+          },
+          "name": {
+            "type": "string",
+            "description": "中文名",
+            "example": "蒂姆·罗宾斯"
+          },
+          "sex": {
+            "type": "string",
+            "description": "性别",
+            "example": "男"
+          },
+          "nameEn": {
+            "type": "string",
+            "description": "英文名",
+            "example": "Tim Robbins"
+          },
+          "nameZh": {
+            "type": "string",
+            "description": "中文名 (备用字段)",
+            "example": "蒂姆·罗宾斯"
+          },
+          "birth": {
+            "type": "string",
+            "description": "出生日期",
+            "example": "1958-10-16"
+          },
+          "birthplace": {
+            "type": "string",
+            "description": "出生地",
+            "example": "美国,加利福尼亚,西柯芬"
+          },
+          "profession": {
+            "type": "string",
+            "description": "职业",
+            "example": "演员,导演,编剧"
+          },
+          "biography": {
+            "type": "string",
+            "description": "影人简介",
+            "example": "蒂姆·罗宾斯于1958年10月16日生于美国加州..."
+          },
+          "avatar": {
+            "type": "string",
+            "description": "影人照片 URL",
+            "example": "http://localhost:8080/images/person_1054521.jpg"
+          }
+        },
+        "description": "影人 (演员/导演/编剧) 详细信息"
+      },
+      "Movie": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "电影ID",
+            "format": "int64",
+            "example": 1292052
+          },
+          "name": {
+            "type": "string",
+            "description": "电影名称",
+            "example": "肖申克的救赎"
+          },
+          "alias": {
+            "type": "string",
+            "description": "电影别名",
+            "example": "The Shawshank Redemption / 月黑高飞(港) / 刺激1995(台)"
+          },
+          "actors": {
+            "type": "array",
+            "description": "演员列表 (包含name和role等信息)",
+            "example": [
+              {
+                "name": "蒂姆·罗宾斯",
+                "id": "12345"
+              }
+            ],
+            "items": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "description": "演员列表 (包含name和role等信息)",
+                "example": [
+                  {
+                    "name": "蒂姆·罗宾斯",
+                    "id": "12345"
+                  }
+                ]
+              },
+              "description": "演员列表 (包含name和role等信息)",
+              "example": [
+                {
+                  "name": "蒂姆·罗宾斯",
+                  "id": "12345"
+                }
+              ]
+            }
+          },
+          "cover": {
+            "type": "string",
+            "description": "封面图片路径 (自动拼接域名)",
+            "example": "http://localhost:8080/images/p480747492.jpg"
+          },
+          "directors": {
+            "type": "array",
+            "description": "导演列表",
+            "example": [
+              {
+                "name": "弗兰克·德拉邦特",
+                "id": "15615"
+              }
+            ],
+            "items": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "description": "导演列表",
+                "example": [
+                  {
+                    "name": "弗兰克·德拉邦特",
+                    "id": "15615"
+                  }
+                ]
+              },
+              "description": "导演列表",
+              "example": [
+                {
+                  "name": "弗兰克·德拉邦特",
+                  "id": "15615"
+                }
+              ]
+            }
+          },
+          "score": {
+            "type": "number",
+            "description": "本站评分 (0-10)",
+            "format": "double",
+            "example": 9.7
+          },
+          "doubanScore": {
+            "type": "number",
+            "description": "豆瓣评分 (0-10)",
+            "format": "double",
+            "example": 9.7
+          },
+          "votes": {
+            "type": "integer",
+            "description": "本站评分人数",
+            "format": "int32",
+            "example": 2956885
+          },
+          "doubanVotes": {
+            "type": "integer",
+            "description": "豆瓣评分人数",
+            "format": "int32",
+            "example": 2956885
+          },
+          "genres": {
+            "type": "string",
+            "description": "电影类型 (逗号分隔)",
+            "example": "犯罪,剧情"
+          },
+          "imdbId": {
+            "type": "string",
+            "description": "IMDB ID",
+            "example": "tt0111161"
+          },
+          "languages": {
+            "type": "string",
+            "description": "语言",
+            "example": "英语"
+          },
+          "mins": {
+            "type": "string",
+            "description": "片长",
+            "example": "142分钟"
+          },
+          "regions": {
+            "type": "string",
+            "description": "制片国家/地区",
+            "example": "美国"
+          },
+          "releaseDate": {
+            "type": "string",
+            "description": "上映日期",
+            "example": "1994-09-10(多伦多电影节)"
+          },
+          "storyline": {
+            "type": "string",
+            "description": "剧情简介",
+            "example": "20世纪40年代末，小有成就的青年银行家安迪..."
+          },
+          "year": {
+            "type": "integer",
+            "description": "上映年份",
+            "format": "int32",
+            "example": 1994
+          },
+          "writers": {
+            "type": "array",
+            "description": "编剧列表",
+            "example": [
+              {
+                "name": "斯蒂芬·金",
+                "id": "12345"
+              }
+            ],
+            "items": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "description": "编剧列表",
+                "example": [
+                  {
+                    "name": "斯蒂芬·金",
+                    "id": "12345"
+                  }
+                ]
+              },
+              "description": "编剧列表",
+              "example": [
+                {
+                  "name": "斯蒂芬·金",
+                  "id": "12345"
+                }
+              ]
+            }
+          }
+        },
+        "description": "电影详细信息实体"
+      },
+      "Genre": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "类型ID",
+            "format": "int32",
+            "example": 1
+          },
+          "name": {
+            "type": "string",
+            "description": "类型名称",
+            "example": "动作"
+          },
+          "nameEn": {
+            "type": "string",
+            "description": "英文名称",
+            "example": "Action"
+          },
+          "description": {
+            "type": "string",
+            "description": "类型描述",
+            "example": "充满激烈打斗、追逐和爆炸场面的电影"
+          },
+          "createTime": {
+            "type": "string",
+            "description": "创建时间",
+            "format": "date-time"
+          }
+        },
+        "description": "电影类型实体"
+      },
+      "RegisterDTO": {
+        "required": [
+          "id",
+          "nickname",
+          "password"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "maxLength": 20,
+            "minLength": 4,
+            "type": "string",
+            "description": "用户账号 (唯一标识)",
+            "example": "movie_fan_01"
+          },
+          "password": {
+            "maxLength": 2147483647,
+            "minLength": 6,
+            "type": "string",
+            "description": "密码",
+            "example": "123456"
+          },
+          "nickname": {
+            "type": "string",
+            "description": "用户昵称",
+            "example": "电影狂热者"
+          },
+          "email": {
+            "type": "string",
+            "description": "电子邮箱",
+            "example": "test@movie.com"
+          },
+          "url": {
+            "type": "string",
+            "description": "个人主页/豆瓣主页链接",
+            "example": "https://douban.com/people/xxx"
+          }
+        },
+        "description": "用户注册请求参数"
+      },
+      "LoginDTO": {
+        "required": [
+          "id",
+          "password"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "用户账号",
+            "example": "movie_fan_01"
+          },
+          "password": {
+            "type": "string",
+            "description": "用户密码",
+            "example": "123456"
+          }
+        },
+        "description": "用户登录请求参数"
+      },
+      "ResultUserVO": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "状态码 (200表示成功，其他为错误码)",
+            "format": "int32",
+            "example": 200
+          },
+          "message": {
+            "type": "string",
+            "description": "响应消息",
+            "example": "Success"
+          },
+          "data": {
+            "$ref": "#/components/schemas/UserVO"
+          }
+        },
+        "description": "统一 API 响应结构"
+      },
+      "UserVO": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "用户ID",
+            "example": "movie_fan_01"
+          },
+          "nickname": {
+            "type": "string",
+            "description": "用户昵称",
+            "example": "电影狂热者"
+          },
+          "avatar": {
+            "type": "string",
+            "description": "用户头像URL (自动拼接域名)",
+            "example": "http://localhost:8080/images/default.png"
+          },
+          "url": {
+            "type": "string",
+            "description": "个人主页链接",
+            "example": "https://douban.com/people/xxx"
+          },
+          "email": {
+            "type": "string",
+            "description": "电子邮箱",
+            "example": "test@movie.com"
+          },
+          "role": {
+            "type": "integer",
+            "description": "用户角色 (0:管理员, 1:普通用户)",
+            "format": "int32",
+            "example": 1
+          },
+          "accessToken": {
+            "type": "string",
+            "description": "JWT 访问令牌 (短效)",
+            "example": "eyJhbGciOiJIUzUxMiJ9..."
+          },
+          "refreshToken": {
+            "type": "string",
+            "description": "JWT 刷新令牌 (长效)",
+            "example": "eyJhbGciOiJIUzUxMiJ9..."
+          },
+          "receivedLikes": {
+            "type": "integer",
+            "description": "用户获得的赞数",
+            "format": "int32",
+            "example": 1024
+          },
+          "commentCount": {
+            "type": "integer",
+            "description": "用户发布的影评数",
+            "format": "int32",
+            "example": 50
+          }
+        },
+        "description": "登录成功后返回的用户信息"
+      },
+      "MovieSearchDTO": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "minimum": 1,
+            "type": "integer",
+            "description": "页码 (从1开始)",
+            "format": "int32",
+            "example": 1,
+            "default": 1
+          },
+          "size": {
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer",
+            "description": "每页显示数量",
+            "format": "int32",
+            "example": 10,
+            "default": 10
+          },
+          "keyword": {
+            "maxLength": 100,
+            "minLength": 0,
+            "type": "string",
+            "description": "搜索关键词（匹配电影名、别名或简介）",
+            "example": "盗梦空间"
+          },
+          "genres": {
+            "type": "array",
+            "description": "电影类型筛选（支持多选）",
+            "example": [
+              "科幻",
+              "动作"
+            ],
+            "items": {
+              "type": "string",
+              "description": "电影类型筛选（支持多选）",
+              "example": "[\"科幻\",\"动作\"]"
+            }
+          },
+          "minScore": {
+            "maximum": 10,
+            "exclusiveMaximum": false,
+            "minimum": 0,
+            "exclusiveMinimum": false,
+            "type": "number",
+            "description": "最低评分筛选 (0.0-10.0)",
+            "format": "double",
+            "example": 8
+          },
+          "maxScore": {
+            "maximum": 10,
+            "exclusiveMaximum": false,
+            "minimum": 0,
+            "exclusiveMinimum": false,
+            "type": "number",
+            "description": "最高评分筛选 (0.0-10.0)",
+            "format": "double",
+            "example": 10
+          },
+          "year": {
+            "pattern": "^(19|20)\\d{2}$",
+            "type": "string",
+            "description": "特定年份精确筛选",
+            "example": "2010"
+          },
+          "startYear": {
+            "type": "integer",
+            "description": "起始年份范围筛选",
+            "format": "int32",
+            "example": 2000
+          },
+          "endYear": {
+            "type": "integer",
+            "description": "结束年份范围筛选",
+            "format": "int32",
+            "example": 2020
+          },
+          "regions": {
+            "type": "array",
+            "description": "地区筛选（支持多选）",
+            "example": [
+              "美国",
+              "中国大陆"
+            ],
+            "items": {
+              "type": "string",
+              "description": "地区筛选（支持多选）",
+              "example": "[\"美国\",\"中国大陆\"]"
+            }
+          },
+          "directors": {
+            "type": "array",
+            "description": "导演筛选（支持多选，匹配导演名称）",
+            "example": [
+              "克里斯托弗·诺兰",
+              "史蒂文·斯皮尔伯格"
+            ],
+            "items": {
+              "type": "string",
+              "description": "导演筛选（支持多选，匹配导演名称）",
+              "example": "[\"克里斯托弗·诺兰\",\"史蒂文·斯皮尔伯格\"]"
+            }
+          },
+          "actors": {
+            "type": "array",
+            "description": "演员筛选（支持多选，匹配演员名称）",
+            "example": [
+              "莱昂纳多·迪卡普里奥",
+              "汤姆·汉克斯"
+            ],
+            "items": {
+              "type": "string",
+              "description": "演员筛选（支持多选，匹配演员名称）",
+              "example": "[\"莱昂纳多·迪卡普里奥\",\"汤姆·汉克斯\"]"
+            }
+          },
+          "sortBy": {
+            "pattern": "^(score|year|votes)$",
+            "type": "string",
+            "description": "排序字段: score(评分), year(年份), votes(热度)",
+            "example": "score"
+          },
+          "sortOrder": {
+            "pattern": "^(desc|asc)$",
+            "type": "string",
+            "description": "排序方向: desc(降序), asc(升序)",
+            "example": "desc",
+            "default": "desc"
+          }
+        },
+        "description": "电影高级搜索请求参数"
+      },
+      "PageInfoMovie": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "list": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Movie"
+            }
+          },
+          "pageNum": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "startRow": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "endRow": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pages": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "prePage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "nextPage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "isFirstPage": {
+            "type": "boolean"
+          },
+          "isLastPage": {
+            "type": "boolean"
+          },
+          "hasPreviousPage": {
+            "type": "boolean"
+          },
+          "hasNextPage": {
+            "type": "boolean"
+          },
+          "navigatePages": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "navigatepageNums": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "navigateFirstPage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "navigateLastPage": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "description": "业务数据载荷"
+      },
+      "ResultPageInfoMovie": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "状态码 (200表示成功，其他为错误码)",
+            "format": "int32",
+            "example": 200
+          },
+          "message": {
+            "type": "string",
+            "description": "响应消息",
+            "example": "Success"
+          },
+          "data": {
+            "$ref": "#/components/schemas/PageInfoMovie"
+          }
+        },
+        "description": "统一 API 响应结构"
+      },
+      "FavoriteFolder": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "收藏夹ID",
+            "format": "int64",
+            "example": 1
+          },
+          "userId": {
+            "type": "string",
+            "description": "用户ID",
+            "example": "movie_fan_01"
+          },
+          "name": {
+            "type": "string",
+            "description": "收藏夹名称",
+            "example": "我的科幻电影"
+          },
+          "description": {
+            "type": "string",
+            "description": "收藏夹描述",
+            "example": "收藏各种科幻题材的电影"
+          },
+          "isPublic": {
+            "type": "integer",
+            "description": "是否公开：0-私密, 1-公开",
+            "format": "int32",
+            "example": 0
+          },
+          "movieCount": {
+            "type": "integer",
+            "description": "电影数量",
+            "format": "int32",
+            "example": 15
+          },
+          "createTime": {
+            "type": "string",
+            "description": "创建时间",
+            "format": "date-time"
+          },
+          "updateTime": {
+            "type": "string",
+            "description": "更新时间",
+            "format": "date-time"
+          }
+        },
+        "description": "用户自定义收藏夹"
+      },
+      "ResultFavoriteFolder": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "状态码 (200表示成功，其他为错误码)",
+            "format": "int32",
+            "example": 200
+          },
+          "message": {
+            "type": "string",
+            "description": "响应消息",
+            "example": "Success"
+          },
+          "data": {
+            "$ref": "#/components/schemas/FavoriteFolder"
+          }
+        },
+        "description": "统一 API 响应结构"
+      },
+      "ResultBoolean": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "状态码 (200表示成功，其他为错误码)",
+            "format": "int32",
+            "example": 200
+          },
+          "message": {
+            "type": "string",
+            "description": "响应消息",
+            "example": "Success"
+          },
+          "data": {
+            "type": "boolean",
+            "description": "业务数据载荷"
+          }
+        },
+        "description": "统一 API 响应结构"
+      },
+      "PublicUserVO": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "用户ID",
+            "example": "movie_fan_01"
+          },
+          "nickname": {
+            "type": "string",
+            "description": "用户昵称",
+            "example": "电影狂热者"
+          },
+          "avatar": {
+            "type": "string",
+            "description": "用户头像URL",
+            "example": "http://localhost:8080/images/default.png"
+          },
+          "url": {
+            "type": "string",
+            "description": "用户豆瓣主页链接",
+            "example": "https://douban.com/people/xxx"
+          },
+          "receivedLikes": {
+            "type": "integer",
+            "description": "用户获得的赞数",
+            "format": "int32",
+            "example": 1024
+          },
+          "commentCount": {
+            "type": "integer",
+            "description": "用户发布的影评数",
+            "format": "int32",
+            "example": 50
+          }
+        },
+        "description": "公开用户信息（不包含敏感信息）"
+      },
+      "ResultPublicUserVO": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "状态码 (200表示成功，其他为错误码)",
+            "format": "int32",
+            "example": 200
+          },
+          "message": {
+            "type": "string",
+            "description": "响应消息",
+            "example": "Success"
+          },
+          "data": {
+            "$ref": "#/components/schemas/PublicUserVO"
+          }
+        },
+        "description": "统一 API 响应结构"
+      },
+      "MyRatingVO": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "评分记录ID (格式: userId_movieId)",
+            "example": "user1_123456"
+          },
+          "movieId": {
+            "type": "integer",
+            "description": "电影ID",
+            "format": "int64",
+            "example": 1292052
+          },
+          "movieName": {
+            "type": "string",
+            "description": "电影名称",
+            "example": "肖申克的救赎"
+          },
+          "posterUrl": {
+            "type": "string",
+            "description": "电影海报URL",
+            "example": "http://localhost:8080/images/poster_01.jpg"
+          },
+          "rating": {
+            "type": "integer",
+            "description": "我的评分 (1-5)",
+            "format": "int32",
+            "example": 5
+          },
+          "ratingTime": {
+            "type": "string",
+            "description": "评分时间",
+            "example": "2023-10-01 12:00:00"
+          },
+          "description": {
+            "type": "string",
+            "description": "电影简介",
+            "example": "20世纪40年代末，小有成就的青年银行家安迪..."
+          }
+        },
+        "description": "我的评分记录 (包含电影信息)"
+      },
+      "PageInfoMyRatingVO": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "list": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MyRatingVO"
+            }
+          },
+          "pageNum": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "startRow": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "endRow": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pages": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "prePage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "nextPage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "isFirstPage": {
+            "type": "boolean"
+          },
+          "isLastPage": {
+            "type": "boolean"
+          },
+          "hasPreviousPage": {
+            "type": "boolean"
+          },
+          "hasNextPage": {
+            "type": "boolean"
+          },
+          "navigatePages": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "navigatepageNums": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "navigateFirstPage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "navigateLastPage": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "description": "业务数据载荷"
+      },
+      "ResultPageInfoMyRatingVO": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "状态码 (200表示成功，其他为错误码)",
+            "format": "int32",
+            "example": 200
+          },
+          "message": {
+            "type": "string",
+            "description": "响应消息",
+            "example": "Success"
+          },
+          "data": {
+            "$ref": "#/components/schemas/PageInfoMyRatingVO"
+          }
+        },
+        "description": "统一 API 响应结构"
+      },
+      "Rating": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "description": "用户ID",
+            "example": "movie_fan_01"
+          },
+          "movieId": {
+            "type": "integer",
+            "description": "电影ID",
+            "format": "int64",
+            "example": 1292052
+          },
+          "rating": {
+            "type": "integer",
+            "description": "评分值 (1-5 星)",
+            "format": "int32",
+            "example": 5
+          },
+          "ratingTime": {
+            "type": "string",
+            "description": "评分时间",
+            "example": "2023-11-20 14:30:00"
+          }
+        },
+        "description": "用户评分实体"
+      },
+      "ResultRating": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "状态码 (200表示成功，其他为错误码)",
+            "format": "int32",
+            "example": 200
+          },
+          "message": {
+            "type": "string",
+            "description": "响应消息",
+            "example": "Success"
+          },
+          "data": {
+            "$ref": "#/components/schemas/Rating"
+          }
+        },
+        "description": "统一 API 响应结构"
+      },
+      "ResultListMovie": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "状态码 (200表示成功，其他为错误码)",
+            "format": "int32",
+            "example": 200
+          },
+          "message": {
+            "type": "string",
+            "description": "响应消息",
+            "example": "Success"
+          },
+          "data": {
+            "type": "array",
+            "description": "业务数据载荷",
+            "items": {
+              "$ref": "#/components/schemas/Movie"
+            }
+          }
+        },
+        "description": "统一 API 响应结构"
+      },
+      "PageInfoPerson": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "list": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Person"
+            }
+          },
+          "pageNum": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "startRow": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "endRow": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pages": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "prePage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "nextPage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "isFirstPage": {
+            "type": "boolean"
+          },
+          "isLastPage": {
+            "type": "boolean"
+          },
+          "hasPreviousPage": {
+            "type": "boolean"
+          },
+          "hasNextPage": {
+            "type": "boolean"
+          },
+          "navigatePages": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "navigatepageNums": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "navigateFirstPage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "navigateLastPage": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "description": "业务数据载荷"
+      },
+      "ResultPageInfoPerson": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "状态码 (200表示成功，其他为错误码)",
+            "format": "int32",
+            "example": 200
+          },
+          "message": {
+            "type": "string",
+            "description": "响应消息",
+            "example": "Success"
+          },
+          "data": {
+            "$ref": "#/components/schemas/PageInfoPerson"
+          }
+        },
+        "description": "统一 API 响应结构"
+      },
+      "ResultPerson": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "状态码 (200表示成功，其他为错误码)",
+            "format": "int32",
+            "example": 200
+          },
+          "message": {
+            "type": "string",
+            "description": "响应消息",
+            "example": "Success"
+          },
+          "data": {
+            "$ref": "#/components/schemas/Person"
+          }
+        },
+        "description": "统一 API 响应结构"
+      },
+      "ResultListInteger": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "状态码 (200表示成功，其他为错误码)",
+            "format": "int32",
+            "example": 200
+          },
+          "message": {
+            "type": "string",
+            "description": "响应消息",
+            "example": "Success"
+          },
+          "data": {
+            "type": "array",
+            "description": "业务数据载荷",
+            "items": {
+              "type": "integer",
+              "description": "业务数据载荷",
+              "format": "int32"
+            }
+          }
+        },
+        "description": "统一 API 响应结构"
+      },
+      "ResultListString": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "状态码 (200表示成功，其他为错误码)",
+            "format": "int32",
+            "example": 200
+          },
+          "message": {
+            "type": "string",
+            "description": "响应消息",
+            "example": "Success"
+          },
+          "data": {
+            "type": "array",
+            "description": "业务数据载荷",
+            "items": {
+              "type": "string",
+              "description": "业务数据载荷"
+            }
+          }
+        },
+        "description": "统一 API 响应结构"
+      },
+      "ResultMapStringObject": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "状态码 (200表示成功，其他为错误码)",
+            "format": "int32",
+            "example": 200
+          },
+          "message": {
+            "type": "string",
+            "description": "响应消息",
+            "example": "Success"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "description": "业务数据载荷"
+            },
+            "description": "业务数据载荷"
+          }
+        },
+        "description": "统一 API 响应结构"
+      },
+      "ResultMovie": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "状态码 (200表示成功，其他为错误码)",
+            "format": "int32",
+            "example": 200
+          },
+          "message": {
+            "type": "string",
+            "description": "响应消息",
+            "example": "Success"
+          },
+          "data": {
+            "$ref": "#/components/schemas/Movie"
+          }
+        },
+        "description": "统一 API 响应结构"
+      },
+      "CatalogQueryDTO": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "minimum": 1,
+            "type": "integer",
+            "description": "页码 (从1开始)",
+            "format": "int32",
+            "example": 1,
+            "default": 1
+          },
+          "size": {
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer",
+            "description": "每页显示数量",
+            "format": "int32",
+            "example": 10,
+            "default": 10
+          },
+          "genres": {
+            "type": "string",
+            "description": "电影类型筛选（支持多选，逗号分隔）",
+            "example": "科幻,动作,冒险"
+          },
+          "regions": {
+            "type": "string",
+            "description": "地区筛选（支持多选，逗号分隔）",
+            "example": "美国,中国大陆"
+          },
+          "minScore": {
+            "maximum": 10,
+            "exclusiveMaximum": false,
+            "minimum": 0,
+            "exclusiveMinimum": false,
+            "type": "number",
+            "description": "最低评分筛选 (0.0-10.0)",
+            "format": "double",
+            "example": 8
+          },
+          "maxScore": {
+            "maximum": 10,
+            "exclusiveMaximum": false,
+            "minimum": 0,
+            "exclusiveMinimum": false,
+            "type": "number",
+            "description": "最高评分筛选 (0.0-10.0)",
+            "format": "double",
+            "example": 10
+          },
+          "startYear": {
+            "type": "integer",
+            "description": "起始年份范围筛选",
+            "format": "int32",
+            "example": 2000
+          },
+          "endYear": {
+            "type": "integer",
+            "description": "结束年份范围筛选",
+            "format": "int32",
+            "example": 2020
+          },
+          "sortBy": {
+            "pattern": "^(score|year|votes)$",
+            "type": "string",
+            "description": "排序字段: score(评分), year(年份), votes(热度)",
+            "example": "score"
+          },
+          "sortOrder": {
+            "pattern": "^(desc|asc)$",
+            "type": "string",
+            "description": "排序方向: desc(降序), asc(升序)",
+            "example": "desc",
+            "default": "desc"
+          },
+          "regionsList": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "genresList": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "电影目录筛选请求参数（GET请求）"
+      },
+      "MyFavoriteVO": {
+        "type": "object",
+        "properties": {
+          "movieId": {
+            "type": "integer",
+            "description": "电影ID",
+            "format": "int64",
+            "example": 1292052
+          },
+          "movieName": {
+            "type": "string",
+            "description": "电影名称",
+            "example": "肖申克的救赎"
+          },
+          "cover": {
+            "type": "string",
+            "description": "电影封面URL",
+            "example": "http://localhost:8080/images/p480747492.jpg"
+          },
+          "score": {
+            "type": "number",
+            "description": "豆瓣评分 (0-10)",
+            "format": "double",
+            "example": 9.7
+          },
+          "votes": {
+            "type": "integer",
+            "description": "评分人数",
+            "format": "int32",
+            "example": 2956885
+          },
+          "genres": {
+            "type": "string",
+            "description": "电影类型 (逗号分隔)",
+            "example": "犯罪,剧情"
+          },
+          "year": {
+            "type": "integer",
+            "description": "上映年份",
+            "format": "int32",
+            "example": 1994
+          },
+          "directors": {
+            "type": "array",
+            "description": "导演列表",
+            "example": [
+              {
+                "name": "弗兰克·德拉邦特",
+                "id": "15615"
+              }
+            ],
+            "items": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "description": "导演列表",
+                "example": [
+                  {
+                    "name": "弗兰克·德拉邦特",
+                    "id": "15615"
+                  }
+                ]
+              },
+              "description": "导演列表",
+              "example": [
+                {
+                  "name": "弗兰克·德拉邦特",
+                  "id": "15615"
+                }
+              ]
+            }
+          },
+          "actors": {
+            "type": "array",
+            "description": "演员列表",
+            "example": [
+              {
+                "name": "蒂姆·罗宾斯",
+                "id": "12345"
+              }
+            ],
+            "items": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "description": "演员列表",
+                "example": [
+                  {
+                    "name": "蒂姆·罗宾斯",
+                    "id": "12345"
+                  }
+                ]
+              },
+              "description": "演员列表",
+              "example": [
+                {
+                  "name": "蒂姆·罗宾斯",
+                  "id": "12345"
+                }
+              ]
+            }
+          },
+          "regions": {
+            "type": "string",
+            "description": "制片国家/地区",
+            "example": "美国"
+          },
+          "mins": {
+            "type": "string",
+            "description": "片长",
+            "example": "142分钟"
+          },
+          "storyline": {
+            "type": "string",
+            "description": "剧情简介",
+            "example": "20世纪40年代末，小有成就的青年银行家安迪..."
+          },
+          "favoriteTime": {
+            "type": "string",
+            "description": "收藏时间",
+            "example": "2024-01-15 14:30:00"
+          }
+        },
+        "description": "我的收藏记录 (包含电影信息和收藏时间)"
+      },
+      "PageInfoMyFavoriteVO": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "list": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MyFavoriteVO"
+            }
+          },
+          "pageNum": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "startRow": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "endRow": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pages": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "prePage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "nextPage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "isFirstPage": {
+            "type": "boolean"
+          },
+          "isLastPage": {
+            "type": "boolean"
+          },
+          "hasPreviousPage": {
+            "type": "boolean"
+          },
+          "hasNextPage": {
+            "type": "boolean"
+          },
+          "navigatePages": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "navigatepageNums": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "navigateFirstPage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "navigateLastPage": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "description": "业务数据载荷"
+      },
+      "ResultPageInfoMyFavoriteVO": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "状态码 (200表示成功，其他为错误码)",
+            "format": "int32",
+            "example": 200
+          },
+          "message": {
+            "type": "string",
+            "description": "响应消息",
+            "example": "Success"
+          },
+          "data": {
+            "$ref": "#/components/schemas/PageInfoMyFavoriteVO"
+          }
+        },
+        "description": "统一 API 响应结构"
+      },
+      "ResultInteger": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "状态码 (200表示成功，其他为错误码)",
+            "format": "int32",
+            "example": 200
+          },
+          "message": {
+            "type": "string",
+            "description": "响应消息",
+            "example": "Success"
+          },
+          "data": {
+            "type": "integer",
+            "description": "业务数据载荷",
+            "format": "int32"
+          }
+        },
+        "description": "统一 API 响应结构"
+      },
+      "FavoriteFolderVO": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "收藏夹ID",
+            "format": "int64",
+            "example": 1
+          },
+          "name": {
+            "type": "string",
+            "description": "收藏夹名称",
+            "example": "我的科幻电影"
+          },
+          "description": {
+            "type": "string",
+            "description": "收藏夹描述",
+            "example": "收藏各种科幻题材的电影"
+          },
+          "isPublic": {
+            "type": "integer",
+            "description": "是否公开：0-私密, 1-公开",
+            "format": "int32",
+            "example": 0
+          },
+          "movieCount": {
+            "type": "integer",
+            "description": "电影数量",
+            "format": "int32",
+            "example": 15
+          },
+          "createTime": {
+            "type": "string",
+            "description": "创建时间",
+            "example": "2024-01-15 14:30:00"
+          },
+          "updateTime": {
+            "type": "string",
+            "description": "更新时间",
+            "example": "2024-02-07 10:00:00"
+          }
+        },
+        "description": "收藏夹详情视图对象"
+      },
+      "ResultListFavoriteFolderVO": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "状态码 (200表示成功，其他为错误码)",
+            "format": "int32",
+            "example": 200
+          },
+          "message": {
+            "type": "string",
+            "description": "响应消息",
+            "example": "Success"
+          },
+          "data": {
+            "type": "array",
+            "description": "业务数据载荷",
+            "items": {
+              "$ref": "#/components/schemas/FavoriteFolderVO"
+            }
+          }
+        },
+        "description": "统一 API 响应结构"
+      },
+      "Comment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "评论ID",
+            "format": "int64",
+            "example": 1712345678901
+          },
+          "userId": {
+            "type": "string",
+            "description": "用户ID",
+            "example": "movie_fan_01"
+          },
+          "movieId": {
+            "type": "integer",
+            "description": "电影ID",
+            "format": "int64",
+            "example": 1292052
+          },
+          "title": {
+            "type": "string",
+            "description": "评论标题 (长评专用)",
+            "example": "《肖申克的救赎》：由于恐惧而受其所累"
+          },
+          "type": {
+            "type": "integer",
+            "description": "评论类型 (1:短评, 2:长评)",
+            "format": "int32",
+            "example": 1
+          },
+          "content": {
+            "type": "string",
+            "description": "评论内容",
+            "example": "这部电影太经典了，值得反复观看！"
+          },
+          "votes": {
+            "type": "integer",
+            "description": "获赞数",
+            "format": "int32",
+            "example": 1024
+          },
+          "commentTime": {
+            "type": "string",
+            "description": "评论发布时间",
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer",
+            "description": "乐观锁版本号",
+            "format": "int32",
+            "example": 0
+          }
+        },
+        "description": "评论实体"
+      },
+      "PageInfoComment": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "list": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Comment"
+            }
+          },
+          "pageNum": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "startRow": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "endRow": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pages": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "prePage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "nextPage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "isFirstPage": {
+            "type": "boolean"
+          },
+          "isLastPage": {
+            "type": "boolean"
+          },
+          "hasPreviousPage": {
+            "type": "boolean"
+          },
+          "hasNextPage": {
+            "type": "boolean"
+          },
+          "navigatePages": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "navigatepageNums": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "navigateFirstPage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "navigateLastPage": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "description": "业务数据载荷"
+      },
+      "ResultPageInfoComment": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "状态码 (200表示成功，其他为错误码)",
+            "format": "int32",
+            "example": 200
+          },
+          "message": {
+            "type": "string",
+            "description": "响应消息",
+            "example": "Success"
+          },
+          "data": {
+            "$ref": "#/components/schemas/PageInfoComment"
+          }
+        },
+        "description": "统一 API 响应结构"
+      },
+      "CommentVO": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "评论ID",
+            "format": "int64",
+            "example": 1712345678901
+          },
+          "userId": {
+            "type": "string",
+            "description": "评论者ID",
+            "example": "user_001"
+          },
+          "movieId": {
+            "type": "integer",
+            "description": "电影ID",
+            "format": "int64",
+            "example": 1292052
+          },
+          "title": {
+            "type": "string",
+            "description": "评论标题"
+          },
+          "type": {
+            "type": "integer",
+            "description": "评论类型 (1:短评, 2:长评)",
+            "format": "int32"
+          },
+          "content": {
+            "type": "string",
+            "description": "评论内容",
+            "example": "这部电影太经典了，值得反复观看！"
+          },
+          "votes": {
+            "type": "integer",
+            "description": "获赞数",
+            "format": "int32",
+            "example": 1024
+          },
+          "commentTime": {
+            "type": "string",
+            "description": "评论发布时间",
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer",
+            "description": "乐观锁版本号",
+            "format": "int32",
+            "example": 0
+          },
+          "userNickname": {
+            "type": "string",
+            "description": "评论者昵称",
+            "example": "电影狂热者"
+          },
+          "userAvatar": {
+            "type": "string",
+            "description": "评论者头像URL",
+            "example": "http://localhost:8080/images/avatar_01.jpg"
+          },
+          "rating": {
+            "type": "integer",
+            "description": "该用户对电影的评分 (1-5，可能为空)",
+            "format": "int32",
+            "example": 4
+          },
+          "isLiked": {
+            "type": "boolean",
+            "description": "当前登录用户是否已点赞该评论",
+            "example": true
+          }
+        },
+        "description": "评论展示对象 (包含用户信息和点赞状态)"
+      },
+      "PageInfoCommentVO": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "list": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CommentVO"
+            }
+          },
+          "pageNum": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "startRow": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "endRow": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pages": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "prePage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "nextPage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "isFirstPage": {
+            "type": "boolean"
+          },
+          "isLastPage": {
+            "type": "boolean"
+          },
+          "hasPreviousPage": {
+            "type": "boolean"
+          },
+          "hasNextPage": {
+            "type": "boolean"
+          },
+          "navigatePages": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "navigatepageNums": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "navigateFirstPage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "navigateLastPage": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "description": "业务数据载荷"
+      },
+      "ResultPageInfoCommentVO": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "状态码 (200表示成功，其他为错误码)",
+            "format": "int32",
+            "example": 200
+          },
+          "message": {
+            "type": "string",
+            "description": "响应消息",
+            "example": "Success"
+          },
+          "data": {
+            "$ref": "#/components/schemas/PageInfoCommentVO"
+          }
+        },
+        "description": "统一 API 响应结构"
+      },
+      "ResultComment": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "状态码 (200表示成功，其他为错误码)",
+            "format": "int32",
+            "example": 200
+          },
+          "message": {
+            "type": "string",
+            "description": "响应消息",
+            "example": "Success"
+          },
+          "data": {
+            "$ref": "#/components/schemas/Comment"
+          }
+        },
+        "description": "统一 API 响应结构"
+      },
+      "PageInfoUser": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "list": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/User"
+            }
+          },
+          "pageNum": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "startRow": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "endRow": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pages": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "prePage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "nextPage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "isFirstPage": {
+            "type": "boolean"
+          },
+          "isLastPage": {
+            "type": "boolean"
+          },
+          "hasPreviousPage": {
+            "type": "boolean"
+          },
+          "hasNextPage": {
+            "type": "boolean"
+          },
+          "navigatePages": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "navigatepageNums": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "navigateFirstPage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "navigateLastPage": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "description": "业务数据载荷"
+      },
+      "ResultPageInfoUser": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "状态码 (200表示成功，其他为错误码)",
+            "format": "int32",
+            "example": 200
+          },
+          "message": {
+            "type": "string",
+            "description": "响应消息",
+            "example": "Success"
+          },
+          "data": {
+            "$ref": "#/components/schemas/PageInfoUser"
+          }
+        },
+        "description": "统一 API 响应结构"
+      },
+      "ResultListRegion": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "状态码 (200表示成功，其他为错误码)",
+            "format": "int32",
+            "example": 200
+          },
+          "message": {
+            "type": "string",
+            "description": "响应消息",
+            "example": "Success"
+          },
+          "data": {
+            "type": "array",
+            "description": "业务数据载荷",
+            "items": {
+              "$ref": "#/components/schemas/Region"
+            }
+          }
+        },
+        "description": "统一 API 响应结构"
+      },
+      "ResultListGenre": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "状态码 (200表示成功，其他为错误码)",
+            "format": "int32",
+            "example": 200
+          },
+          "message": {
+            "type": "string",
+            "description": "响应消息",
+            "example": "Success"
+          },
+          "data": {
+            "type": "array",
+            "description": "业务数据载荷",
+            "items": {
+              "$ref": "#/components/schemas/Genre"
+            }
+          }
+        },
+        "description": "统一 API 响应结构"
+      }
+    },
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  }
+}

@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.movie.backend.mapper.RegionMapper">
+
+    <resultMap id="BaseResultMap" type="com.movie.backend.entity.Region">
+        <id column="id" property="id" jdbcType="INTEGER"/>
+        <result column="name" property="name" jdbcType="VARCHAR"/>
+        <result column="name_en" property="nameEn" jdbcType="VARCHAR"/>
+        <result column="description" property="description" jdbcType="VARCHAR"/>
+        <result column="create_time" property="createTime" jdbcType="TIMESTAMP"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, name, name_en, description, create_time
+    </sql>
+
+    <!-- Select all regions -->
+    <select id="selectAll" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM regions
+        ORDER BY name ASC
+    </select>
+
+    <!-- Select region by ID -->
+    <select id="selectById" parameterType="java.lang.Integer" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM regions
+        WHERE id = #{id}
+    </select>
+
+    <!-- Select region by name -->
+    <select id="selectByName" parameterType="java.lang.String" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM regions
+        WHERE name = #{name}
+    </select>
+
+    <!-- Get regions by movie ID -->
+    <select id="selectByMovieId" parameterType="java.lang.Long" resultMap="BaseResultMap">
+        SELECT r.id, r.name, r.name_en, r.description, r.create_time
+        FROM regions r
+        INNER JOIN movie_region_relation mrr ON r.id = mrr.region_id
+        WHERE mrr.movie_id = #{movieId}
+        ORDER BY r.name ASC
+    </select>
+
+    <!-- Insert region -->
+    <insert id="insert" parameterType="com.movie.backend.entity.Region" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO regions (name, name_en, description)
+        VALUES (#{name}, #{nameEn}, #{description})
+    </insert>
+
+    <!-- Update region -->
+    <update id="update" parameterType="com.movie.backend.entity.Region">
+        UPDATE regions
+        SET name = #{name},
+            name_en = #{nameEn},
+            description = #{description}
+        WHERE id = #{id}
+    </update>
+
+    <!-- Delete region by ID -->
+    <delete id="deleteById" parameterType="java.lang.Integer">
+        DELETE FROM regions WHERE id = #{id}
+    </delete>
+
+</mapper>
