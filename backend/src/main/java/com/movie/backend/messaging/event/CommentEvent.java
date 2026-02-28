@@ -7,7 +7,7 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class CommentEvent {
+public class CommentEvent implements KeyedEvent {
     private String userId;
     private Long movieId;
     private Long commentId;
@@ -20,4 +20,9 @@ public class CommentEvent {
      */
     private String operation;
     private Integer contentLength;
+
+    @Override
+    public Object getKeyId() {
+        return movieId;
+    }
 }

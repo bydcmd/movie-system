@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.movie.backend.mapper.UserMapper">
+
+    <resultMap id="BaseResultMap" type="com.movie.backend.entity.User">
+        <id column="user_id" property="id" />
+        <result column="user_nickname" property="nickname" />
+        <result column="user_password" property="password" />
+        <result column="user_avatar" property="avatar" />
+        <result column="user_url" property="url" />
+        <result column="role" property="role" />
+        <result column="email" property="email" />
+        <result column="status" property="status" />
+        <result column="password_version" property="passwordVersion" />
+        <result column="create_time" property="createTime" />
+        <result column="update_time" property="updateTime" />
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        user_id, user_nickname, user_password, user_avatar, user_url, role, email, status, password_version, create_time, update_time
+    </sql>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/> FROM users WHERE user_id = #{id}
+    </select>
+
+    <select id="selectByEmail" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/> FROM users WHERE email = #{email}
+    </select>
+    
+    <insert id="insert" parameterType="com.movie.backend.entity.User">
+        INSERT INTO users (user_id, user_nickname, user_password, user_avatar, user_url, role, email, status, password_version, create_time, update_time)
+        VALUES (#{id}, #{nickname}, #{password}, #{avatar}, #{url}, #{role}, #{email}, #{status}, #{passwordVersion}, #{createTime}, #{updateTime})
+    </insert>
+
+    <select id="selectList" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/> FROM users
+        <where>
+            <if test="keyword != null and keyword != ''">
+                AND (user_id LIKE CONCAT('%', #{keyword}, '%') OR user_nickname LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+        </where>
+    </select>
+
+    <delete id="deleteById">
+        DELETE FROM users WHERE user_id = #{id}
+    </delete>
+
+    <update id="update" parameterType="com.movie.backend.entity.User">
+        UPDATE users
+        <set>
+            <if test="nickname != null">user_nickname = #{nickname},</if>
+            <if test="password != null">user_password = #{password},</if>
+            <if test="avatar != null">user_avatar = #{avatar},</if>
+            <if test="url != null">user_url = #{url},</if>
+            <if test="role != null">role = #{role},</if>
+            <if test="email != null">email = #{email},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="passwordVersion != null">password_version = #{passwordVersion},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+        </set>
+        WHERE user_id = #{id}
+    </update>
+
+    <select id="countActiveUsers" resultType="int">
+        SELECT COUNT(*) FROM users WHERE status IS NULL OR status = 0
+    </select>
+</mapper>

@@ -2,7 +2,7 @@ package com.movie.backend.service.impl;
 
 import com.github.pagehelper.PageHelper;
 import com.github.pagehelper.PageInfo;
-import com.movie.backend.dto.MyFavoriteVO;
+import com.movie.backend.dto.MovieItemVO;
 import com.movie.backend.entity.ViewHistory;
 import com.movie.backend.mapper.ViewHistoryMapper;
 import com.movie.backend.messaging.event.ViewHistoryEvent;
@@ -11,10 +11,10 @@ import com.movie.backend.service.ViewHistoryService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+
 import java.util.List;
-
-@Service
+
+@Service
 public class ViewHistoryServiceImpl implements ViewHistoryService {
     
     @Autowired
@@ -33,12 +33,12 @@ public class ViewHistoryServiceImpl implements ViewHistoryService {
         ViewHistoryEvent event = new ViewHistoryEvent(userId, movieId, now);
         kafkaEventPublisher.publishViewHistory(event);
     }
-
-    @Override
-    @SuppressWarnings("resource")
-    public PageInfo<MyFavoriteVO> getUserViewHistory(String userId, int page, int size) {
-        PageHelper.startPage(page, size);
-        List<MyFavoriteVO> list = viewHistoryMapper.selectHistoryByUserId(userId);
+
+    @Override
+    @SuppressWarnings("resource")
+    public PageInfo<MovieItemVO> getUserViewHistory(String userId, int page, int size) {
+        PageHelper.startPage(page, size);
+        List<MovieItemVO> list = viewHistoryMapper.selectHistoryByUserId(userId);
         return new PageInfo<>(list);
     }
 

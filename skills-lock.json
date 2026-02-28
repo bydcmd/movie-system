@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "skills": {
+    "vue-best-practices": {
+      "source": "hyf0/vue-skills",
+      "sourceType": "github",
+      "computedHash": "21132f6c11c765bd11d0d6ad081122dd858630073e2123b651e58f17b399b131"
+    },
+    "vue-debug-guides": {
+      "source": "hyf0/vue-skills",
+      "sourceType": "github",
+      "computedHash": "58bb2ad9e92dce0c15b42acc65aeec1dd93bc36f9db96ab248e52b1d22945472"
+    }
+  }
+}

@@ -5,6 +5,8 @@ import com.movie.backend.dto.FavoriteFolderVO;
 import com.movie.backend.entity.FavoriteFolder;
 import com.movie.backend.mapper.FavoriteMapper;
 import com.movie.backend.mapper.FavoriteFolderMapper;
+import com.movie.backend.messaging.event.FavoriteFolderActionEvent;
+import com.movie.backend.messaging.kafka.KafkaEventPublisher;
 import com.movie.backend.service.FavoriteFolderService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -21,6 +23,9 @@ public class FavoriteFolderServiceImpl implements FavoriteFolderService {
     
     @Autowired
     private FavoriteMapper favoriteMapper;
+
+    @Autowired
+    private KafkaEventPublisher kafkaEventPublisher;
     
     @Override
     public FavoriteFolder createFolder(String userId, FavoriteFolderDTO dto) {
@@ -34,6 +39,14 @@ public class FavoriteFolderServiceImpl implements FavoriteFolderService {
         folder.setUpdateTime(new Date());
         
         favoriteFolderMapper.insert(folder);
+        FavoriteFolderActionEvent event = new FavoriteFolderActionEvent(
+                userId,
+                folder.getId(),
+                folder.getName(),
+                folder.getIsPublic(),
+                "CREATE"
+        );
+        kafkaEventPublisher.publishFavoriteFolderActionEvent(event);
         return folder;
     }
     
@@ -47,7 +60,11 @@ public class FavoriteFolderServiceImpl implements FavoriteFolderService {
         if (!checkFolderOwner(dto.getId(), userId)) {
             throw new IllegalArgumentException("无权修改该收藏夹");
         }
-        
+
+        FavoriteFolder existing = favoriteFolderMapper.selectById(dto.getId());
+        Integer previousPublic = existing != null ? existing.getIsPublic() : null;
+        String previousName = existing != null ? existing.getName() : null;
+
         FavoriteFolder folder = new FavoriteFolder();
         folder.setId(dto.getId());
         folder.setName(dto.getName());
@@ -55,6 +72,21 @@ public class FavoriteFolderServiceImpl implements FavoriteFolderService {
         folder.setIsPublic(dto.getIsPublic());
         
         favoriteFolderMapper.update(folder);
+
+        String currentName = dto.getName() != null ? dto.getName() : previousName;
+        Integer currentPublic = dto.getIsPublic() != null ? dto.getIsPublic() : previousPublic;
+        String operation = "UPDATE";
+        if (previousPublic != null && currentPublic != null && previousPublic == 0 && currentPublic == 1) {
+            operation = "SHARE";
+        }
+        FavoriteFolderActionEvent event = new FavoriteFolderActionEvent(
+                userId,
+                dto.getId(),
+                currentName,
+                currentPublic,
+                operation
+        );
+        kafkaEventPublisher.publishFavoriteFolderActionEvent(event);
     }
     
     @Override
@@ -64,22 +96,63 @@ public class FavoriteFolderServiceImpl implements FavoriteFolderService {
         if (!checkFolderOwner(folderId, userId)) {
             throw new IllegalArgumentException("无权删除该收藏夹");
         }
-        
+
+        FavoriteFolder existing = favoriteFolderMapper.selectById(folderId);
+
         // 删除收藏夹下的所有收藏记录
         favoriteMapper.deleteByFolderId(folderId);
         
         // 删除收藏夹
         favoriteFolderMapper.deleteById(folderId);
+
+        FavoriteFolderActionEvent event = new FavoriteFolderActionEvent(
+                userId,
+                folderId,
+                existing != null ? existing.getName() : null,
+                existing != null ? existing.getIsPublic() : null,
+                "DELETE"
+        );
+        kafkaEventPublisher.publishFavoriteFolderActionEvent(event);
     }
     
     @Override
-    public FavoriteFolder getFolderById(Long folderId) {
-        return favoriteFolderMapper.selectById(folderId);
+    public FavoriteFolder getFolderById(Long folderId, String viewerUserId) {
+        FavoriteFolder folder = favoriteFolderMapper.selectById(folderId);
+        if (folder == null) {
+            return null;
+        }
+
+        boolean isOwner = viewerUserId != null
+                && folder.getUserId() != null
+                && folder.getUserId().equals(viewerUserId);
+        boolean isPublic = folder.getIsPublic() != null && folder.getIsPublic() == 1;
+        if (!isOwner && !isPublic) {
+            throw new org.springframework.security.access.AccessDeniedException("无权访问该收藏夹");
+        }
+
+        return folder;
     }
     
     @Override
     public List<FavoriteFolderVO> getUserFolders(String userId) {
-        return favoriteFolderMapper.selectByUserId(userId);
+        List<FavoriteFolderVO> folders = favoriteFolderMapper.selectByUserId(userId);
+        
+        // 创建默认收藏夹VO
+        FavoriteFolderVO defaultFolder = new FavoriteFolderVO();
+        defaultFolder.setId(0L);
+        defaultFolder.setName("默认收藏夹");
+        defaultFolder.setDescription("系统自动创建的默认收藏夹");
+        defaultFolder.setIsPublic(0);
+        // 动态计算默认收藏夹的电影数量
+        int defaultFolderCount = favoriteMapper.countByUserIdAndFolderId(userId, 0L);
+        defaultFolder.setMovieCount(defaultFolderCount);
+        defaultFolder.setCreateTime(null);
+        defaultFolder.setUpdateTime(null);
+        
+        // 将默认收藏夹添加到列表最前面
+        folders.add(0, defaultFolder);
+        
+        return folders;
     }
     
     @Override

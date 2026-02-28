@@ -7,7 +7,7 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class RatingEvent {
+public class RatingEvent implements KeyedEvent {
     private String userId;
     private Long movieId;
     private Integer rating;
@@ -16,4 +16,9 @@ public class RatingEvent {
      */
     private String operation;
     private String ratingTime;
+
+    @Override
+    public Object getKeyId() {
+        return movieId;
+    }
 }

@@ -5,6 +5,7 @@ import com.movie.backend.dto.MyRatingVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.util.Collection;
 import java.util.List;
 
 @Mapper
@@ -20,6 +21,14 @@ public interface RatingMapper {
     int updateByUserAndMovie(@Param("userId") String userId, @Param("movieId") Long movieId, @Param("rating") Integer rating, @Param("ratingTime") String ratingTime);
 
     /**
+     * 写入或更新用户评分（相同评分不重复更新）
+     */
+    int upsertByUserAndMovie(@Param("userId") String userId,
+                             @Param("movieId") Long movieId,
+                             @Param("rating") Integer rating,
+                             @Param("ratingTime") String ratingTime);
+
+    /**
      * Get user's rating for a movie
      */
     Rating selectByUserAndMovie(@Param("userId") String userId, @Param("movieId") Long movieId);
@@ -28,6 +37,11 @@ public interface RatingMapper {
      * 获取用户的评分列表
      */
     List<Rating> selectByUserId(@Param("userId") String userId);
+
+    /**
+     * 获取用户已评分电影ID列表
+     */
+    List<Long> selectMovieIdsByUserId(@Param("userId") String userId);
 
     /**
      * 获取指定电影的所有评分
@@ -48,4 +62,18 @@ public interface RatingMapper {
      * 批量删除用户的评分记录（按电影ID）
      */
     int deleteBatch(@Param("userId") String userId, @Param("movieIds") List<Long> movieIds);
+
+    /**
+     * 基于用户评分重算电影的本站评分与评分人数
+     */
+    int refreshMovieScoreAndVotes(@Param("movieId") Long movieId,
+                                  @Param("kWeight") Integer kWeight,
+                                  @Param("forceUpdateVotesThreshold") Integer forceUpdateVotesThreshold);
+
+    /**
+     * 批量重算电影的本站评分与评分人数
+     */
+    int refreshMovieScoreAndVotesBatch(@Param("movieIds") Collection<Long> movieIds,
+                                       @Param("kWeight") Integer kWeight,
+                                       @Param("forceUpdateVotesThreshold") Integer forceUpdateVotesThreshold);
 }

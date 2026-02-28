@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.movie.backend.mapper.AnalyticsMapper">
+
+    <select id="selectHotMovieIds" resultType="java.lang.Long">
+        SELECT movie_id
+        FROM stats_hot_movies
+        WHERE period_type = #{period}
+          AND calc_date = (SELECT MAX(calc_date) FROM stats_hot_movies WHERE period_type = #{period})
+        ORDER BY hot_score DESC
+        LIMIT #{limit}
+    </select>
+
+    <select id="selectUserRecs" resultType="com.movie.backend.dto.UserRecDTO">
+        SELECT movie_id AS movieId,
+               score,
+               algorithm_type AS algorithmType
+        FROM stats_user_recs
+        WHERE user_id = #{userId}
+        ORDER BY score DESC
+        LIMIT #{limit}
+    </select>
+
+    <select id="selectSimilarMovies" resultType="com.movie.backend.dto.SimilarMovieDTO">
+        SELECT similar_movie_id AS similarMovieId,
+               similarity_score AS similarityScore,
+               similarity_type  AS similarityType
+        FROM stats_similar_movies
+        WHERE movie_id = #{movieId}
+        <if test="similarityType != null">
+            AND similarity_type = #{similarityType}
+        </if>
+        ORDER BY similarity_score DESC
+        LIMIT #{limit}
+    </select>
+
+</mapper>

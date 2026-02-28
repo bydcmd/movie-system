@@ -7,7 +7,7 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class FavoriteEvent {
+public class FavoriteEvent implements KeyedEvent {
     private String userId;
     private Long movieId;
     private Long folderId;
@@ -15,4 +15,9 @@ public class FavoriteEvent {
      * ADD, REMOVE
      */
     private String operation;
+
+    @Override
+    public Object getKeyId() {
+        return movieId;
+    }
 }

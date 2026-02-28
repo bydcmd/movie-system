@@ -7,12 +7,7 @@ import java.util.List;
 
 public interface RatingService {
     /**
-     * Submit or update rating
-     */
-    void submitRating(String userId, Long movieId, Integer rating);
-
-    /**
-     * 修改评分
+     * 提交或更新评分
      */
     void updateRating(String userId, Long movieId, Integer rating);
 

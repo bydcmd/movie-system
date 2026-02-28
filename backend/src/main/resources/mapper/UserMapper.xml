@@ -38,7 +38,7 @@
         SELECT <include refid="Base_Column_List"/> FROM users
         <where>
             <if test="keyword != null and keyword != ''">
-                AND (user_id LIKE CONCAT('%', #{keyword}, '%') OR user_nickname LIKE CONCAT('%', #{keyword}, '%'))
+                AND (user_id LIKE '%' || #{keyword} || '%' OR user_nickname LIKE '%' || #{keyword} || '%')
             </if>
         </where>
     </select>

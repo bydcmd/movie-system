@@ -1,5 +1,6 @@
 package com.movie.backend.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.movie.backend.config.ImagePathSerializer;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -31,7 +32,8 @@ public class UserVO {
     @Schema(description = "JWT 访问令牌 (短效)", example = "eyJhbGciOiJIUzUxMiJ9...")
     private String accessToken;
 
-    @Schema(description = "JWT 刷新令牌 (长效)", example = "eyJhbGciOiJIUzUxMiJ9...")
+    @JsonIgnore
+    @Schema(hidden = true)
     private String refreshToken;
 
     @Schema(description = "用户获得的赞数", example = "1024")
@@ -39,4 +41,7 @@ public class UserVO {
 
     @Schema(description = "用户发布的影评数", example = "50")
     private Integer commentCount;
+
+    @Schema(description = "用户看过的电影数量", example = "120")
+    private Integer watchedCount;
 }

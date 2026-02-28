@@ -1,21 +1,35 @@
 package com.movie.backend.service;
 
 import com.github.pagehelper.PageInfo;
-import com.movie.backend.dto.MyFavoriteVO;
+import com.movie.backend.dto.MovieItemVO;
+
 import com.movie.backend.entity.Movie;
 
+
+
 public interface FavoriteService {
+
     void addFavorite(String userId, Long movieId);
+
     void addFavoriteToFolder(String userId, Long movieId, Long folderId);
+
     void removeFavorite(String userId, Long movieId);
+
     
+
     /**
+
      * 从指定收藏夹中移除电影
+
      */
+
     void removeFavoriteFromFolder(String userId, Long movieId, Long folderId);
+
     PageInfo<Movie> getUserFavoriteMovies(String userId, int page, int size);
-    PageInfo<MyFavoriteVO> getMyFavoriteVOList(String userId, int page, int size);
-    PageInfo<MyFavoriteVO> getFolderMovies(String userId, Long folderId, int page, int size);
+
+    PageInfo<MovieItemVO> getMyFavoriteList(String userId, int page, int size);
+
+    PageInfo<MovieItemVO> getFolderMovies(String userId, Long folderId, int page, int size);
     boolean isFavorited(String userId, Long movieId);
     
     /**

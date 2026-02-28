@@ -57,14 +57,17 @@ public class MovieControllerTest {
 
         when(movieService.getDetail(1294377L)).thenReturn(mockMovie);
 
-        String token = generateTestToken();
-
-        mockMvc.perform(get("/movie/detail/1294377")
-                        .header("Authorization", "Bearer " + token))
+        mockMvc.perform(get("/movies/1294377"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.name").value("Inception"))
                 .andExpect(jsonPath("$.data.score").value(9.5));
+    }
+
+    @Test
+    public void testGetSearchPathShouldReturnMethodNotAllowed() throws Exception {
+        mockMvc.perform(get("/movies/search"))
+                .andExpect(status().isMethodNotAllowed());
     }
 
     @Test
@@ -78,16 +81,25 @@ public class MovieControllerTest {
         movie.setName("Inception");
         PageInfo<Movie> pageInfo = new PageInfo<>(Collections.singletonList(movie));
 
-        when(movieService.search(any(MovieSearchDTO.class))).thenReturn(pageInfo);
+        when(movieService.search(any(MovieSearchDTO.class), org.mockito.ArgumentMatchers.nullable(String.class))).thenReturn(pageInfo);
 
-        String token = generateTestToken();
-
-        mockMvc.perform(post("/movie/search")
-                        .header("Authorization", "Bearer " + token)
+        mockMvc.perform(post("/movies/search")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(searchDTO)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.list[0].name").value("Inception"));
+    }
+
+    @Test
+    public void testSearch_EmptyBodyAllowed() throws Exception {
+        PageInfo<Movie> pageInfo = new PageInfo<>(Collections.emptyList());
+        when(movieService.search(org.mockito.ArgumentMatchers.nullable(MovieSearchDTO.class),
+                org.mockito.ArgumentMatchers.nullable(String.class))).thenReturn(pageInfo);
+
+        mockMvc.perform(post("/movies/search")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
     }
 }

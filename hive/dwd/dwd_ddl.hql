@@ -1,0 +1,55 @@
+CREATE DATABASE IF NOT EXISTS dwd;
+USE dwd;
+
+CREATE EXTERNAL TABLE IF NOT EXISTS dwd.dwd_user_event_wide_di (
+  topic string,
+  event_key string,
+  event_id string,
+  event_type string,
+  event_ts timestamp,
+  kafka_timestamp timestamp,
+  occurred_at timestamp,
+  ingest_time timestamp,
+  hh string,
+  user_id string,
+  user_nickname string,
+  user_role tinyint,
+  user_status int,
+  movie_id bigint,
+  movie_name string,
+  movie_year int,
+  movie_genres string,
+  movie_score decimal(3,1),
+  movie_douban_score decimal(3,1),
+  comment_id bigint,
+  comment_type tinyint,
+  comment_votes int,
+  comment_time timestamp,
+  comment_title string,
+  comment_content_length int,
+  folder_id bigint,
+  folder_name string,
+  folder_is_public tinyint,
+  operation string,
+  operation_norm string,
+  rating int,
+  rating_snapshot int,
+  rating_time timestamp,
+  search_keyword string,
+  result_count bigint,
+  is_view tinyint,
+  is_rating tinyint,
+  is_comment tinyint,
+  is_comment_like tinyint,
+  is_favorite tinyint,
+  is_watched tinyint,
+  is_search tinyint,
+  is_register tinyint,
+  is_login tinyint,
+  event_data string,
+  raw_json string
+)
+PARTITIONED BY (dt string)
+STORED AS ORC
+LOCATION '/warehouse/movie/dwd/user_event_wide_di'
+TBLPROPERTIES ('orc.compress'='SNAPPY');

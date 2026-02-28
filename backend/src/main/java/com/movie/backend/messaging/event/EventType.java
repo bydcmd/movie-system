@@ -5,7 +5,12 @@ public enum EventType {
     RATING("rating"),
     COMMENT("comment"),
     COMMENT_LIKE("comment_like"),
-    FAVORITE("favorite");
+    FAVORITE("favorite"),
+    WATCHED("watched"),
+    FAVORITE_FOLDER_ACTION("favorite_folder_action"),
+    SEARCH("search"),
+    USER_REGISTER("user_register"),
+    USER_LOGIN("user_login");
 
     private final String code;
 

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.ibatis.type.BaseTypeHandler;
 import org.apache.ibatis.type.JdbcType;
 import org.apache.ibatis.type.MappedJdbcTypes;
+import org.postgresql.util.PGobject;
 
 import java.sql.CallableStatement;
 import java.sql.PreparedStatement;
@@ -12,10 +13,10 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 
 /**
- * MyBatis TypeHandler for JSON fields
- * Converts between Java List/Map and database JSON
+ * MyBatis TypeHandler for PostgreSQL JSONB fields
+ * Converts between Java List/Map and PostgreSQL JSONB
  */
-@MappedJdbcTypes(JdbcType.VARCHAR)
+@MappedJdbcTypes(JdbcType.OTHER)
 public class JsonTypeHandler extends BaseTypeHandler<Object> {
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
@@ -23,9 +24,12 @@ public class JsonTypeHandler extends BaseTypeHandler<Object> {
     @Override
     public void setNonNullParameter(PreparedStatement ps, int i, Object parameter, JdbcType jdbcType) throws SQLException {
         try {
-            ps.setString(i, objectMapper.writeValueAsString(parameter));
+            PGobject jsonObject = new PGobject();
+            jsonObject.setType("jsonb");
+            jsonObject.setValue(objectMapper.writeValueAsString(parameter));
+            ps.setObject(i, jsonObject);
         } catch (JsonProcessingException e) {
-            throw new SQLException("Error converting object to JSON", e);
+            throw new SQLException("Error converting object to JSONB", e);
         }
     }
 

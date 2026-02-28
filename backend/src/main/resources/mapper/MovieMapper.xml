@@ -12,7 +12,7 @@
         <result column="directors" property="directors" typeHandler="com.movie.backend.config.JsonTypeHandler" />
         <result column="douban_score" property="doubanScore" />
         <result column="score" property="score" />
-        <result column="douban_votes" property="votes" />
+        <result column="douban_votes" property="doubanVotes" />
         <result column="votes" property="votes" />
         <result column="genres" property="genres" />
         <result column="imdb_id" property="imdbId" />
@@ -26,7 +26,7 @@
     </resultMap>
 
     <sql id="Base_Column_List">
-        movie_id, name, alias, actors, cover, directors, douban_score, douban_votes, genres, 
+        movie_id, name, alias, actors, cover, directors, douban_score, score, douban_votes, votes, genres, 
         imdb_id, languages, mins, regions, release_date, storyline, year, writers
     </sql>
 
@@ -40,14 +40,43 @@
         <where>
 
             <if test="keyword != null and keyword != ''">
-                AND (
-                    MATCH(full_search_text) AGAINST(#{keyword} IN BOOLEAN MODE)
-                    OR name LIKE CONCAT('%', #{keyword}, '%')
-                    OR alias LIKE CONCAT('%', #{keyword}, '%')
-                    OR storyline LIKE CONCAT('%', #{keyword}, '%')
-                    OR directors LIKE CONCAT('%', #{keyword}, '%')
-                    OR actors LIKE CONCAT('%', #{keyword}, '%')
-                    OR writers LIKE CONCAT('%', #{keyword}, '%')
+                AND movie_id IN (
+                    SELECT keyword_pool.movie_id
+                    FROM (
+                        SELECT candidate.movie_id
+                        FROM (
+                            SELECT
+                                m.movie_id,
+                                GREATEST(
+                                    similarity(COALESCE(m.name, ''), #{keyword}),
+                                    similarity(COALESCE(m.alias, ''), #{keyword}),
+                                    similarity(COALESCE(m.full_search_text, ''), #{keyword})
+                                ) AS relevance
+                            FROM movies m
+                            WHERE m.full_search_text % #{keyword}
+                               OR m.name % #{keyword}
+                               OR m.alias % #{keyword}
+                            ORDER BY relevance DESC
+                            LIMIT 5000
+                        ) candidate
+
+                        UNION ALL
+
+                        SELECT fallback.movie_id
+                        FROM (
+                            SELECT m.movie_id
+                            FROM movies m
+                            WHERE NOT EXISTS (
+                                SELECT 1
+                                FROM movies t
+                                WHERE t.full_search_text % #{keyword}
+                                   OR t.name % #{keyword}
+                                   OR t.alias % #{keyword}
+                            )
+                              AND m.full_search_text ILIKE '%' || #{keyword} || '%'
+                            LIMIT 5000
+                        ) fallback
+                    ) keyword_pool
                 )
             </if>
 
@@ -97,8 +126,7 @@
             <if test="directors != null and directors.size() > 0">
                 AND (
                 <foreach collection="directors" item="director" separator=" OR ">
-                    (JSON_SEARCH(directors, 'one', CONCAT('%', #{director}, '%'), NULL, '$[*].name') IS NOT NULL
-                     OR directors LIKE CONCAT('%', #{director}, '%'))
+                    (directors @> jsonb_build_array(jsonb_build_object('name', #{director})))
                 </foreach>
                 )
             </if>
@@ -106,8 +134,7 @@
             <if test="actors != null and actors.size() > 0">
                 AND (
                 <foreach collection="actors" item="actor" separator=" OR ">
-                    (JSON_SEARCH(actors, 'one', CONCAT('%', #{actor}, '%'), NULL, '$[*].name') IS NOT NULL
-                     OR actors LIKE CONCAT('%', #{actor}, '%'))
+                    (actors @> jsonb_build_array(jsonb_build_object('name', #{actor})))
                 </foreach>
                 )
             </if>
@@ -122,6 +149,16 @@
             </when>
             <when test="sortBy == 'votes'">
                 ORDER BY douban_votes ${sortOrder}
+            </when>
+            <when test="keyword != null and keyword != '' and (sortBy == null or sortBy == '')">
+                ORDER BY
+                GREATEST(
+                    similarity(COALESCE(name, ''), #{keyword}),
+                    similarity(COALESCE(alias, ''), #{keyword}),
+                    similarity(COALESCE(full_search_text, ''), #{keyword})
+                ) DESC,
+                douban_score DESC,
+                douban_votes DESC
             </when>
             <otherwise>
                 ORDER BY douban_score DESC </otherwise>
@@ -156,6 +193,18 @@
                 )
             </if>
 
+            <if test="languagesList != null and languagesList.size() > 0">
+                AND EXISTS (
+                SELECT 1 FROM movie_language_relation mlr
+                INNER JOIN languages l ON mlr.language_id = l.id
+                WHERE mlr.movie_id = movies.movie_id
+                AND l.name IN
+                <foreach collection="languagesList" item="language" open="(" separator="," close=")">
+                    #{language}
+                </foreach>
+                )
+            </if>
+
             <if test="minScore != null">
                 AND douban_score &gt;= #{minScore}
             </if>
@@ -173,16 +222,16 @@
 
         <choose>
             <when test="sortBy == 'score'">
-                ORDER BY douban_score ${sortOrder}
+                ORDER BY douban_score ${sortOrder}, movie_id DESC
             </when>
             <when test="sortBy == 'year'">
-                ORDER BY year ${sortOrder}
+                ORDER BY year ${sortOrder}, movie_id DESC
             </when>
             <when test="sortBy == 'votes'">
-                ORDER BY douban_votes ${sortOrder}
+                ORDER BY douban_votes ${sortOrder}, movie_id DESC
             </when>
             <otherwise>
-                ORDER BY year DESC, douban_score DESC
+                ORDER BY year DESC, douban_score DESC, movie_id DESC
             </otherwise>
         </choose>
     </select>
@@ -191,7 +240,7 @@
         SELECT m.movie_id, m.name, m.cover, m.douban_score, m.year, m.regions, m.genres
         FROM movies m
         INNER JOIN stats_hot_movies s ON m.movie_id = s.movie_id
-        WHERE s.calc_date = CURRENT_DATE()
+        WHERE s.calc_date = CURRENT_DATE
         AND s.period_type = 'DAILY'
         ORDER BY s.hot_score DESC
         LIMIT #{limit}
@@ -217,10 +266,10 @@
     </select>
 
     <insert id="insert" parameterType="com.movie.backend.entity.Movie">
-        INSERT INTO movies (movie_id, name, alias, actors, cover, directors, douban_score, douban_votes, genres, 
+        INSERT INTO movies (movie_id, name, alias, actors, cover, directors, douban_score, score, douban_votes, votes, genres, 
                             imdb_id, languages, mins, regions, release_date, storyline, year, writers)
         VALUES (#{id}, #{name}, #{alias}, #{actors,typeHandler=com.movie.backend.config.JsonTypeHandler}, #{cover}, 
-                #{directors,typeHandler=com.movie.backend.config.JsonTypeHandler}, #{score}, #{votes}, #{genres}, 
+                #{directors,typeHandler=com.movie.backend.config.JsonTypeHandler}, #{doubanScore}, #{score}, #{doubanVotes}, #{votes}, #{genres}, 
                 #{imdbId}, #{languages}, #{mins}, #{regions}, #{releaseDate}, #{storyline}, #{year}, 
                 #{writers,typeHandler=com.movie.backend.config.JsonTypeHandler})
     </insert>
@@ -233,8 +282,10 @@
             <if test="actors != null">actors = #{actors,typeHandler=com.movie.backend.config.JsonTypeHandler},</if>
             <if test="cover != null">cover = #{cover},</if>
             <if test="directors != null">directors = #{directors,typeHandler=com.movie.backend.config.JsonTypeHandler},</if>
-            <if test="score != null">douban_score = #{score},</if>
-            <if test="votes != null">douban_votes = #{votes},</if>
+            <if test="doubanScore != null">douban_score = #{doubanScore},</if>
+            <if test="score != null">score = #{score},</if>
+            <if test="doubanVotes != null">douban_votes = #{doubanVotes},</if>
+            <if test="votes != null">votes = #{votes},</if>
             <if test="genres != null">genres = #{genres},</if>
             <if test="imdbId != null">imdb_id = #{imdbId},</if>
             <if test="languages != null">languages = #{languages},</if>
@@ -253,16 +304,15 @@
     </delete>
 
     <select id="selectList" resultMap="BaseResultMap">
-        SELECT movie_id, name, cover, douban_score, douban_votes, year, directors, actors, writers
-        FROM movies
+        SELECT <include refid="Base_Column_List"/> FROM movies
         <where>
             <if test="keyword != null and keyword != ''">
-                (name LIKE CONCAT('%', #{keyword}, '%')
-                 OR alias LIKE CONCAT('%', #{keyword}, '%')
-                 OR storyline LIKE CONCAT('%', #{keyword}, '%')
-                 OR directors LIKE CONCAT('%', #{keyword}, '%')
-                 OR actors LIKE CONCAT('%', #{keyword}, '%')
-                 OR writers LIKE CONCAT('%', #{keyword}, '%'))
+                (name LIKE '%' || #{keyword} || '%'
+                 OR alias LIKE '%' || #{keyword} || '%'
+                 OR storyline LIKE '%' || #{keyword} || '%'
+                 OR directors::text LIKE '%' || #{keyword} || '%'
+                 OR actors::text LIKE '%' || #{keyword} || '%'
+                 OR writers::text LIKE '%' || #{keyword} || '%')
             </if>
         </where>
         ORDER BY douban_score DESC, year DESC
@@ -306,9 +356,21 @@
     <select id="selectByPersonName" resultMap="BaseResultMap">
         SELECT movie_id, name, cover, douban_score, douban_votes, year
         FROM movies
-        -- 使用布尔模式，确保精确匹配名字（加双引号可强制匹配短语，视分词器而定，通常直接匹配即可）
-        WHERE MATCH(full_search_text) AGAINST(#{personName} IN BOOLEAN MODE)
+        WHERE full_search_text LIKE '%' || #{personName} || '%'
         ORDER BY year DESC
+    </select>
+
+    <select id="selectByIds" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM movies
+        WHERE movie_id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        ORDER BY array_position(
+            ARRAY[<foreach collection="ids" item="id" separator=",">#{id}::bigint</foreach>],
+            movie_id
+        )
     </select>
 
     <select id="selectAllGenres" resultType="java.lang.String">
@@ -319,21 +381,18 @@
         SELECT name FROM regions ORDER BY name
     </select>
 
+    <select id="selectAllLanguages" resultType="java.lang.String">
+        SELECT name FROM languages ORDER BY name
+    </select>
+
     <select id="selectAllYears" resultType="java.lang.Integer">
         SELECT DISTINCT year FROM movies WHERE year IS NOT NULL ORDER BY year DESC
     </select>
 
     <update id="updateMovieScore">
-        UPDATE movies 
-        SET douban_score = #{score}, douban_votes = #{votes}
+        UPDATE movies
+        SET score = #{siteScore}, votes = #{siteVotes}
         WHERE movie_id = #{movieId}
     </update>
 
-    <select id="selectColdGems" resultMap="BaseResultMap">
-        SELECT <include refid="Base_Column_List"/> FROM movies
-        WHERE douban_score >= #{minScore}
-          AND douban_votes &lt; #{maxVotes} AND douban_votes > 0
-        ORDER BY douban_score DESC, douban_votes ASC
-        LIMIT #{limit}
-    </select>
 </mapper>

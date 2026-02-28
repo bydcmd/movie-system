@@ -16,26 +16,26 @@ import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import javax.sql.DataSource;
 
 @Configuration
-@MapperScan(basePackages = "com.movie.backend.mapper", sqlSessionFactoryRef = "mysqlSqlSessionFactory")
+@MapperScan(basePackages = "com.movie.backend.mapper", sqlSessionFactoryRef = "postgresqlSqlSessionFactory")
 public class DataSourceConfig {
 
-    // --- Primary MySQL DataSource ---
-    @Bean(name = "mysqlDataSource")
+    // --- Primary PostgreSQL DataSource ---
+    @Bean(name = "postgresqlDataSource")
     @Primary
     @ConfigurationProperties(prefix = "spring.datasource")
-    public DataSource mysqlDataSource() {
+    public DataSource postgresqlDataSource() {
         return new DruidDataSource();
     }
 
-    @Bean(name = "mysqlTransactionManager")
+    @Bean(name = "postgresqlTransactionManager")
     @Primary
-    public DataSourceTransactionManager mysqlTransactionManager(@Qualifier("mysqlDataSource") DataSource dataSource) {
+    public DataSourceTransactionManager postgresqlTransactionManager(@Qualifier("postgresqlDataSource") DataSource dataSource) {
         return new DataSourceTransactionManager(dataSource);
     }
 
-    @Bean(name = "mysqlSqlSessionFactory")
+    @Bean(name = "postgresqlSqlSessionFactory")
     @Primary
-    public SqlSessionFactory mysqlSqlSessionFactory(@Qualifier("mysqlDataSource") DataSource dataSource) throws Exception {
+    public SqlSessionFactory postgresqlSqlSessionFactory(@Qualifier("postgresqlDataSource") DataSource dataSource) throws Exception {
         SqlSessionFactoryBean bean = new SqlSessionFactoryBean();
         bean.setDataSource(dataSource);
         bean.setMapperLocations(new PathMatchingResourcePatternResolver().getResources("classpath:mapper/*.xml"));
@@ -47,9 +47,9 @@ public class DataSourceConfig {
         return bean.getObject();
     }
 
-    @Bean(name = "mysqlJdbcTemplate")
+    @Bean(name = "postgresqlJdbcTemplate")
     @Primary
-    public JdbcTemplate mysqlJdbcTemplate(@Qualifier("mysqlDataSource") DataSource dataSource) {
+    public JdbcTemplate postgresqlJdbcTemplate(@Qualifier("postgresqlDataSource") DataSource dataSource) {
         return new JdbcTemplate(dataSource);
     }
 

@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.movie.backend.mapper.WatchedMapper">
+
+    <insert id="insert" parameterType="com.movie.backend.entity.Watched">
+        INSERT INTO watched_movies (user_id, movie_id, create_time)
+        VALUES (#{userId}, #{movieId}, #{createTime})
+    </insert>
+
+    <delete id="deleteByUserAndMovie">
+        DELETE FROM watched_movies WHERE user_id = #{userId} AND movie_id = #{movieId}
+    </delete>
+
+    <delete id="deleteBatchByUserAndMovies">
+        DELETE FROM watched_movies
+        WHERE user_id = #{userId}
+        AND movie_id IN
+        <foreach collection="movieIds" item="movieId" open="(" separator="," close=")">
+            #{movieId}
+        </foreach>
+    </delete>
+
+    <delete id="deleteAllByUserId">
+        DELETE FROM watched_movies WHERE user_id = #{userId}
+    </delete>
+
+    <select id="selectByUserAndMovie" resultType="com.movie.backend.entity.Watched">
+        SELECT user_id as userId, movie_id as movieId, create_time as createTime
+        FROM watched_movies
+        WHERE user_id = #{userId} AND movie_id = #{movieId}
+        LIMIT 1
+    </select>
+
+    <select id="selectBatchByUserAndMovies" resultType="com.movie.backend.entity.Watched">
+        SELECT user_id as userId, movie_id as movieId, create_time as createTime
+        FROM watched_movies
+        WHERE user_id = #{userId}
+        AND movie_id IN
+        <foreach collection="movieIds" item="movieId" open="(" separator="," close=")">
+            #{movieId}
+        </foreach>
+    </select>
+
+    <resultMap id="MyWatchedVOMap" type="com.movie.backend.dto.MovieItemVO">
+        <result column="movie_id" property="movieId" />
+        <result column="name" property="movieName" />
+        <result column="cover" property="cover" />
+        <result column="score" property="score" />
+        <result column="votes" property="votes" />
+        <result column="genres" property="genres" />
+        <result column="year" property="year" />
+        <result column="directors" property="directors" typeHandler="com.movie.backend.config.JsonTypeHandler" />
+        <result column="actors" property="actors" typeHandler="com.movie.backend.config.JsonTypeHandler" />
+        <result column="regions" property="regions" />
+        <result column="mins" property="mins" />
+        <result column="storyline" property="storyline" />
+        <result column="watched_time" property="favoriteTime" />
+    </resultMap>
+
+    <select id="selectMyWatchedByUserId" resultMap="MyWatchedVOMap">
+        SELECT
+            m.movie_id,
+            m.name,
+            m.cover,
+            m.douban_score as score,
+            m.douban_votes as votes,
+            m.genres,
+            m.year,
+            m.directors,
+            m.actors,
+            m.regions,
+            m.mins,
+            m.storyline,
+            DATE_FORMAT(w.create_time, '%Y-%m-%d %H:%i:%s') as watched_time
+        FROM movies m
+        JOIN watched_movies w ON m.movie_id = w.movie_id
+        WHERE w.user_id = #{userId}
+        ORDER BY w.create_time DESC
+    </select>
+
+    <select id="countByUserId" resultType="int">
+        SELECT COUNT(*) FROM watched_movies WHERE user_id = #{userId}
+    </select>
+</mapper>

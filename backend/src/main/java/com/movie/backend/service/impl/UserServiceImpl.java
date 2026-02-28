@@ -9,6 +9,10 @@ import com.movie.backend.dto.UserVO;
 import com.movie.backend.entity.User;
 import com.movie.backend.mapper.CommentMapper;
 import com.movie.backend.mapper.UserMapper;
+import com.movie.backend.mapper.WatchedMapper;
+import com.movie.backend.messaging.event.UserLoginEvent;
+import com.movie.backend.messaging.event.UserRegisterEvent;
+import com.movie.backend.messaging.kafka.KafkaEventPublisher;
 import com.movie.backend.service.UserService;
 import com.movie.backend.utils.JwtUtil;
 import com.movie.backend.utils.PasswordUtil;
@@ -26,6 +30,12 @@ public class UserServiceImpl implements UserService {
     
     @Autowired
     private CommentMapper commentMapper;
+
+    @Autowired
+    private WatchedMapper watchedMapper;
+
+    @Autowired
+    private KafkaEventPublisher kafkaEventPublisher;
 
     @Override
     public UserVO login(LoginDTO loginDTO) {
@@ -57,7 +67,10 @@ public class UserServiceImpl implements UserService {
         // 生成 Access Token (短效) 和 Refresh Token (长效)
         userVO.setAccessToken(JwtUtil.generateAccessToken(user.getId(), user.getNickname(), user.getRole(), passwordVersion));
         userVO.setRefreshToken(JwtUtil.generateRefreshToken(user.getId(), user.getNickname(), user.getRole(), passwordVersion));
-        
+
+        UserLoginEvent event = new UserLoginEvent(user.getId());
+        kafkaEventPublisher.publishUserLoginEvent(event);
+
         return userVO;
     }
 
@@ -79,6 +92,8 @@ public class UserServiceImpl implements UserService {
         user.setUpdateTime(new Date());
 
         userMapper.insert(user);
+        UserRegisterEvent event = new UserRegisterEvent(user.getId());
+        kafkaEventPublisher.publishUserRegisterEvent(event);
     }
 
     @Override
@@ -124,6 +139,7 @@ public class UserServiceImpl implements UserService {
         // 获取用户的统计数据
         Integer receivedLikes = commentMapper.getTotalReceivedLikes(userId);
         Integer commentCount = commentMapper.getCommentCount(userId);
+        Integer watchedCount = watchedMapper.countByUserId(userId);
         
         // 设置统计数据
         publicUserVO.setReceivedLikes(receivedLikes != null ? receivedLikes : 0);
@@ -146,10 +162,12 @@ public class UserServiceImpl implements UserService {
         // 获取用户的统计数据
         Integer receivedLikes = commentMapper.getTotalReceivedLikes(userId);
         Integer commentCount = commentMapper.getCommentCount(userId);
+        Integer watchedCount = watchedMapper.countByUserId(userId);
         
         // 设置统计数据
         userVO.setReceivedLikes(receivedLikes != null ? receivedLikes : 0);
         userVO.setCommentCount(commentCount != null ? commentCount : 0);
+        userVO.setWatchedCount(watchedCount != null ? watchedCount : 0);
         
         return userVO;
     }
@@ -158,24 +176,24 @@ public class UserServiceImpl implements UserService {
     public void changePassword(String userId, String oldPassword, String newPassword) {
         User user = userMapper.selectById(userId);
         if (user == null) {
-            throw new RuntimeException("用户不存在");
+            throw new IllegalArgumentException("用户不存在");
         }
-        
+
         // 验证旧密码
         if (!PasswordUtil.matches(oldPassword, user.getPassword())) {
-            throw new RuntimeException("旧密码错误");
+            throw new IllegalArgumentException("旧密码错误");
         }
-        
+
         // 更新密码和版本号
         User updateUser = new User();
         updateUser.setId(userId);
         updateUser.setPassword(PasswordUtil.encode(newPassword));
-        
+
         // 递增密码版本号，使所有旧 Token 失效
         Integer currentVersion = user.getPasswordVersion() != null ? user.getPasswordVersion() : 1;
         updateUser.setPasswordVersion(currentVersion + 1);
         updateUser.setUpdateTime(new Date());
-        
+
         userMapper.update(updateUser);
     }
 

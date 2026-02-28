@@ -6,10 +6,11 @@ import com.movie.backend.dto.RegisterDTO;
 import com.movie.backend.dto.UpdateUserProfileDTO;
 import com.movie.backend.dto.UserProfileVO;
 import com.movie.backend.dto.UserVO;
-import com.movie.backend.context.UserContext;
 import com.movie.backend.entity.User;
+import com.movie.backend.mapper.UserMapper;
 import com.movie.backend.service.UserService;
-import org.junit.jupiter.api.AfterEach;
+import com.movie.backend.service.TokenBlacklistService;
+import com.movie.backend.utils.JwtUtil;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -23,10 +24,12 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.hamcrest.Matchers.containsString;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -38,12 +41,17 @@ public class UserControllerTest {
     @MockBean
     private UserService userService; // Mock Service to avoid DB dependency in this test
 
+    @MockBean
+    private UserMapper userMapper;
+
+    @MockBean
+    private TokenBlacklistService tokenBlacklistService;
+
     @Autowired
     private ObjectMapper objectMapper;
 
-    @AfterEach
-    public void tearDown() {
-        UserContext.clear();
+    private String bearerTokenFor(String userId) {
+        return "Bearer " + JwtUtil.generateAccessToken(userId, "TestUser", 1, 1);
     }
 
     @Test
@@ -54,12 +62,13 @@ public class UserControllerTest {
         registerDTO.setNickname("TestUser");
         registerDTO.setEmail("test@test.com");
 
-        mockMvc.perform(post("/user/register")
+        mockMvc.perform(post("/users/register")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(registerDTO)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
-                .andExpect(jsonPath("$.message").value("Success"));
+                .andExpect(jsonPath("$.message").value("Success"))
+                .andExpect(jsonPath("$.data").value("注册成功"));
     }
 
     @Test
@@ -76,20 +85,21 @@ public class UserControllerTest {
 
         when(userService.login(any(LoginDTO.class))).thenReturn(mockUser);
 
-        mockMvc.perform(post("/user/login")
+        mockMvc.perform(post("/users/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(loginDTO)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.accessToken").exists())
-                .andExpect(jsonPath("$.data.refreshToken").exists());
+                .andExpect(header().string("Set-Cookie", containsString("refresh_token=")));
     }
 
     @Test
     public void testGetMyProfile_Success() throws Exception {
         User currentUser = new User();
         currentUser.setId("user123");
-        UserContext.setCurrentUser(currentUser);
+        when(userMapper.selectById("user123")).thenReturn(currentUser);
+        when(tokenBlacklistService.isBlacklisted(any(String.class))).thenReturn(false);
 
         UserProfileVO profileVO = new UserProfileVO();
         profileVO.setId("user123");
@@ -98,7 +108,8 @@ public class UserControllerTest {
 
         when(userService.getMyProfile("user123")).thenReturn(profileVO);
 
-        mockMvc.perform(get("/user/profile"))
+        mockMvc.perform(get("/users/me/profile")
+                        .header("Authorization", bearerTokenFor("user123")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.id").value("user123"))
@@ -109,7 +120,8 @@ public class UserControllerTest {
     public void testUpdateMyProfile_Success() throws Exception {
         User currentUser = new User();
         currentUser.setId("user123");
-        UserContext.setCurrentUser(currentUser);
+        when(userMapper.selectById("user123")).thenReturn(currentUser);
+        when(tokenBlacklistService.isBlacklisted(any(String.class))).thenReturn(false);
 
         UpdateUserProfileDTO dto = new UpdateUserProfileDTO();
         dto.setNickname("NewName");
@@ -117,27 +129,31 @@ public class UserControllerTest {
 
         doNothing().when(userService).updateMyProfile(eq("user123"), any(UpdateUserProfileDTO.class));
 
-        mockMvc.perform(put("/user/profile")
+        mockMvc.perform(patch("/users/me/profile")
+                        .header("Authorization", bearerTokenFor("user123"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
-                .andExpect(jsonPath("$.message").value("Success"));
+                .andExpect(jsonPath("$.message").value("Success"))
+                .andExpect(jsonPath("$.data").value("个人资料更新成功"));
     }
 
     @Test
     public void testUpdateMyProfile_InvalidEmail() throws Exception {
         User currentUser = new User();
         currentUser.setId("user123");
-        UserContext.setCurrentUser(currentUser);
+        when(userMapper.selectById("user123")).thenReturn(currentUser);
+        when(tokenBlacklistService.isBlacklisted(any(String.class))).thenReturn(false);
 
         UpdateUserProfileDTO dto = new UpdateUserProfileDTO();
         dto.setEmail("invalid-email");
 
-        mockMvc.perform(put("/user/profile")
+        mockMvc.perform(patch("/users/me/profile")
+                        .header("Authorization", bearerTokenFor("user123"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("邮箱格式不正确"));
     }

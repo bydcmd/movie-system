@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 
 /**
  * 电影目录筛选请求DTO（用于GET请求）
- * 用于浏览页面的目录筛选，与POST /movie/search（复杂搜索）分离
+ * 用于浏览页面的目录筛选，与POST /movies/search（复杂搜索）分离
  */
 @Data
 @EqualsAndHashCode(callSuper = true)
@@ -26,6 +26,9 @@ public class CatalogQueryDTO extends PageRequest {
 
     @Schema(description = "地区筛选（支持多选，逗号分隔）", example = "美国,中国大陆")
     private String regions;
+
+    @Schema(description = "语言筛选（支持多选，逗号分隔）", example = "英语,日语")
+    private String languages;
 
     @Schema(description = "最低评分筛选 (1.0-10.0)", example = "8.0")
     @DecimalMin(value = "1.0", message = "最低评分不能小于1")
@@ -77,6 +80,20 @@ public class CatalogQueryDTO extends PageRequest {
                 .map(String::trim)          // 去除每个元素前后的空格
                 .filter(s -> !s.isEmpty())  // 过滤掉连续逗号产生的空字符串
                 .collect(Collectors.toList()); // 转换为 List
+    }
+
+    /**
+     * 将逗号分隔的languages字符串转为List
+     */
+    public List<String> getLanguagesList() {
+        if (languages == null || languages.trim().isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        return Arrays.stream(languages.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toList());
     }
 }
 

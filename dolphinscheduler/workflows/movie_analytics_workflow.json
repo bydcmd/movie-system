@@ -1,7 +1,7 @@
 {
   "processDefinition": {
-    "name": "Movie_Analytics_Daily",
-    "description": "电影数据分析每日工作流 - 包含热度计算和评分融合",
+    "name": "Movie_Analytics_Full_Pipeline",
+    "description": "电影数仓全链路工作流 - ODS/DWD/DWS/ADS",
     "globalParams": [
       {
         "prop": "calc_date",
@@ -10,117 +10,100 @@
         "direct": "IN"
       },
       {
-        "prop": "jdbc_url",
-        "value": "jdbc:mysql://localhost:3306/movie_db?useSSL=false",
+        "prop": "snapshot_date",
+        "value": "${calc_date}",
         "type": "VARCHAR",
         "direct": "IN"
       },
       {
-        "prop": "db_user",
-        "value": "root",
+        "prop": "etl_config",
+        "value": "spark/conf/etl_config.json",
         "type": "VARCHAR",
         "direct": "IN"
       },
       {
-        "prop": "db_password",
-        "value": "${movie_db_password}",
+        "prop": "pg_tables",
+        "value": "",
         "type": "VARCHAR",
         "direct": "IN"
       },
       {
-        "prop": "hive_db",
-        "value": "ods_movie_db",
+        "prop": "checkpoint_root",
+        "value": "hdfs:///warehouse/checkpoints/movie-etl",
+        "type": "VARCHAR",
+        "direct": "IN"
+      },
+      {
+        "prop": "trigger_processing_time",
+        "value": "30 seconds",
+        "type": "VARCHAR",
+        "direct": "IN"
+      },
+      {
+        "prop": "kafka_run_mode",
+        "value": "available-now",
+        "type": "VARCHAR",
+        "direct": "IN"
+      },
+      {
+        "prop": "ads_top_n",
+        "value": "100",
+        "type": "VARCHAR",
+        "direct": "IN"
+      },
+      {
+        "prop": "itemcf_top_k",
+        "value": "100",
+        "type": "VARCHAR",
+        "direct": "IN"
+      },
+      {
+        "prop": "itemcf_top_n",
+        "value": "30",
         "type": "VARCHAR",
         "direct": "IN"
       }
     ],
     "tasks": [
       {
-        "name": "Data_Quality_Check",
-        "description": "数据质量检查 - 检查ODS层数据是否就绪",
-        "taskType": "SQL",
-        "taskParams": {
-          "type": "HIVE",
-          "datasource": 1,
-          "sql": "SELECT COUNT(*) as cnt FROM ${hive_db}.ods_ratings WHERE dt = '${calc_date}'",
-          "udfs": "",
-          "sqlType": 0,
-          "title": "检查评分数据",
-          "receivers": "",
-          "receiversCc": "",
-          "showType": "TABLE",
-          "localParams": [],
-          "resourceList": [],
-          "dependence": {}
-        },
-        "flag": "YES",
-        "taskPriority": "MEDIUM",
-        "workerGroup": "default",
-        "failRetryTimes": 3,
-        "failRetryInterval": 5,
-        "timeoutFlag": "OPEN",
-        "timeoutNotifyStrategy": ["WARN"],
-        "timeout": 300
-      },
-      {
-        "name": "Hot_Movies_Calc",
-        "description": "电影热度计算 - 计算日/周/月热度榜",
+        "name": "Postgres_To_Hive_ODS",
+        "description": "PostgreSQL 全量快照入仓 ODS 分区",
         "taskType": "SPARK",
         "taskParams": {
           "programType": "PYTHON",
           "mainClass": "",
           "mainJar": {
             "id": null,
-            "res": "spark/jobs/hot_movies_calc.py"
+            "res": "spark/jobs/postgres_to_hive_ods.py"
           },
           "deployMode": "cluster",
           "resourceList": [
             {
               "id": null,
-              "res": "spark/jobs/hot_movies_calc.py"
+              "res": "spark/jobs/postgres_to_hive_ods.py"
             }
           ],
           "localParams": [
             {
-              "prop": "--calc-date",
+              "prop": "--config",
+              "value": "${etl_config}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            },
+            {
+              "prop": "--batch-date",
               "value": "${calc_date}",
               "direct": "IN",
               "type": "VARCHAR"
             },
             {
-              "prop": "--jdbc-url",
-              "value": "${jdbc_url}",
-              "direct": "IN",
-              "type": "VARCHAR"
-            },
-            {
-              "prop": "--db-user",
-              "value": "${db_user}",
-              "direct": "IN",
-              "type": "VARCHAR"
-            },
-            {
-              "prop": "--db-password",
-              "value": "${db_password}",
-              "direct": "IN",
-              "type": "VARCHAR"
-            },
-            {
-              "prop": "--hive-db",
-              "value": "${hive_db}",
+              "prop": "--tables",
+              "value": "${pg_tables}",
               "direct": "IN",
               "type": "VARCHAR"
             }
           ],
-          "dependence": {
-            "relation": "AND",
-            "dependTaskList": [
-              {
-                "depTaskCode": "Data_Quality_Check",
-                "depTaskVersion": 1
-              }
-            ]
-          },
+          "dependence": {},
           "sparkVersion": "SPARK2",
           "driverCores": 1,
           "driverMemory": "2G",
@@ -135,81 +118,64 @@
         "failRetryTimes": 2,
         "failRetryInterval": 10,
         "timeoutFlag": "OPEN",
-        "timeoutNotifyStrategy": ["WARN", "FAILED"],
+        "timeoutNotifyStrategy": [
+          "WARN",
+          "FAILED"
+        ],
         "timeout": 1800
       },
       {
-        "name": "Rating_Sync",
-        "description": "评分融合 - 融合豆瓣和本站评分",
+        "name": "Kafka_Events_To_Hive_ODS",
+        "description": "Kafka 事件入仓 ODS（available-now 模式）",
         "taskType": "SPARK",
         "taskParams": {
           "programType": "PYTHON",
           "mainClass": "",
           "mainJar": {
             "id": null,
-            "res": "spark/jobs/rating_sync.py"
+            "res": "spark/jobs/kafka_events_to_hive_ods.py"
           },
           "deployMode": "cluster",
           "resourceList": [
             {
               "id": null,
-              "res": "spark/jobs/rating_sync.py"
+              "res": "spark/jobs/kafka_events_to_hive_ods.py"
             }
           ],
           "localParams": [
             {
-              "prop": "--jdbc-url",
-              "value": "${jdbc_url}",
+              "prop": "--config",
+              "value": "${etl_config}",
               "direct": "IN",
               "type": "VARCHAR"
             },
             {
-              "prop": "--db-user",
-              "value": "${db_user}",
+              "prop": "--checkpoint-root",
+              "value": "${checkpoint_root}",
               "direct": "IN",
               "type": "VARCHAR"
             },
             {
-              "prop": "--db-password",
-              "value": "${db_password}",
+              "prop": "--trigger-processing-time",
+              "value": "${trigger_processing_time}",
               "direct": "IN",
               "type": "VARCHAR"
             },
             {
-              "prop": "--hive-db",
-              "value": "${hive_db}",
-              "direct": "IN",
-              "type": "VARCHAR"
-            },
-            {
-              "prop": "--min-votes",
-              "value": "10",
-              "direct": "IN",
-              "type": "VARCHAR"
-            },
-            {
-              "prop": "--smooth-k",
-              "value": "50",
+              "prop": "--run-mode",
+              "value": "${kafka_run_mode}",
               "direct": "IN",
               "type": "VARCHAR"
             }
           ],
-          "dependence": {
-            "relation": "AND",
-            "dependTaskList": [
-              {
-                "depTaskCode": "Data_Quality_Check",
-                "depTaskVersion": 1
-              }
-            ]
-          },
+          "dependence": {},
           "sparkVersion": "SPARK2",
           "driverCores": 1,
           "driverMemory": "2G",
           "numExecutors": 2,
           "executorMemory": "2G",
           "executorCores": 1,
-          "others": "--conf spark.sql.adaptive.enabled=true"
+          "others": "--conf spark.sql.adaptive.enabled=true --conf spark.sql.adaptive.coalescePartitions.enabled=true"
         },
         "flag": "YES",
         "taskPriority": "HIGH",
@@ -217,38 +183,589 @@
         "failRetryTimes": 2,
         "failRetryInterval": 10,
         "timeoutFlag": "OPEN",
-        "timeoutNotifyStrategy": ["WARN", "FAILED"],
+        "timeoutNotifyStrategy": [
+          "WARN",
+          "FAILED"
+        ],
+        "timeout": 1800
+      },
+      {
+        "name": "Build_DWD_User_Event_Wide",
+        "description": "构建 DWD 用户行为宽表",
+        "taskType": "SPARK",
+        "taskParams": {
+          "programType": "PYTHON",
+          "mainClass": "",
+          "mainJar": {
+            "id": null,
+            "res": "spark/jobs/build_dwd_user_event_wide_di.py"
+          },
+          "deployMode": "cluster",
+          "resourceList": [
+            {
+              "id": null,
+              "res": "spark/jobs/build_dwd_user_event_wide_di.py"
+            }
+          ],
+          "localParams": [
+            {
+              "prop": "--config",
+              "value": "${etl_config}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            },
+            {
+              "prop": "--calc-date",
+              "value": "${calc_date}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            },
+            {
+              "prop": "--snapshot-date",
+              "value": "${snapshot_date}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            }
+          ],
+          "dependence": {},
+          "sparkVersion": "SPARK2",
+          "driverCores": 1,
+          "driverMemory": "3G",
+          "numExecutors": 3,
+          "executorMemory": "3G",
+          "executorCores": 1,
+          "others": "--conf spark.sql.adaptive.enabled=true --conf spark.sql.adaptive.coalescePartitions.enabled=true"
+        },
+        "flag": "YES",
+        "taskPriority": "HIGH",
+        "workerGroup": "default",
+        "failRetryTimes": 2,
+        "failRetryInterval": 10,
+        "timeoutFlag": "OPEN",
+        "timeoutNotifyStrategy": [
+          "WARN",
+          "FAILED"
+        ],
+        "timeout": 2400
+      },
+      {
+        "name": "Build_DWS_User_Movie_Metrics",
+        "description": "构建 DWS 用户/电影聚合指标",
+        "taskType": "SPARK",
+        "taskParams": {
+          "programType": "PYTHON",
+          "mainClass": "",
+          "mainJar": {
+            "id": null,
+            "res": "spark/jobs/build_dws_user_movie_metrics_di.py"
+          },
+          "deployMode": "cluster",
+          "resourceList": [
+            {
+              "id": null,
+              "res": "spark/jobs/build_dws_user_movie_metrics_di.py"
+            }
+          ],
+          "localParams": [
+            {
+              "prop": "--config",
+              "value": "${etl_config}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            },
+            {
+              "prop": "--calc-date",
+              "value": "${calc_date}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            }
+          ],
+          "dependence": {},
+          "sparkVersion": "SPARK2",
+          "driverCores": 1,
+          "driverMemory": "2G",
+          "numExecutors": 2,
+          "executorMemory": "2G",
+          "executorCores": 1,
+          "others": "--conf spark.sql.adaptive.enabled=true --conf spark.sql.adaptive.coalescePartitions.enabled=true"
+        },
+        "flag": "YES",
+        "taskPriority": "HIGH",
+        "workerGroup": "default",
+        "failRetryTimes": 2,
+        "failRetryInterval": 10,
+        "timeoutFlag": "OPEN",
+        "timeoutNotifyStrategy": [
+          "WARN",
+          "FAILED"
+        ],
+        "timeout": 1800
+      },
+      {
+        "name": "Build_ADS_Hot_Movies",
+        "description": "构建 ADS 热榜（日/周/月）",
+        "taskType": "SPARK",
+        "taskParams": {
+          "programType": "PYTHON",
+          "mainClass": "",
+          "mainJar": {
+            "id": null,
+            "res": "spark/jobs/build_ads_hot_movies.py"
+          },
+          "deployMode": "cluster",
+          "resourceList": [
+            {
+              "id": null,
+              "res": "spark/jobs/build_ads_hot_movies.py"
+            }
+          ],
+          "localParams": [
+            {
+              "prop": "--config",
+              "value": "${etl_config}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            },
+            {
+              "prop": "--calc-date",
+              "value": "${calc_date}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            },
+            {
+              "prop": "--top-n",
+              "value": "${ads_top_n}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            }
+          ],
+          "dependence": {},
+          "sparkVersion": "SPARK2",
+          "driverCores": 1,
+          "driverMemory": "2G",
+          "numExecutors": 2,
+          "executorMemory": "2G",
+          "executorCores": 1,
+          "others": "--conf spark.sql.adaptive.enabled=true --conf spark.sql.adaptive.coalescePartitions.enabled=true"
+        },
+        "flag": "YES",
+        "taskPriority": "HIGH",
+        "workerGroup": "default",
+        "failRetryTimes": 2,
+        "failRetryInterval": 10,
+        "timeoutFlag": "OPEN",
+        "timeoutNotifyStrategy": [
+          "WARN",
+          "FAILED"
+        ],
+        "timeout": 1800
+      },
+      {
+        "name": "Build_ADS_User_Funnel",
+        "description": "构建 ADS 用户行为漏斗日报",
+        "taskType": "SPARK",
+        "taskParams": {
+          "programType": "PYTHON",
+          "mainClass": "",
+          "mainJar": {
+            "id": null,
+            "res": "spark/jobs/build_ads_user_funnel_1d.py"
+          },
+          "deployMode": "cluster",
+          "resourceList": [
+            {
+              "id": null,
+              "res": "spark/jobs/build_ads_user_funnel_1d.py"
+            }
+          ],
+          "localParams": [
+            {
+              "prop": "--config",
+              "value": "${etl_config}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            },
+            {
+              "prop": "--calc-date",
+              "value": "${calc_date}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            }
+          ],
+          "dependence": {},
+          "sparkVersion": "SPARK2",
+          "driverCores": 1,
+          "driverMemory": "2G",
+          "numExecutors": 2,
+          "executorMemory": "2G",
+          "executorCores": 1,
+          "others": "--conf spark.sql.adaptive.enabled=true --conf spark.sql.adaptive.coalescePartitions.enabled=true"
+        },
+        "flag": "YES",
+        "taskPriority": "HIGH",
+        "workerGroup": "default",
+        "failRetryTimes": 2,
+        "failRetryInterval": 10,
+        "timeoutFlag": "OPEN",
+        "timeoutNotifyStrategy": [
+          "WARN",
+          "FAILED"
+        ],
+        "timeout": 1800
+      },
+      {
+        "name": "Build_ADS_User_Retention",
+        "description": "构建 ADS 用户留存报表",
+        "taskType": "SPARK",
+        "taskParams": {
+          "programType": "PYTHON",
+          "mainClass": "",
+          "mainJar": {
+            "id": null,
+            "res": "spark/jobs/build_ads_user_retention.py"
+          },
+          "deployMode": "cluster",
+          "resourceList": [
+            {
+              "id": null,
+              "res": "spark/jobs/build_ads_user_retention.py"
+            }
+          ],
+          "localParams": [
+            {
+              "prop": "--config",
+              "value": "${etl_config}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            },
+            {
+              "prop": "--calc-date",
+              "value": "${calc_date}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            }
+          ],
+          "dependence": {},
+          "sparkVersion": "SPARK2",
+          "driverCores": 1,
+          "driverMemory": "2G",
+          "numExecutors": 2,
+          "executorMemory": "2G",
+          "executorCores": 1,
+          "others": "--conf spark.sql.adaptive.enabled=true --conf spark.sql.adaptive.coalescePartitions.enabled=true"
+        },
+        "flag": "YES",
+        "taskPriority": "HIGH",
+        "workerGroup": "default",
+        "failRetryTimes": 2,
+        "failRetryInterval": 10,
+        "timeoutFlag": "OPEN",
+        "timeoutNotifyStrategy": [
+          "WARN",
+          "FAILED"
+        ],
+        "timeout": 1800
+      },
+      {
+        "name": "Build_ADS_Genre_Preference",
+        "description": "构建 ADS 类型偏好排行日报",
+        "taskType": "SPARK",
+        "taskParams": {
+          "programType": "PYTHON",
+          "mainClass": "",
+          "mainJar": {
+            "id": null,
+            "res": "spark/jobs/build_ads_genre_preference_1d.py"
+          },
+          "deployMode": "cluster",
+          "resourceList": [
+            {
+              "id": null,
+              "res": "spark/jobs/build_ads_genre_preference_1d.py"
+            }
+          ],
+          "localParams": [
+            {
+              "prop": "--config",
+              "value": "${etl_config}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            },
+            {
+              "prop": "--calc-date",
+              "value": "${calc_date}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            },
+            {
+              "prop": "--top-n",
+              "value": "${ads_top_n}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            }
+          ],
+          "dependence": {},
+          "sparkVersion": "SPARK2",
+          "driverCores": 1,
+          "driverMemory": "2G",
+          "numExecutors": 2,
+          "executorMemory": "2G",
+          "executorCores": 1,
+          "others": "--conf spark.sql.adaptive.enabled=true --conf spark.sql.adaptive.coalescePartitions.enabled=true"
+        },
+        "flag": "YES",
+        "taskPriority": "HIGH",
+        "workerGroup": "default",
+        "failRetryTimes": 2,
+        "failRetryInterval": 10,
+        "timeoutFlag": "OPEN",
+        "timeoutNotifyStrategy": [
+          "WARN",
+          "FAILED"
+        ],
+        "timeout": 1800
+      },
+      {
+        "name": "Build_ADS_ItemCF_Recommendations",
+        "description": "构建 ADS ItemCF 相似电影与个性化推荐",
+        "taskType": "SPARK",
+        "taskParams": {
+          "programType": "PYTHON",
+          "mainClass": "",
+          "mainJar": {
+            "id": null,
+            "res": "spark/jobs/build_ads_itemcf_recommendations.py"
+          },
+          "deployMode": "cluster",
+          "resourceList": [
+            {
+              "id": null,
+              "res": "spark/jobs/build_ads_itemcf_recommendations.py"
+            }
+          ],
+          "localParams": [
+            {
+              "prop": "--config",
+              "value": "${etl_config}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            },
+            {
+              "prop": "--calc-date",
+              "value": "${calc_date}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            },
+            {
+              "prop": "--top-k",
+              "value": "${itemcf_top_k}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            },
+            {
+              "prop": "--top-n",
+              "value": "${itemcf_top_n}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            }
+          ],
+          "dependence": {},
+          "sparkVersion": "SPARK2",
+          "driverCores": 1,
+          "driverMemory": "3G",
+          "numExecutors": 3,
+          "executorMemory": "3G",
+          "executorCores": 1,
+          "others": "--conf spark.sql.adaptive.enabled=true --conf spark.sql.adaptive.coalescePartitions.enabled=true"
+        },
+        "flag": "YES",
+        "taskPriority": "HIGH",
+        "workerGroup": "default",
+        "failRetryTimes": 2,
+        "failRetryInterval": 10,
+        "timeoutFlag": "OPEN",
+        "timeoutNotifyStrategy": [
+          "WARN",
+          "FAILED"
+        ],
+        "timeout": 3600
+      },
+      {
+        "name": "Build_ADS_Reco_User_Item_Features",
+        "description": "构建 ADS 推荐用户-电影特征表",
+        "taskType": "SPARK",
+        "taskParams": {
+          "programType": "PYTHON",
+          "mainClass": "",
+          "mainJar": {
+            "id": null,
+            "res": "spark/jobs/build_ads_reco_user_item_features_1d.py"
+          },
+          "deployMode": "cluster",
+          "resourceList": [
+            {
+              "id": null,
+              "res": "spark/jobs/build_ads_reco_user_item_features_1d.py"
+            }
+          ],
+          "localParams": [
+            {
+              "prop": "--config",
+              "value": "${etl_config}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            },
+            {
+              "prop": "--calc-date",
+              "value": "${calc_date}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            }
+          ],
+          "dependence": {},
+          "sparkVersion": "SPARK2",
+          "driverCores": 1,
+          "driverMemory": "2G",
+          "numExecutors": 2,
+          "executorMemory": "2G",
+          "executorCores": 1,
+          "others": "--conf spark.sql.adaptive.enabled=true --conf spark.sql.adaptive.coalescePartitions.enabled=true"
+        },
+        "flag": "YES",
+        "taskPriority": "HIGH",
+        "workerGroup": "default",
+        "failRetryTimes": 2,
+        "failRetryInterval": 10,
+        "timeoutFlag": "OPEN",
+        "timeoutNotifyStrategy": [
+          "WARN",
+          "FAILED"
+        ],
+        "timeout": 1800
+      },
+      {
+        "name": "Build_ADS_Search_Keyword_Insights",
+        "description": "构建 ADS 搜索问题词洞察日报",
+        "taskType": "SPARK",
+        "taskParams": {
+          "programType": "PYTHON",
+          "mainClass": "",
+          "mainJar": {
+            "id": null,
+            "res": "spark/jobs/build_ads_search_keyword_insights_1d.py"
+          },
+          "deployMode": "cluster",
+          "resourceList": [
+            {
+              "id": null,
+              "res": "spark/jobs/build_ads_search_keyword_insights_1d.py"
+            }
+          ],
+          "localParams": [
+            {
+              "prop": "--config",
+              "value": "${etl_config}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            },
+            {
+              "prop": "--calc-date",
+              "value": "${calc_date}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            }
+          ],
+          "dependence": {},
+          "sparkVersion": "SPARK2",
+          "driverCores": 1,
+          "driverMemory": "2G",
+          "numExecutors": 2,
+          "executorMemory": "2G",
+          "executorCores": 1,
+          "others": "--conf spark.sql.adaptive.enabled=true --conf spark.sql.adaptive.coalescePartitions.enabled=true"
+        },
+        "flag": "YES",
+        "taskPriority": "HIGH",
+        "workerGroup": "default",
+        "failRetryTimes": 2,
+        "failRetryInterval": 10,
+        "timeoutFlag": "OPEN",
+        "timeoutNotifyStrategy": [
+          "WARN",
+          "FAILED"
+        ],
+        "timeout": 1800
+      },
+      {
+        "name": "Build_ADS_Search_Funnel",
+        "description": "构建 ADS 搜索转化漏斗日报",
+        "taskType": "SPARK",
+        "taskParams": {
+          "programType": "PYTHON",
+          "mainClass": "",
+          "mainJar": {
+            "id": null,
+            "res": "spark/jobs/build_ads_search_funnel_1d.py"
+          },
+          "deployMode": "cluster",
+          "resourceList": [
+            {
+              "id": null,
+              "res": "spark/jobs/build_ads_search_funnel_1d.py"
+            }
+          ],
+          "localParams": [
+            {
+              "prop": "--config",
+              "value": "${etl_config}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            },
+            {
+              "prop": "--calc-date",
+              "value": "${calc_date}",
+              "direct": "IN",
+              "type": "VARCHAR"
+            }
+          ],
+          "dependence": {},
+          "sparkVersion": "SPARK2",
+          "driverCores": 1,
+          "driverMemory": "2G",
+          "numExecutors": 2,
+          "executorMemory": "2G",
+          "executorCores": 1,
+          "others": "--conf spark.sql.adaptive.enabled=true --conf spark.sql.adaptive.coalescePartitions.enabled=true"
+        },
+        "flag": "YES",
+        "taskPriority": "HIGH",
+        "workerGroup": "default",
+        "failRetryTimes": 2,
+        "failRetryInterval": 10,
+        "timeoutFlag": "OPEN",
+        "timeoutNotifyStrategy": [
+          "WARN",
+          "FAILED"
+        ],
         "timeout": 1800
       },
       {
         "name": "Data_Validation",
-        "description": "结果验证 - 检查计算结果是否正确写入",
+        "description": "结果验证 - 检查 ADS 报表是否产出",
         "taskType": "SQL",
         "taskParams": {
-          "type": "MYSQL",
-          "datasource": 2,
-          "sql": "SELECT period_type, COUNT(*) as cnt FROM stats_hot_movies WHERE calc_date = '${calc_date}' GROUP BY period_type",
+          "type": "HIVE",
+          "datasource": 1,
+          "sql": "SELECT 'ads_hot_movies' AS report_name, COUNT(*) AS cnt FROM ads.ads_hot_movies WHERE dt = '${calc_date}' UNION ALL SELECT 'ads_user_funnel_1d' AS report_name, COUNT(*) AS cnt FROM ads.ads_user_funnel_1d WHERE dt = '${calc_date}' UNION ALL SELECT 'ads_user_retention' AS report_name, COUNT(*) AS cnt FROM ads.ads_user_retention WHERE dt = '${calc_date}' UNION ALL SELECT 'ads_genre_preference_1d' AS report_name, COUNT(*) AS cnt FROM ads.ads_genre_preference_1d WHERE dt = '${calc_date}' UNION ALL SELECT 'ads_itemcf_similar_movies' AS report_name, COUNT(*) AS cnt FROM ads.ads_itemcf_similar_movies WHERE dt = '${calc_date}' UNION ALL SELECT 'ads_itemcf_user_recommendations' AS report_name, COUNT(*) AS cnt FROM ads.ads_itemcf_user_recommendations WHERE dt = '${calc_date}' UNION ALL SELECT 'ads_reco_user_item_features_1d' AS report_name, COUNT(*) AS cnt FROM ads.ads_reco_user_item_features_1d WHERE dt = '${calc_date}' UNION ALL SELECT 'ads_search_keyword_insights_1d' AS report_name, COUNT(*) AS cnt FROM ads.ads_search_keyword_insights_1d WHERE dt = '${calc_date}' UNION ALL SELECT 'ads_search_funnel_1d' AS report_name, COUNT(*) AS cnt FROM ads.ads_search_funnel_1d WHERE dt = '${calc_date}'",
           "udfs": "",
           "sqlType": 0,
-          "title": "验证热度统计结果",
-          "receivers": "data-team@movie.com",
+          "title": "验证 ADS 报表结果",
+          "receivers": "",
           "receiversCc": "",
           "showType": "TABLE",
           "localParams": [],
           "resourceList": [],
-          "dependence": {
-            "relation": "AND",
-            "dependTaskList": [
-              {
-                "depTaskCode": "Hot_Movies_Calc",
-                "depTaskVersion": 1
-              },
-              {
-                "depTaskCode": "Rating_Sync",
-                "depTaskVersion": 1
-              }
-            ]
-          }
+          "dependence": {}
         },
         "flag": "YES",
         "taskPriority": "MEDIUM",
@@ -256,7 +773,9 @@
         "failRetryTimes": 3,
         "failRetryInterval": 5,
         "timeoutFlag": "OPEN",
-        "timeoutNotifyStrategy": ["WARN"],
+        "timeoutNotifyStrategy": [
+          "WARN"
+        ],
         "timeout": 300
       },
       {
@@ -277,16 +796,8 @@
           "condition": "",
           "localParams": [],
           "resourceList": [],
-          "dependence": {
-            "relation": "AND",
-            "dependTaskList": [
-              {
-                "depTaskCode": "Data_Validation",
-                "depTaskVersion": 1
-              }
-            ]
-          },
-          "requestBody": "{\"msgtype\": \"text\", \"text\": {\"content\": \"【电影数据分析】每日工作流执行成功！日期: ${calc_date}\"}}"
+          "dependence": {},
+          "requestBody": "{\"msgtype\": \"text\", \"text\": {\"content\": \"【电影数仓全链路】工作流执行成功！日期: ${calc_date}\"}}"
         },
         "flag": "YES",
         "taskPriority": "LOW",
@@ -298,28 +809,113 @@
     ],
     "taskRelation": [
       {
-        "name": "Data_Quality_Check",
+        "name": "Postgres_To_Hive_ODS",
         "preTaskCode": 0,
-        "postTaskCode": "Hot_Movies_Calc"
+        "postTaskCode": "Postgres_To_Hive_ODS"
       },
       {
-        "name": "Data_Quality_Check",
+        "name": "Kafka_Events_To_Hive_ODS",
         "preTaskCode": 0,
-        "postTaskCode": "Rating_Sync"
+        "postTaskCode": "Kafka_Events_To_Hive_ODS"
       },
       {
-        "name": "Hot_Movies_Calc",
-        "preTaskCode": "Data_Quality_Check",
-        "postTaskCode": "Data_Validation"
+        "name": "Build_DWD_User_Event_Wide",
+        "preTaskCode": "Postgres_To_Hive_ODS",
+        "postTaskCode": "Build_DWD_User_Event_Wide"
       },
       {
-        "name": "Rating_Sync",
-        "preTaskCode": "Data_Quality_Check",
+        "name": "Build_DWD_User_Event_Wide",
+        "preTaskCode": "Kafka_Events_To_Hive_ODS",
+        "postTaskCode": "Build_DWD_User_Event_Wide"
+      },
+      {
+        "name": "Build_DWS_User_Movie_Metrics",
+        "preTaskCode": "Build_DWD_User_Event_Wide",
+        "postTaskCode": "Build_DWS_User_Movie_Metrics"
+      },
+      {
+        "name": "Build_ADS_Hot_Movies",
+        "preTaskCode": "Build_DWS_User_Movie_Metrics",
+        "postTaskCode": "Build_ADS_Hot_Movies"
+      },
+      {
+        "name": "Build_ADS_User_Funnel",
+        "preTaskCode": "Build_DWD_User_Event_Wide",
+        "postTaskCode": "Build_ADS_User_Funnel"
+      },
+      {
+        "name": "Build_ADS_User_Retention",
+        "preTaskCode": "Build_DWS_User_Movie_Metrics",
+        "postTaskCode": "Build_ADS_User_Retention"
+      },
+      {
+        "name": "Build_ADS_Genre_Preference",
+        "preTaskCode": "Build_DWS_User_Movie_Metrics",
+        "postTaskCode": "Build_ADS_Genre_Preference"
+      },
+      {
+        "name": "Build_ADS_ItemCF_Recommendations",
+        "preTaskCode": "Build_DWD_User_Event_Wide",
+        "postTaskCode": "Build_ADS_ItemCF_Recommendations"
+      },
+      {
+        "name": "Build_ADS_Reco_User_Item_Features",
+        "preTaskCode": "Build_DWD_User_Event_Wide",
+        "postTaskCode": "Build_ADS_Reco_User_Item_Features"
+      },
+      {
+        "name": "Build_ADS_Search_Keyword_Insights",
+        "preTaskCode": "Build_DWD_User_Event_Wide",
+        "postTaskCode": "Build_ADS_Search_Keyword_Insights"
+      },
+      {
+        "name": "Build_ADS_Search_Funnel",
+        "preTaskCode": "Build_DWD_User_Event_Wide",
+        "postTaskCode": "Build_ADS_Search_Funnel"
+      },
+      {
+        "name": "Data_Validation",
+        "preTaskCode": "Build_ADS_Hot_Movies",
         "postTaskCode": "Data_Validation"
       },
       {
         "name": "Data_Validation",
-        "preTaskCode": "Hot_Movies_Calc",
+        "preTaskCode": "Build_ADS_User_Funnel",
+        "postTaskCode": "Data_Validation"
+      },
+      {
+        "name": "Data_Validation",
+        "preTaskCode": "Build_ADS_User_Retention",
+        "postTaskCode": "Data_Validation"
+      },
+      {
+        "name": "Data_Validation",
+        "preTaskCode": "Build_ADS_Genre_Preference",
+        "postTaskCode": "Data_Validation"
+      },
+      {
+        "name": "Data_Validation",
+        "preTaskCode": "Build_ADS_ItemCF_Recommendations",
+        "postTaskCode": "Data_Validation"
+      },
+      {
+        "name": "Data_Validation",
+        "preTaskCode": "Build_ADS_Reco_User_Item_Features",
+        "postTaskCode": "Data_Validation"
+      },
+      {
+        "name": "Data_Validation",
+        "preTaskCode": "Build_ADS_Search_Keyword_Insights",
+        "postTaskCode": "Data_Validation"
+      },
+      {
+        "name": "Data_Validation",
+        "preTaskCode": "Build_ADS_Search_Funnel",
+        "postTaskCode": "Data_Validation"
+      },
+      {
+        "name": "Send_Success_Notification",
+        "preTaskCode": "Data_Validation",
         "postTaskCode": "Send_Success_Notification"
       }
     ],
@@ -328,7 +924,7 @@
   },
   "schedule": {
     "crontab": "0 2 * * * ?",
-    "startTime": "2026-02-12 00:00:00",
+    "startTime": "2026-02-26 00:00:00",
     "endTime": "2099-12-31 23:59:59",
     "timezoneId": "Asia/Shanghai"
   }

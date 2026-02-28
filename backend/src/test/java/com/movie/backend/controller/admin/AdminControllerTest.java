@@ -6,17 +6,19 @@ import com.movie.backend.entity.Comment;
 import com.movie.backend.entity.Movie;
 import com.movie.backend.entity.Person;
 import com.movie.backend.entity.User;
-import com.movie.backend.mapper.UserMapper;
 import com.movie.backend.service.AdminService;
-import com.movie.backend.utils.JwtUtil;
+import com.movie.backend.service.AnalyticsService;
+import com.movie.backend.service.GenreService;
+import com.movie.backend.service.RegionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.test.web.servlet.MockMvc;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -30,37 +32,31 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
-@AutoConfigureMockMvc
+@ExtendWith(MockitoExtension.class)
 public class AdminControllerTest {
 
-    @Autowired
+    @InjectMocks
+    private AdminController adminController;
+
     private MockMvc mockMvc;
 
-    @MockBean
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Mock
     private AdminService adminService;
 
-    @MockBean
-    private UserMapper userMapper;
+    @Mock
+    private GenreService genreService;
 
-    @Autowired
-    private ObjectMapper objectMapper;
+    @Mock
+    private RegionService regionService;
 
-    /**
-     * 生成管理员测试用的JWT token
-     */
-    private String generateAdminToken() {
-        return JwtUtil.generateAccessToken("admin_001", "AdminTest", 0, 1);
-    }
+    @Mock
+    private AnalyticsService analyticsService;
 
     @BeforeEach
-    public void setupUser() {
-        User admin = new User();
-        admin.setId("admin_001");
-        admin.setRole(0);
-        admin.setStatus(0);
-        admin.setPasswordVersion(1);
-        when(userMapper.selectById(anyString())).thenReturn(admin);
+    void setUp() {
+        mockMvc = MockMvcBuilders.standaloneSetup(adminController).build();
     }
 
     @Test
@@ -72,10 +68,8 @@ public class AdminControllerTest {
 
         when(adminService.getDashboardStats()).thenReturn(mockStats);
 
-        String token = generateAdminToken();
-
         mockMvc.perform(get("/admin/dashboard/stats")
-                        .header("Authorization", "Bearer " + token))
+                        )
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.userCount").value(100))
@@ -92,10 +86,8 @@ public class AdminControllerTest {
 
         when(adminService.getUserList(anyString(), anyInt(), anyInt())).thenReturn(pageInfo);
 
-        String token = generateAdminToken();
-
-        mockMvc.perform(get("/admin/user/list")
-                        .header("Authorization", "Bearer " + token))
+        mockMvc.perform(get("/admin/users")
+                        )
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.list[0].id").value("test_user"));
@@ -107,10 +99,7 @@ public class AdminControllerTest {
         movie.setName("New Movie");
         movie.setId(8888L);
 
-        String token = generateAdminToken();
-
-        mockMvc.perform(post("/admin/movie/add")
-                        .header("Authorization", "Bearer " + token)
+        mockMvc.perform(post("/admin/movies")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(movie)))
                 .andExpect(status().isOk())
@@ -125,10 +114,8 @@ public class AdminControllerTest {
 
         when(adminService.getPersonList(anyString(), anyInt(), anyInt())).thenReturn(pageInfo);
 
-        String token = generateAdminToken();
-
-        mockMvc.perform(get("/admin/person/list")
-                        .header("Authorization", "Bearer " + token))
+        mockMvc.perform(get("/admin/people")
+                        )
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.list[0].name").value("Test Actor"));
@@ -142,12 +129,11 @@ public class AdminControllerTest {
 
         when(adminService.getCommentList(anyString(), anyInt(), anyInt())).thenReturn(pageInfo);
 
-        String token = generateAdminToken();
-
-        mockMvc.perform(get("/admin/comment/list")
-                        .header("Authorization", "Bearer " + token))
+        mockMvc.perform(get("/admin/comments")
+                        )
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.list[0].content").value("Great Movie!"));
     }
+
 }

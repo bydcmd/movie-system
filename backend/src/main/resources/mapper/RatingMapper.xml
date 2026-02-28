@@ -21,21 +21,36 @@
         WHERE user_id = #{userId} AND movie_id = #{movieId}
     </update>
 
+    <insert id="upsertByUserAndMovie">
+        INSERT INTO ratings (user_id, movie_id, rating, rating_time)
+        VALUES (#{userId}, #{movieId}, #{rating}, #{ratingTime})
+        ON CONFLICT (user_id, movie_id) DO UPDATE
+        SET rating = EXCLUDED.rating,
+            rating_time = EXCLUDED.rating_time
+        WHERE ratings.rating IS DISTINCT FROM EXCLUDED.rating
+    </insert>
+
     <select id="selectByUserAndMovie" resultMap="BaseResultMap">
-        SELECT rating_id, user_id, movie_id, rating, rating_time
+        SELECT user_id, movie_id, rating, rating_time
         FROM ratings
         WHERE user_id = #{userId} AND movie_id = #{movieId}
     </select>
 
     <select id="selectByUserId" resultMap="BaseResultMap">
-        SELECT rating_id, user_id, movie_id, rating, rating_time
+        SELECT user_id, movie_id, rating, rating_time
         FROM ratings
         WHERE user_id = #{userId}
         ORDER BY rating_time DESC
     </select>
 
+    <select id="selectMovieIdsByUserId" resultType="java.lang.Long">
+        SELECT movie_id
+        FROM ratings
+        WHERE user_id = #{userId}
+    </select>
+
     <select id="selectByMovieId" resultMap="BaseResultMap">
-        SELECT rating_id, user_id, movie_id, rating, rating_time
+        SELECT user_id, movie_id, rating, rating_time
         FROM ratings
         WHERE movie_id = #{movieId}
     </select>
@@ -67,4 +82,111 @@
             #{movieId}
         </foreach>
     </delete>
+
+    <update id="refreshMovieScoreAndVotes">
+        WITH rating_stats AS (
+            SELECT
+                COUNT(*)::int AS votes,
+                AVG(rating)::numeric AS avg_rating
+            FROM ratings
+            WHERE movie_id = #{movieId}
+        ),
+        blended_calc AS (
+            SELECT
+                m.movie_id,
+                m.score AS current_score,
+                COALESCE(rs.votes, 0) AS new_votes,
+                CASE
+                    WHEN COALESCE(rs.votes, 0) = 0 THEN ROUND(COALESCE(m.douban_score, m.score, 0)::numeric, 1)
+                    WHEN m.douban_score IS NULL THEN ROUND((COALESCE(rs.avg_rating, 0) * 2)::numeric, 1)
+                    ELSE ROUND(
+                        ((#{kWeight} * m.douban_score + COALESCE(rs.votes, 0) * COALESCE(rs.avg_rating, 0) * 2.0)
+                        / (#{kWeight} + COALESCE(rs.votes, 0)))::numeric,
+                        1
+                    )
+                END AS blended_score
+            FROM movies m
+            CROSS JOIN rating_stats rs
+            WHERE m.movie_id = #{movieId}
+        ),
+        score_calc AS (
+            SELECT
+                b.movie_id,
+                b.new_votes,
+                CASE
+                    WHEN b.new_votes < #{forceUpdateVotesThreshold}
+                         OR b.current_score IS NULL
+                         OR ROUND(b.current_score::numeric, 1) <> b.blended_score
+                    THEN b.blended_score
+                    ELSE b.current_score
+                END AS target_score
+            FROM blended_calc b
+        )
+        UPDATE movies m
+        SET
+            votes = c.new_votes,
+            score = c.target_score
+        FROM score_calc c
+        WHERE m.movie_id = c.movie_id
+          AND (m.votes IS DISTINCT FROM c.new_votes OR m.score IS DISTINCT FROM c.target_score)
+    </update>
+
+    <update id="refreshMovieScoreAndVotesBatch">
+        WITH target_movies AS (
+            SELECT DISTINCT t.movie_id
+            FROM (
+                VALUES
+                <foreach collection="movieIds" item="movieId" separator=",">
+                    (#{movieId})
+                </foreach>
+            ) AS t(movie_id)
+            WHERE t.movie_id IS NOT NULL
+        ),
+        rating_stats AS (
+            SELECT
+                tm.movie_id,
+                COUNT(r.rating)::int AS votes,
+                AVG(r.rating)::numeric AS avg_rating
+            FROM target_movies tm
+            LEFT JOIN ratings r ON r.movie_id = tm.movie_id
+            GROUP BY tm.movie_id
+        ),
+        blended_calc AS (
+            SELECT
+                m.movie_id,
+                m.score AS current_score,
+                COALESCE(rs.votes, 0) AS new_votes,
+                CASE
+                    WHEN COALESCE(rs.votes, 0) = 0 THEN ROUND(COALESCE(m.douban_score, m.score, 0)::numeric, 1)
+                    WHEN m.douban_score IS NULL THEN ROUND((COALESCE(rs.avg_rating, 0) * 2)::numeric, 1)
+                    ELSE ROUND(
+                        ((#{kWeight} * m.douban_score + COALESCE(rs.votes, 0) * COALESCE(rs.avg_rating, 0) * 2.0)
+                        / (#{kWeight} + COALESCE(rs.votes, 0)))::numeric,
+                        1
+                    )
+                END AS blended_score
+            FROM movies m
+            JOIN rating_stats rs ON rs.movie_id = m.movie_id
+        ),
+        score_calc AS (
+            SELECT
+                b.movie_id,
+                b.new_votes,
+                CASE
+                    WHEN b.new_votes < #{forceUpdateVotesThreshold}
+                         OR b.current_score IS NULL
+                         OR ROUND(b.current_score::numeric, 1) <> b.blended_score
+                    THEN b.blended_score
+                    ELSE b.current_score
+                END AS target_score
+            FROM blended_calc b
+        )
+        UPDATE movies m
+        SET
+            votes = c.new_votes,
+            score = c.target_score
+        FROM score_calc c
+        WHERE m.movie_id = c.movie_id
+          AND (m.votes IS DISTINCT FROM c.new_votes OR m.score IS DISTINCT FROM c.target_score)
+    </update>
 </mapper>

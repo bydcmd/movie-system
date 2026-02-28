@@ -342,11 +342,25 @@ public class TiptapJsonValidator {
      * @return 摘要文本
      */
     public static String getSummary(String jsonContent, int maxLength) {
-        String plainText = extractPlainText(jsonContent);
-        if (plainText.length() <= maxLength) {
-            return plainText.trim();
+        return summarizeText(extractPlainText(jsonContent), maxLength);
+    }
+
+    /**
+     * 对纯文本进行摘要截断。
+     *
+     * @param plainText 纯文本内容
+     * @param maxLength 最大长度
+     * @return 摘要文本
+     */
+    public static String summarizeText(String plainText, int maxLength) {
+        if (!StringUtils.hasText(plainText) || maxLength <= 0) {
+            return "";
         }
-        return plainText.substring(0, maxLength).trim() + "...";
+        String normalized = plainText.trim();
+        if (normalized.length() <= maxLength) {
+            return normalized;
+        }
+        return normalized.substring(0, maxLength).trim() + "...";
     }
 
     /**

@@ -24,9 +24,9 @@ public interface FavoriteFolderService {
     void deleteFolder(String userId, Long folderId);
     
     /**
-     * 获取收藏夹详情
+     * 获取收藏夹详情（若无权限访问则抛出 AccessDeniedException）
      */
-    FavoriteFolder getFolderById(Long folderId);
+    FavoriteFolder getFolderById(Long folderId, String viewerUserId);
     
     /**
      * 获取用户的所有收藏夹列表

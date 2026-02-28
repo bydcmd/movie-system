@@ -7,6 +7,8 @@ import com.movie.backend.entity.Movie;
 
 import java.util.List;
 
+import java.util.Map;
+
 public interface MovieService {
     /**
      * Get Movie Detail
@@ -16,7 +18,7 @@ public interface MovieService {
     /**
      * Search Movies (Paged)
      */
-    PageInfo<Movie> search(MovieSearchDTO searchDTO);
+    PageInfo<Movie> search(MovieSearchDTO searchDTO, String userId);
 
     /**
      * Get Hot Movies (By votes)
@@ -54,6 +56,11 @@ public interface MovieService {
     List<String> getAllRegions();
 
     /**
+     * 获取所有语言
+     */
+    List<String> getAllLanguages();
+
+    /**
      * 获取所有年份
      */
     List<Integer> getAllYears();
@@ -63,5 +70,10 @@ public interface MovieService {
      * 与复杂搜索分离，专注于简单的分类筛选
      */
     PageInfo<Movie> getCatalogMovies(CatalogQueryDTO catalogQuery);
+
+    /**
+     * 获取电影筛选元数据（评分分段、年代分段）
+     */
+    Map<String, Object> getFilterMetadata();
 
 }

@@ -30,22 +30,5 @@ public class LongReviewDTO {
             required = true)
     private String content;
 
-    /**
-     * 获取内容的纯文本摘要
-     * @param maxLength 最大长度
-     * @return 摘要文本
-     */
-    public String getSummary(int maxLength) {
-        if (content == null) {
-            return "";
-        }
-        // 这里使用 TiptapJsonValidator 提取纯文本
-        // 注意：实际提取在 Service 层进行，这里只做简单的长度检查提示
-        String plainText = content.replaceAll("\\s+", " ").trim();
-        if (plainText.length() <= maxLength) {
-            return plainText;
-        }
-        return plainText.substring(0, maxLength) + "...";
-    }
 }
 

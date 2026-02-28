@@ -1,20 +1,20 @@
 package com.movie.backend.service;
 
 import com.github.pagehelper.PageInfo;
-import com.movie.backend.dto.MyFavoriteVO;
-
-import java.util.List;
-
-public interface ViewHistoryService {
-    /**
-     * 记录用户浏览历史
-     */
-    void recordViewHistory(String userId, Long movieId);
-
-    /**
-     * 获取用户的浏览历史列表（分页）
-     */
-    PageInfo<MyFavoriteVO> getUserViewHistory(String userId, int page, int size);
+import com.movie.backend.dto.MovieItemVO;
+
+import java.util.List;
+
+public interface ViewHistoryService {
+    /**
+     * 记录用户浏览历史
+     */
+    void recordViewHistory(String userId, Long movieId);
+
+    /**
+     * 获取用户的浏览历史列表（分页）
+     */
+    PageInfo<MovieItemVO> getUserViewHistory(String userId, int page, int size);
 
     /**
      * 删除单条浏览历史

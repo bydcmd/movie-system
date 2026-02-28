@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.movie.backend.mapper.RatingMapper">
+
+    <resultMap id="BaseResultMap" type="com.movie.backend.entity.Rating">
+        <result column="user_id" property="userId" />
+        <result column="movie_id" property="movieId" />
+        <result column="rating" property="rating" />
+        <result column="rating_time" property="ratingTime" />
+    </resultMap>
+
+    <insert id="insert" parameterType="com.movie.backend.entity.Rating">
+        INSERT INTO ratings (user_id, movie_id, rating, rating_time)
+        VALUES (#{userId}, #{movieId}, #{rating}, #{ratingTime})
+    </insert>
+
+    <update id="updateByUserAndMovie">
+        UPDATE ratings 
+        SET rating = #{rating}, rating_time = #{ratingTime}
+        WHERE user_id = #{userId} AND movie_id = #{movieId}
+    </update>
+
+    <insert id="upsertByUserAndMovie">
+        INSERT INTO ratings (user_id, movie_id, rating, rating_time)
+        VALUES (#{userId}, #{movieId}, #{rating}, #{ratingTime})
+        ON DUPLICATE KEY UPDATE
+            rating = IF(NOT (rating &lt;=&gt; VALUES(rating)), VALUES(rating), rating),
+            rating_time = IF(NOT (rating &lt;=&gt; VALUES(rating)), VALUES(rating_time), rating_time)
+    </insert>
+
+    <select id="selectByUserAndMovie" resultMap="BaseResultMap">
+        SELECT rating_id, user_id, movie_id, rating, rating_time
+        FROM ratings
+        WHERE user_id = #{userId} AND movie_id = #{movieId}
+    </select>
+
+    <select id="selectByUserId" resultMap="BaseResultMap">
+        SELECT rating_id, user_id, movie_id, rating, rating_time
+        FROM ratings
+        WHERE user_id = #{userId}
+        ORDER BY rating_time DESC
+    </select>
+
+    <select id="selectMovieIdsByUserId" resultType="java.lang.Long">
+        SELECT movie_id
+        FROM ratings
+        WHERE user_id = #{userId}
+    </select>
+
+    <select id="selectByMovieId" resultMap="BaseResultMap">
+        SELECT rating_id, user_id, movie_id, rating, rating_time
+        FROM ratings
+        WHERE movie_id = #{movieId}
+    </select>
+
+    <select id="selectVOByUserId" resultType="com.movie.backend.dto.MyRatingVO">
+        SELECT 
+            r.movie_id as id,
+            r.movie_id as movieId,
+            m.name as movieName,
+            m.cover as posterUrl,
+            r.rating as rating,
+            r.rating_time as ratingTime,
+            m.storyline as description
+        FROM ratings r
+        JOIN movies m ON r.movie_id = m.movie_id
+        WHERE r.user_id = #{userId}
+        ORDER BY r.rating_time DESC
+    </select>
+
+    <delete id="deleteByUserId">
+        DELETE FROM ratings WHERE user_id = #{userId}
+    </delete>
+
+    <delete id="deleteBatch">
+        DELETE FROM ratings 
+        WHERE user_id = #{userId} 
+        AND movie_id IN 
+        <foreach collection="movieIds" item="movieId" open="(" separator="," close=")">
+            #{movieId}
+        </foreach>
+    </delete>
+
+    <update id="refreshMovieScoreAndVotes">
+        UPDATE movies m
+        LEFT JOIN (
+            SELECT
+                calc.movie_id,
+                calc.new_votes,
+                CASE
+                    WHEN calc.new_votes < #{forceUpdateVotesThreshold}
+                         OR calc.current_score IS NULL
+                         OR ROUND(calc.current_score, 1) <> calc.blended_score
+                    THEN calc.blended_score
+                    ELSE calc.current_score
+                END AS target_score
+            FROM (
+                SELECT
+                    mv.movie_id,
+                    mv.score AS current_score,
+                    COALESCE(rs.votes, 0) AS new_votes,
+                    ROUND(
+                        CASE
+                            WHEN COALESCE(rs.votes, 0) = 0 THEN COALESCE(mv.douban_score, mv.score, 0)
+                            WHEN mv.douban_score IS NULL THEN COALESCE(rs.avg_rating, 0) * 2
+                            ELSE (#{kWeight} * mv.douban_score + COALESCE(rs.votes, 0) * COALESCE(rs.avg_rating, 0) * 2.0)
+                                 / (#{kWeight} + COALESCE(rs.votes, 0))
+                        END,
+                        1
+                    ) AS blended_score
+                FROM movies mv
+                LEFT JOIN (
+                    SELECT
+                        movie_id,
+                        COUNT(*) AS votes,
+                        AVG(rating) AS avg_rating
+                    FROM ratings
+                    WHERE movie_id = #{movieId}
+                    GROUP BY movie_id
+                ) rs ON rs.movie_id = mv.movie_id
+                WHERE mv.movie_id = #{movieId}
+            ) calc
+        ) c ON c.movie_id = m.movie_id
+        SET
+            m.votes = c.new_votes,
+            m.score = c.target_score
+        WHERE m.movie_id = #{movieId}
+          AND NOT (m.votes <=> c.new_votes AND m.score <=> c.target_score)
+    </update>
+
+    <update id="refreshMovieScoreAndVotesBatch">
+        UPDATE movies m
+        JOIN (
+            SELECT
+                calc.movie_id,
+                calc.new_votes,
+                CASE
+                    WHEN calc.new_votes < #{forceUpdateVotesThreshold}
+                         OR calc.current_score IS NULL
+                         OR ROUND(calc.current_score, 1) <> calc.blended_score
+                    THEN calc.blended_score
+                    ELSE calc.current_score
+                END AS target_score
+            FROM (
+                SELECT
+                    mv.movie_id,
+                    mv.score AS current_score,
+                    COALESCE(rs.votes, 0) AS new_votes,
+                    ROUND(
+                        CASE
+                            WHEN COALESCE(rs.votes, 0) = 0 THEN COALESCE(mv.douban_score, mv.score, 0)
+                            WHEN mv.douban_score IS NULL THEN COALESCE(rs.avg_rating, 0) * 2
+                            ELSE (#{kWeight} * mv.douban_score + COALESCE(rs.votes, 0) * COALESCE(rs.avg_rating, 0) * 2.0)
+                                 / (#{kWeight} + COALESCE(rs.votes, 0))
+                        END,
+                        1
+                    ) AS blended_score
+                FROM movies mv
+                LEFT JOIN (
+                    SELECT
+                        movie_id,
+                        COUNT(*) AS votes,
+                        AVG(rating) AS avg_rating
+                    FROM ratings
+                    WHERE movie_id IN
+                    <foreach collection="movieIds" item="movieId" open="(" separator="," close=")">
+                        #{movieId}
+                    </foreach>
+                    GROUP BY movie_id
+                ) rs ON rs.movie_id = mv.movie_id
+                WHERE mv.movie_id IN
+                <foreach collection="movieIds" item="movieId" open="(" separator="," close=")">
+                    #{movieId}
+                </foreach>
+            ) calc
+        ) c ON c.movie_id = m.movie_id
+        SET
+            m.votes = c.new_votes,
+            m.score = c.target_score
+        WHERE NOT (m.votes <=> c.new_votes AND m.score <=> c.target_score)
+    </update>
+</mapper>

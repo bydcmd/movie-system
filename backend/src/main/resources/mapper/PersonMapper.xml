@@ -53,7 +53,7 @@
         SELECT <include refid="Base_Column_List"/> FROM persons
         <where>
             <if test="keyword != null and keyword != ''">
-                AND (name LIKE CONCAT('%', #{keyword}, '%') OR name_en LIKE CONCAT('%', #{keyword}, '%'))
+                AND (name LIKE '%' || #{keyword} || '%' OR name_en LIKE '%' || #{keyword} || '%')
             </if>
         </where>
     </select>

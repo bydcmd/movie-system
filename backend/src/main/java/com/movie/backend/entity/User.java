@@ -15,6 +15,7 @@ public class User {
     @Schema(description = "用户昵称", example = "电影狂热者")
     private String nickname;
 
+    @com.fasterxml.jackson.annotation.JsonIgnore
     @Schema(description = "加密后的密码 (仅后端使用，不建议直接返回)", hidden = true)
     private String password;
 

@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: 9090
   tomcat:
     connection-timeout: 60000  # 连接超时时间 60 秒
     keep-alive-timeout: 60000  # Keep-Alive 超时时间 60 秒
@@ -10,10 +10,10 @@ server:
 
 spring:
   datasource:
-    # Primary (MySQL)
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://8.136.198.88:3306/movie_db?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai
-    username: root
+    # Primary (PostgreSQL)
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://localhost/movie_db?useUnicode=true&characterEncoding=utf-8&useSSL=false
+    username: postgres
     password: Hadoop@123
     type: com.alibaba.druid.pool.DruidDataSource
     druid:
@@ -26,17 +26,19 @@ spring:
   # Redis
   data:
     redis:
-      host: 8.136.198.88
+      host: localhost
       port: 6379
       database: 0
       # password:  # Add password if needed
-      timeout: 3000ms
+      timeout: 10000ms  # 增加到 10 秒，适应远程服务器网络延迟
       lettuce:
         pool:
           max-active: 8
           max-wait: -1ms
           max-idle: 8
           min-idle: 0
+        # 连接超时和命令超时配置
+        shutdown-timeout: 100ms
 
   # Kafka
   kafka:
@@ -58,8 +60,23 @@ app:
       comment: movie-comment-events
       comment-like: movie-comment-like-events
       favorite: movie-favorite-events
+      watched: movie-watched-events
+      favorite-folder-action: movie-favorite-folder-action-events
+      search: movie-search-events
+      user-register: movie-user-register-events
+      user-login: movie-user-login-events
     consumer:
       view-history-group: movie-backend-view-history
+    outbox:
+      poll-interval-ms: 36000000
+      batch-size: 100
+      max-retries: 10
+      base-delay-ms: 5000
+      max-delay-ms: 120000
+      processing-timeout-ms: 60000
+      cleanup-interval-ms: 36000000
+      cleanup-retention-ms: 604800000
+      cleanup-batch-size: 500
 
   # Cache Configuration
   cache:
@@ -74,6 +91,15 @@ app:
     multipart:
       max-file-size: 5MB
       max-request-size: 5MB
+
+  cors:
+    allowed-origins:
+      - http://localhost:5173
+      - http://localhost:3000
+
+  auth:
+    refresh-cookie-secure: false
+    refresh-cookie-same-site: Lax
 
 # MyBatis
 mybatis:
@@ -96,3 +122,5 @@ jwt:
   secret: ThisIsAVeryLongSecretKeyForMovieProjectThatIsAtLeast64BytesLongToSatisfyHS512SecurityRequirement
   access-token-expiration: 3600000  # 1 小时 (单位: 毫秒)
   refresh-token-expiration: 2592000000  # 30 天 (单位: 毫秒)
+pagehelper:
+  helperDialect: postgresql

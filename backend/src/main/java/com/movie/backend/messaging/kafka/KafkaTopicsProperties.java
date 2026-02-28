@@ -13,4 +13,9 @@ public class KafkaTopicsProperties {
     private String comment;
     private String commentLike;
     private String favorite;
+    private String watched;
+    private String favoriteFolderAction;
+    private String search;
+    private String userRegister;
+    private String userLogin;
 }

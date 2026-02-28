@@ -1,0 +1,12 @@
+.agents/*
+.claude/*
+.qoder/*
+.serena/*
+.vscode/*
+
+data/*
+
+backend/ADVANCED_SEARCH_FEATURE.md
+backend/COMMENT_FIX_SUMMARY.md
+backend/RATING_RACE_CONDITION_FIX.md
+frontend/technology_stack.md

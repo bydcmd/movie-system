@@ -4,8 +4,12 @@ import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.CachingConfigurer;
 import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.cache.interceptor.CacheErrorHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
@@ -20,9 +24,10 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
+@Slf4j
 @Configuration
 @EnableCaching  // Enable Spring Cache
-public class RedisConfig {
+public class RedisConfig implements CachingConfigurer {
 
     @Bean
     public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory factory) {
@@ -87,11 +92,44 @@ public class RedisConfig {
      * Create Jackson serializer for Redis value serialization
      */
     private Jackson2JsonRedisSerializer<Object> createJacksonSerializer() {
-        Jackson2JsonRedisSerializer<Object> serializer = new Jackson2JsonRedisSerializer<>(Object.class);
         ObjectMapper om = new ObjectMapper();
         om.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY);
         om.activateDefaultTyping(LaissezFaireSubTypeValidator.instance, ObjectMapper.DefaultTyping.NON_FINAL);
-        serializer.setObjectMapper(om);
-        return serializer;
+        return new Jackson2JsonRedisSerializer<>(om, Object.class);
+    }
+
+    /**
+     * Redis 缓存异常处理器
+     * 当 Redis 不可用时，自动降级到直接查询数据库，不影响业务
+     */
+    @Override
+    public CacheErrorHandler errorHandler() {
+        return new CacheErrorHandler() {
+            @Override
+            public void handleCacheGetError(RuntimeException exception, Cache cache, Object key) {
+                log.warn("Redis 缓存读取失败，降级到数据库查询 [cache={}, key={}]: {}", 
+                        cache.getName(), key, exception.getMessage());
+                // 静默处理，让方法继续执行（会自动查询数据库）
+            }
+
+            @Override
+            public void handleCachePutError(RuntimeException exception, Cache cache, Object key, Object value) {
+                log.warn("Redis 缓存写入失败 [cache={}, key={}]: {}", 
+                        cache.getName(), key, exception.getMessage());
+                // 静默处理，不影响业务逻辑
+            }
+
+            @Override
+            public void handleCacheEvictError(RuntimeException exception, Cache cache, Object key) {
+                log.warn("Redis 缓存清除失败 [cache={}, key={}]: {}", 
+                        cache.getName(), key, exception.getMessage());
+            }
+
+            @Override
+            public void handleCacheClearError(RuntimeException exception, Cache cache) {
+                log.warn("Redis 缓存清空失败 [cache={}]: {}", 
+                        cache.getName(), exception.getMessage());
+            }
+        };
     }
 }

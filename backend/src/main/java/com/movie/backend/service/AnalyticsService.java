@@ -1,7 +1,6 @@
 package com.movie.backend.service;
 
 import com.movie.backend.common.TrendPeriod;
-import com.movie.backend.dto.ColdGemVO;
 import com.movie.backend.dto.TrendingMovieDTO;
 import com.movie.backend.entity.Movie;
 
@@ -21,12 +20,6 @@ public interface AnalyticsService {
      * @param limit 返回数量
      */
     List<TrendingMovieDTO> getTrendingMovies(TrendPeriod period, int limit);
-
-    /**
-     * 获取冷门佳作（离线分析结果）
-     * @param limit 数量
-     */
-    List<ColdGemVO> getHiddenGems(int limit);
 
     /**
      * 获取个性化推荐（猜你喜欢）

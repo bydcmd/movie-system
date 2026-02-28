@@ -1,0 +1,222 @@
+I've now thoroughly reviewed all 12 controllers. Below is the comprehensive analysis of interface design issues.
+
+  ---
+  接口设计问题检查报告
+
+  1. 安全性问题 (Security)
+
+  1.1 changePassword 密码通过 Query String 传输 [严重]
+
+  文件: UserController.java:175-176
+
+  @PatchMapping("/me/password")
+  public Result<String> changePassword(
+          @RequestParam String oldPassword,
+          @RequestParam String newPassword, ...)
+
+  密码以 @RequestParam 方式传递，会出现在 URL 查询字符串中（如
+  ?oldPassword=abc&newPassword=xyz），会被浏览器历史、代理日志、Nginx access log 记录。应使用 @RequestBody 接收一个 DTO
+  对象。
+
+  1.2 submitComment / submitLongReview 内容通过 Query String 传输 [中等]
+
+  文件: CommentController.java:85-90, CommentController.java:63-68
+
+  @PostMapping
+  public Result<String> submitComment(
+          @RequestParam Long movieId,
+          @RequestParam String content, ...)
+
+  @PostMapping("/long-reviews")
+  public Result<String> submitLongReview(
+          @RequestParam Long movieId,
+          @RequestParam String title,
+          @RequestParam String content, ...)
+
+  评论内容（尤其是长评的富文本 HTML）通过 @RequestParam 传递，URL 长度有限（通常 2KB-8KB），超长内容会被截断或报 414
+  错误。应使用 @RequestBody DTO。updateLongReview 存在同样问题。
+
+  ---
+  2. RESTful 设计问题
+
+  2.1 PUT/PATCH 缺少资源标识符 [严重]
+
+  文件: CommentController.java
+
+  @PutMapping                          // PUT /comments
+  public Result<String> updateComment(@RequestParam Long movieId, ...)
+
+  @PatchMapping                        // PATCH /comments
+  public Result<String> updateCommentContent(@RequestParam Long movieId, ...)
+
+  @PutMapping("/long-reviews")         // PUT /comments/long-reviews
+  public Result<String> updateLongReview(@RequestParam Long movieId, ...)
+
+  REST 规范中 PUT/PATCH 应作用于具体资源路径（如 PUT /comments/{commentId}）。当前写法没有在 URL
+  中标识要操作的资源，完全依赖 query param 定位，不符合 REST 语义。
+
+  2.2 收藏的增删使用 @RequestParam 而非路径变量 [轻微]
+
+  文件: FavoriteController.java:28-30
+
+  @PostMapping
+  public Result<String> addFavorite(@RequestParam Long movieId, ...)
+
+  @DeleteMapping
+  public Result<String> removeFavorite(@RequestParam Long movieId, ...)
+
+  更 RESTful 的写法是 POST /favorites/{movieId} 和 DELETE /favorites/{movieId}，与 WatchedController 的 POST
+  /watched-movies/{movieId} 风格统一。
+
+  2.3 认证相关接口挂在 /users 下 [轻微]
+
+  POST /users/login、POST /users/register、POST /users/token/refresh 在语义上属于认证操作，非用户资源 CRUD。可考虑分离到
+   /auth 前缀下（如 /auth/login, /auth/register, /auth/token/refresh）。当前也可以接受，但会导致 Swagger 分组不够清晰。
+
+  ---
+  3. 一致性问题
+
+  3.1 语言混用 [中等]
+
+  同一项目中 Operation summary/description 和成功消息中英文混用：
+
+  ┌────────────────────┬────────────────────────────────────────────┐
+  │     Controller     │                    语言                    │
+  ├────────────────────┼────────────────────────────────────────────┤
+  │ MovieController    │ 中文                                       │
+  ├────────────────────┼────────────────────────────────────────────┤
+  │ UserController     │ 中文                                       │
+  ├────────────────────┼────────────────────────────────────────────┤
+  │ CommentController  │ 中文                                       │
+  ├────────────────────┼────────────────────────────────────────────┤
+  │ RatingController   │ 英文 ("Submit Rating", "Rating Submitted") │
+  ├────────────────────┼────────────────────────────────────────────┤
+  │ FavoriteController │ 中文                                       │
+  ├────────────────────┼────────────────────────────────────────────┤
+  │ WatchedController  │ 中文                                       │
+  └────────────────────┴────────────────────────────────────────────┘
+
+  RatingController 是唯一使用英文描述的控制器，但其验证消息（message = "电影ID必须大于0"）又是中文。应统一。
+
+  3.2 返回类型 VO 命名不当 [中等]
+
+  三个不同业务场景复用了 MyFavoriteVO：
+
+  // ViewHistoryController.java:40
+  Result<PageInfo<MyFavoriteVO>> getMyHistory(...)
+
+  // WatchedController.java:66
+  Result<PageInfo<MyFavoriteVO>> getMyWatchedList(...)
+
+  // FavoriteController.java:64
+  Result<PageInfo<MyFavoriteVO>> getMyFavorites(...)
+
+  浏览历史和看过列表复用了「收藏」的 VO，语义不对。应该有独立的 MyViewHistoryVO / MyWatchedVO，或者使用一个通用名称如
+  MovieItemVO。
+
+  3.3 同功能接口路径风格不统一
+
+  - 清空操作：DELETE /favorites/all, DELETE /ratings/all, DELETE /view-histories/all, DELETE /watched-movies/all —
+  路径一致，OK。
+  - 但批量删除：DELETE /favorites/batch 接收 @RequestBody List<Long> movieIds，DELETE /ratings/batch 接收 @RequestBody
+  List<Long> movieIds，而 DELETE /view-histories/batch 接收 @RequestBody List<Long> historyIds — 语义不同（前者按
+  movieId，后者按 historyId），但路径结构相同，容易让调用方困惑。
+
+  ---
+  4. 冗余/重复接口
+
+  4.1 长评的两套并行 API [中等]
+
+  POST  /comments/long-reviews           (form params: movieId, title, content)
+  POST  /comments/long-reviews/json      (JSON body: LongReviewDTO)
+  PUT   /comments/long-reviews           (form params)
+  PUT   /comments/long-reviews/json      (JSON body)
+
+  同一功能提供了两种入参格式（form-param 和 JSON），维护成本翻倍。应只保留 JSON
+  版本（/long-reviews/json），并将其路径简化为 /long-reviews。
+
+  4.2 submitRating 与 updateRating 功能重叠 [轻微]
+
+  @PostMapping("/{movieId}")  // submitRating - description: "will update the existing rating"
+  @PutMapping("/{movieId}")   // updateRating
+
+  submitRating 的描述已经说明会 upsert（存在则更新），那 updateRating 就是冗余的。建议保留一个 upsert 接口即可（PUT
+  /ratings/{movieId}）。
+
+  ---
+  5. 架构层面问题
+
+  5.1 业务逻辑泄漏到 Controller [中等]
+
+  MovieController.getFilterMetadata() (line 167-192) — 评分分段、年代分段的硬编码逻辑在 Controller 中，应下沉到 Service
+  或配置。
+
+  FavoriteFolderController.getFolderById() (line 60-72) — 所有权和公开性的鉴权判断在 Controller 中：
+  boolean isOwner = user != null && folder.getUserId() != null && ...;
+  boolean isPublic = folder.getIsPublic() != null && folder.getIsPublic() == 1;
+  if (!isOwner && !isPublic) { return Result.fail("无权访问该收藏夹"); }
+  这段权限逻辑应在 Service 层实现。
+
+  5.2 AdminController 缺少输入校验 [中等]
+
+  @PostMapping("/movies")
+  public Result<String> addMovie(@RequestBody Movie movie) { ... }
+
+  @PutMapping("/movies/{id}")
+  public Result<String> updateMovie(..., @RequestBody Movie movie) { ... }
+
+  @PostMapping("/people")
+  public Result<String> addPerson(@RequestBody Person person) { ... }
+
+  直接接收实体对象且没有 @Valid 注解。应使用 DTO + @Valid 进行输入校验，而非直接绑定数据库实体。
+
+  ---
+  6. 其他设计建议
+
+  6.1 AnalyticsController.getSimilarMovies 路径设计 [轻微]
+
+  GET /analytics/movies/{movieId}/similar
+  "相似电影"在语义上更属于电影资源（GET /movies/{movieId}/similar），放在 analytics 前缀下使前端调用不够直觉。
+
+  6.2 AnalyticsController.getTrendingMovies 枚举参数用 String [轻微]
+
+  @RequestParam(defaultValue = "DAILY") String period
+  然后在 Controller 中手动 TrendPeriod.from(period) 校验。直接使用枚举类型参数可以让 Spring 自动转换和校验，并在 Swagger
+   中展示可选值。
+
+  6.3 UserController.logout / cancelAccount 吞异常 [轻微]
+
+  catch (Exception e) {
+      return Result.fail(500, "注销失败: " + e.getMessage());
+  }
+  捕获全部 Exception 并将内部异常信息直接返回给客户端，可能泄露实现细节。应由全局异常处理器统一处理，或至少不将
+  e.getMessage() 原样返回。
+
+  ---
+  问题汇总优先级
+
+  ┌────────┬───────────────────────────────────────┬──────────────────────────────────────┐
+  │ 优先级 │                 问题                  │                 影响                 │
+  ├────────┼───────────────────────────────────────┼──────────────────────────────────────┤
+  │ P0     │ 密码通过 QueryString 传输             │ 安全漏洞                             │
+  ├────────┼───────────────────────────────────────┼──────────────────────────────────────┤
+  │ P1     │ 评论内容通过 RequestParam 传输        │ URL 超长截断 + 日志泄露              │
+  ├────────┼───────────────────────────────────────┼──────────────────────────────────────┤
+  │ P1     │ PUT/PATCH 缺少资源 ID                 │ REST 语义错误，可能引起缓存/幂等问题 │
+  ├────────┼───────────────────────────────────────┼──────────────────────────────────────┤
+  │ P2     │ 中英文混用                            │ API 文档一致性差                     │
+  ├────────┼───────────────────────────────────────┼──────────────────────────────────────┤
+  │ P2     │ VO 命名错误（MyFavoriteVO 复用）      │ 代码可读性、前端对接困惑             │
+  ├────────┼───────────────────────────────────────┼──────────────────────────────────────┤
+  │ P2     │ 长评两套并行 API                      │ 维护成本高                           │
+  ├────────┼───────────────────────────────────────┼──────────────────────────────────────┤
+  │ P2     │ Admin 缺少 @Valid                     │ 缺少输入校验                         │
+  ├────────┼───────────────────────────────────────┼──────────────────────────────────────┤
+  │ P3     │ 收藏增删 RequestParam vs PathVariable │ 风格不统一                           │
+  ├────────┼───────────────────────────────────────┼──────────────────────────────────────┤
+  │ P3     │ submitRating/updateRating 冗余        │ 接口冗余                             │
+  ├────────┼───────────────────────────────────────┼──────────────────────────────────────┤
+  │ P3     │ 业务逻辑在 Controller 层              │ 分层不清                             │
+  ├────────┼───────────────────────────────────────┼──────────────────────────────────────┤
+  │ P3     │ 异常信息直接返回客户端                │ 信息泄露风险                         │
+  └────────┴───────────────────────────────────────┴──────────────────────────────────────┘

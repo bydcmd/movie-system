@@ -37,10 +37,16 @@ public interface CommentService {
     void updateComment(String userId, Long movieId, String content);
 
     /**
-     * 点赞或取消点赞评论
-     * @return 当前点赞状态 (true: 已点赞, false: 未点赞)
+     * 点赞评论（幂等）
+     * @return 当前点赞状态 (true: 已点赞)
      */
-    boolean toggleLike(String userId, Long commentId);
+    boolean likeComment(String userId, Long commentId);
+
+    /**
+     * 取消点赞评论（幂等）
+     * @return 当前点赞状态 (false: 未点赞)
+     */
+    boolean unlikeComment(String userId, Long commentId);
 
     /**
      * 检查用户是否已点赞过某评论
@@ -63,26 +69,13 @@ public interface CommentService {
     PageInfo<CommentVO> getCommentsByType(Long movieId, String currentUserId, Integer type, int page, int size);
 
     /**
-     * 发布长评 (支持 HTML 内容和标题)
+     * 发布长评（Tiptap JSON 格式）
      */
-    void submitLongReview(String userId, Long movieId, String title, String content);
+    void submitLongReview(String userId, LongReviewDTO dto);
 
     /**
      * 修改长评
      */
     void updateLongReview(String userId, Long movieId, String title, String content);
 
-    /**
-     * 发布长评（JSON 格式，支持 Tiptap 编辑器）
-     * @param userId 用户ID
-     * @param dto 长评DTO
-     */
-    void submitLongReviewJson(String userId, LongReviewDTO dto);
-
-    /**
-     * 修改长评（JSON 格式，支持 Tiptap 编辑器）
-     * @param userId 用户ID
-     * @param dto 长评DTO
-     */
-    void updateLongReviewJson(String userId, LongReviewDTO dto);
 }

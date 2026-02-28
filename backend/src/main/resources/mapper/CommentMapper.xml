@@ -27,7 +27,7 @@
         SELECT <include refid="Base_Column_List"/> FROM comments
         <where>
             <if test="keyword != null and keyword != ''">
-                AND content LIKE CONCAT('%', #{keyword}, '%')
+                AND content LIKE '%' || #{keyword} || '%'
             </if>
         </where>
         ORDER BY comment_time DESC

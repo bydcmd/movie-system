@@ -73,7 +73,7 @@ public class MovieControllerIntegrationTest {
         void testGetDetail_Success() throws Exception {
             when(movieService.getDetail(1L)).thenReturn(testMovie);
 
-            mockMvc.perform(get("/movie/detail/1"))
+            mockMvc.perform(get("/movies/1"))
                     .andDo(print())
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.code").value(200))
@@ -87,9 +87,9 @@ public class MovieControllerIntegrationTest {
         void testGetDetail_NotFound() throws Exception {
             when(movieService.getDetail(999L)).thenReturn(null);
 
-            mockMvc.perform(get("/movie/detail/999"))
+            mockMvc.perform(get("/movies/999"))
                     .andDo(print())
-                    .andExpect(status().isOk())
+                    .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.code").value(404))
                     .andExpect(jsonPath("$.message").value("电影不存在"));
         }
@@ -97,9 +97,9 @@ public class MovieControllerIntegrationTest {
         @Test
         @DisplayName("电影ID为0 - 应返回400参数验证错误")
         void testGetDetail_InvalidId_Zero() throws Exception {
-            mockMvc.perform(get("/movie/detail/0"))
+            mockMvc.perform(get("/movies/0"))
                     .andDo(print())
-                    .andExpect(status().isOk())
+                    .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value(400))
                     .andExpect(jsonPath("$.message").value("电影ID必须大于0"));
         }
@@ -107,9 +107,9 @@ public class MovieControllerIntegrationTest {
         @Test
         @DisplayName("电影ID为负数 - 应返回400参数验证错误")
         void testGetDetail_InvalidId_Negative() throws Exception {
-            mockMvc.perform(get("/movie/detail/-1"))
+            mockMvc.perform(get("/movies/-1"))
                     .andDo(print())
-                    .andExpect(status().isOk())
+                    .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value(400));
         }
     }
@@ -127,9 +127,9 @@ public class MovieControllerIntegrationTest {
             searchDTO.setSize(10);
 
             PageInfo<Movie> pageInfo = new PageInfo<>(Collections.singletonList(testMovie));
-            when(movieService.search(any(MovieSearchDTO.class))).thenReturn(pageInfo);
+            when(movieService.search(any(MovieSearchDTO.class), org.mockito.ArgumentMatchers.nullable(String.class))).thenReturn(pageInfo);
 
-            mockMvc.perform(post("/movie/search")
+            mockMvc.perform(post("/movies/search")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(searchDTO)))
                     .andDo(print())
@@ -146,11 +146,11 @@ public class MovieControllerIntegrationTest {
             searchDTO.setPage(1);
             searchDTO.setSize(10);
 
-            mockMvc.perform(post("/movie/search")
+            mockMvc.perform(post("/movies/search")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(searchDTO)))
                     .andDo(print())
-                    .andExpect(status().isOk())
+                    .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value(400))
                     .andExpect(jsonPath("$.message").value("关键词长度不能超过100"));
         }
@@ -163,11 +163,11 @@ public class MovieControllerIntegrationTest {
             searchDTO.setPage(1);
             searchDTO.setSize(10);
 
-            mockMvc.perform(post("/movie/search")
+            mockMvc.perform(post("/movies/search")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(searchDTO)))
                     .andDo(print())
-                    .andExpect(status().isOk())
+                    .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value(400))
                     .andExpect(jsonPath("$.message").value("最高评分不能大于10"));
         }
@@ -180,11 +180,11 @@ public class MovieControllerIntegrationTest {
             searchDTO.setPage(1);
             searchDTO.setSize(10);
 
-            mockMvc.perform(post("/movie/search")
+            mockMvc.perform(post("/movies/search")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(searchDTO)))
                     .andDo(print())
-                    .andExpect(status().isOk())
+                    .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value(400))
                     .andExpect(jsonPath("$.message").value("年份格式不正确，应为4位数字"));
         }
@@ -197,11 +197,11 @@ public class MovieControllerIntegrationTest {
             searchDTO.setPage(0);
             searchDTO.setSize(10);
 
-            mockMvc.perform(post("/movie/search")
+            mockMvc.perform(post("/movies/search")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(searchDTO)))
                     .andDo(print())
-                    .andExpect(status().isOk())
+                    .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value(400))
                     .andExpect(jsonPath("$.message").value("页码必须大于0"));
         }
@@ -214,11 +214,11 @@ public class MovieControllerIntegrationTest {
             searchDTO.setPage(1);
             searchDTO.setSize(101);
 
-            mockMvc.perform(post("/movie/search")
+            mockMvc.perform(post("/movies/search")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(searchDTO)))
                     .andDo(print())
-                    .andExpect(status().isOk())
+                    .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value(400))
                     .andExpect(jsonPath("$.message").value("每页数量不能超过100"));
         }
@@ -234,7 +234,7 @@ public class MovieControllerIntegrationTest {
             List<Movie> movies = Collections.singletonList(testMovie);
             when(analyticsService.getHotMoviesByPeriod("DAILY", 10)).thenReturn(movies);
 
-            mockMvc.perform(get("/movie/hot")
+            mockMvc.perform(get("/movies/hot")
                             .param("limit", "10"))
                     .andDo(print())
                     .andExpect(status().isOk())
@@ -248,7 +248,7 @@ public class MovieControllerIntegrationTest {
             List<Movie> movies = Collections.singletonList(testMovie);
             when(analyticsService.getHotMoviesByPeriod(eq("DAILY"), anyInt())).thenReturn(movies);
 
-            mockMvc.perform(get("/movie/hot"))
+            mockMvc.perform(get("/movies/hot"))
                     .andDo(print())
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.code").value(200));
@@ -257,10 +257,10 @@ public class MovieControllerIntegrationTest {
         @Test
         @DisplayName("limit为0 - 应返回400参数验证错误")
         void testGetHotMovies_InvalidLimit_Zero() throws Exception {
-            mockMvc.perform(get("/movie/hot")
+            mockMvc.perform(get("/movies/hot")
                             .param("limit", "0"))
                     .andDo(print())
-                    .andExpect(status().isOk())
+                    .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value(400))
                     .andExpect(jsonPath("$.message").value("返回数量至少为1"));
         }
@@ -268,10 +268,10 @@ public class MovieControllerIntegrationTest {
         @Test
         @DisplayName("limit超过100 - 应返回400参数验证错误")
         void testGetHotMovies_InvalidLimit_TooLarge() throws Exception {
-            mockMvc.perform(get("/movie/hot")
+            mockMvc.perform(get("/movies/hot")
                             .param("limit", "101"))
                     .andDo(print())
-                    .andExpect(status().isOk())
+                    .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value(400))
                     .andExpect(jsonPath("$.message").value("返回数量最多为100"));
         }
@@ -287,7 +287,7 @@ public class MovieControllerIntegrationTest {
             PageInfo<Movie> pageInfo = new PageInfo<>(Collections.singletonList(testMovie));
             when(movieService.getMoviesByGenre(anyString(), anyInt(), anyInt())).thenReturn(pageInfo);
 
-            mockMvc.perform(get("/movie/genre/动作")
+            mockMvc.perform(get("/movies/genres/动作")
                             .param("page", "1")
                             .param("size", "10"))
                     .andDo(print())
@@ -299,11 +299,11 @@ public class MovieControllerIntegrationTest {
         @Test
         @DisplayName("页码为0 - 应返回400参数验证错误")
         void testGetMoviesByGenre_InvalidPage() throws Exception {
-            mockMvc.perform(get("/movie/genre/动作")
+            mockMvc.perform(get("/movies/genres/动作")
                             .param("page", "0")
                             .param("size", "10"))
                     .andDo(print())
-                    .andExpect(status().isOk())
+                    .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value(400))
                     .andExpect(jsonPath("$.message").value("页码必须大于0"));
         }
@@ -319,7 +319,7 @@ public class MovieControllerIntegrationTest {
             PageInfo<Movie> pageInfo = new PageInfo<>(Collections.singletonList(testMovie));
             when(movieService.getMoviesByYear(anyInt(), anyInt(), anyInt())).thenReturn(pageInfo);
 
-            mockMvc.perform(get("/movie/year/2010")
+            mockMvc.perform(get("/movies/years/2010")
                             .param("page", "1")
                             .param("size", "10"))
                     .andDo(print())
@@ -331,11 +331,11 @@ public class MovieControllerIntegrationTest {
         @Test
         @DisplayName("年份早于1900 - 应返回400参数验证错误")
         void testGetMoviesByYear_InvalidYear() throws Exception {
-            mockMvc.perform(get("/movie/year/1899")
+            mockMvc.perform(get("/movies/years/1899")
                             .param("page", "1")
                             .param("size", "10"))
                     .andDo(print())
-                    .andExpect(status().isOk())
+                    .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value(400))
                     .andExpect(jsonPath("$.message").value("年份不能早于1900"));
         }
@@ -354,7 +354,7 @@ public class MovieControllerIntegrationTest {
 
             when(movieService.getLatestMovies(anyInt(), anyInt())).thenReturn(pageInfo);
 
-            mockMvc.perform(get("/movie/latest")
+            mockMvc.perform(get("/movies/latest")
                             .param("page", "1")
                             .param("size", "10"))
                     .andDo(print())
@@ -369,7 +369,7 @@ public class MovieControllerIntegrationTest {
             PageInfo<Movie> pageInfo = new PageInfo<>(Collections.singletonList(testMovie));
             when(movieService.getLatestMovies(anyInt(), anyInt())).thenReturn(pageInfo);
 
-            mockMvc.perform(get("/movie/latest"))
+            mockMvc.perform(get("/movies/latest"))
                     .andDo(print())
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.code").value(200));

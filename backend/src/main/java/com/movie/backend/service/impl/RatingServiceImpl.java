@@ -9,13 +9,17 @@ import com.movie.backend.messaging.event.RatingEvent;
 import com.movie.backend.messaging.kafka.KafkaEventPublisher;
 import com.movie.backend.service.RatingService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.DuplicateKeyException;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 
 @Service
 public class RatingServiceImpl implements RatingService {
@@ -26,47 +30,41 @@ public class RatingServiceImpl implements RatingService {
     @Autowired
     private KafkaEventPublisher kafkaEventPublisher;
 
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public void submitRating(String userId, Long movieId, Integer rating) {
-        // 1. 验证评分范围 (1-5)
-        if (rating < 1 || rating > 5) {
-            throw new RuntimeException("评分必须在 1 到 5 之间");
-        }
+    @Value("${movie.rating.blend.k:200}")
+    private Integer ratingBlendK;
 
-        Rating ratingEntity = new Rating();
-        ratingEntity.setUserId(userId);
-        ratingEntity.setMovieId(movieId);
-        ratingEntity.setRating(rating);
-        ratingEntity.setRatingTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+    @Value("${movie.rating.force-update-votes-threshold:50}")
+    private Integer forceUpdateVotesThreshold;
 
-        try {
-            // 直接尝试插入，利用数据库的唯一索引 (uk_user_movie) 保证原子性
-            ratingMapper.insert(ratingEntity);
-
-            RatingEvent event = new RatingEvent(userId, movieId, rating, "CREATE", ratingEntity.getRatingTime());
-            kafkaEventPublisher.publishRatingEvent(event);
-        } catch (DuplicateKeyException e) {
-            // 4. 捕获唯一索引冲突异常，抛出对应的业务提示
-            // 这样既解决了并发问题，又节省了一次查询 IO
-            throw new RuntimeException("您已经评价过这部电影了");
-        }
-    }
+    private static final int RATING_REFRESH_BATCH_SIZE = 200;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateRating(String userId, Long movieId, Integer rating) {
-        // 1. 验证评分范围 (1-5)
         if (rating < 1 || rating > 5) {
             throw new RuntimeException("评分必须在 1 到 5 之间");
         }
 
         String ratingTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-        int rows = ratingMapper.updateByUserAndMovie(userId, movieId, rating, ratingTime);
-        if (rows == 0) {
-            throw new RuntimeException("修改失败，您尚未对该电影评分");
+        Rating existingRating = ratingMapper.selectByUserAndMovie(userId, movieId);
+        boolean ratingChanged = existingRating == null || !Objects.equals(existingRating.getRating(), rating);
+
+        int rows = ratingMapper.upsertByUserAndMovie(userId, movieId, rating, ratingTime);
+        if (rows == 0 && existingRating == null) {
+            // 并发下可能被其他请求先写入且分值相同，此时无需刷新电影评分
+            existingRating = ratingMapper.selectByUserAndMovie(userId, movieId);
+            if (existingRating == null) {
+                throw new RuntimeException("评分提交失败，请稍后重试");
+            }
+            ratingChanged = !Objects.equals(existingRating.getRating(), rating);
         }
-        RatingEvent event = new RatingEvent(userId, movieId, rating, "UPDATE", ratingTime);
+
+        if (ratingChanged) {
+            refreshMovieRatingSnapshot(movieId);
+        }
+
+        String eventAction = existingRating == null ? "CREATE" : "UPDATE";
+        RatingEvent event = new RatingEvent(userId, movieId, rating, eventAction, ratingTime);
         kafkaEventPublisher.publishRatingEvent(event);
     }
 
@@ -92,8 +90,15 @@ public class RatingServiceImpl implements RatingService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void clearUserRatings(String userId) {
-        // 删除用户的所有评分
+        List<Long> existingMovieIds = ratingMapper.selectMovieIdsByUserId(userId);
+        Set<Long> affectedMovieIds = new LinkedHashSet<>();
+        if (existingMovieIds != null && !existingMovieIds.isEmpty()) {
+            affectedMovieIds.addAll(existingMovieIds);
+        }
+
         ratingMapper.deleteByUserId(userId);
+        refreshMovieRatings(affectedMovieIds);
+
         RatingEvent event = new RatingEvent(userId, null, null, "CLEAR", null);
         kafkaEventPublisher.publishRatingEvent(event);
     }
@@ -102,11 +107,40 @@ public class RatingServiceImpl implements RatingService {
     @Transactional(rollbackFor = Exception.class)
     public void deleteRatingsBatch(String userId, List<Long> movieIds) {
         if (movieIds != null && !movieIds.isEmpty()) {
+            Set<Long> affectedMovieIds = new LinkedHashSet<>(movieIds);
             ratingMapper.deleteBatch(userId, movieIds);
-            for (Long movieId : movieIds) {
+            refreshMovieRatings(affectedMovieIds);
+            for (Long movieId : affectedMovieIds) {
                 RatingEvent event = new RatingEvent(userId, movieId, null, "DELETE", null);
                 kafkaEventPublisher.publishRatingEvent(event);
             }
         }
+    }
+
+    private void refreshMovieRatings(Set<Long> movieIds) {
+        if (movieIds == null || movieIds.isEmpty()) {
+            return;
+        }
+        List<Long> batchMovieIds = new ArrayList<>(RATING_REFRESH_BATCH_SIZE);
+        for (Long movieId : movieIds) {
+            if (movieId == null) {
+                continue;
+            }
+            batchMovieIds.add(movieId);
+            if (batchMovieIds.size() >= RATING_REFRESH_BATCH_SIZE) {
+                ratingMapper.refreshMovieScoreAndVotesBatch(batchMovieIds, ratingBlendK, forceUpdateVotesThreshold);
+                batchMovieIds.clear();
+            }
+        }
+        if (!batchMovieIds.isEmpty()) {
+            ratingMapper.refreshMovieScoreAndVotesBatch(batchMovieIds, ratingBlendK, forceUpdateVotesThreshold);
+        }
+    }
+
+    private void refreshMovieRatingSnapshot(Long movieId) {
+        if (movieId == null) {
+            return;
+        }
+        ratingMapper.refreshMovieScoreAndVotes(movieId, ratingBlendK, forceUpdateVotesThreshold);
     }
 }

@@ -2,9 +2,10 @@ package com.movie.backend.service.impl;
 
 
 import com.github.pagehelper.PageHelper;
-import com.movie.backend.dto.MyFavoriteVO;
+import com.movie.backend.dto.MovieItemVO;
 import com.movie.backend.entity.Favorite;
 import com.movie.backend.mapper.FavoriteMapper;
+import com.movie.backend.entity.FavoriteFolder;
 import com.movie.backend.mapper.FavoriteFolderMapper;
 import com.movie.backend.messaging.event.FavoriteEvent;
 import com.movie.backend.messaging.kafka.KafkaEventPublisher;
@@ -15,10 +16,16 @@ import org.springframework.transaction.annotation.Transactional;
 import com.movie.backend.entity.Movie;
 import com.github.pagehelper.PageInfo;
 
+
+
 import java.util.List;
+
 import java.util.Date;
 
+
+
 @Service
+
 public class FavoriteServiceImpl implements FavoriteService {
     @Autowired
     private FavoriteMapper favoriteMapper;
@@ -30,38 +37,66 @@ public class FavoriteServiceImpl implements FavoriteService {
     private KafkaEventPublisher kafkaEventPublisher;
 
     @Override
+
     public void addFavorite(String userId, Long movieId) {
         // 检查是否已收藏到默认收藏夹
+
         Favorite existing = favoriteMapper.selectByUserMovieAndFolder(userId, movieId, 0L);
+
         if (existing != null) {
+
             throw new IllegalStateException("该电影已在默认收藏夹中");
+
         }
+
         
+
         Favorite favorite = new Favorite();
+
         favorite.setUserId(userId);
+
         favorite.setMovieId(movieId);
+
         favorite.setFolderId(0L); // 默认收藏夹，使用0代替NULL
+
         favorite.setCreateTime(new Date());
+
+
 
         favoriteMapper.insert(favorite);
         FavoriteEvent event = new FavoriteEvent(userId, movieId, 0L, "ADD");
         kafkaEventPublisher.publishFavoriteEvent(event);
     }
 
+
     @Override
+
     @Transactional
+
     public void addFavoriteToFolder(String userId, Long movieId, Long folderId) {
         // 检查是否已收藏到该收藏夹
+
         Favorite existing = favoriteMapper.selectByUserMovieAndFolder(userId, movieId, folderId);
+
         if (existing != null) {
+
             throw new IllegalStateException("该电影已在当前收藏夹中");
+
         }
+
         
+
         Favorite favorite = new Favorite();
+
         favorite.setUserId(userId);
+
         favorite.setMovieId(movieId);
+
         favorite.setFolderId(folderId);
+
         favorite.setCreateTime(new Date());
+
+
 
         favoriteMapper.insert(favorite);
         FavoriteEvent event = new FavoriteEvent(userId, movieId, folderId, "ADD");
@@ -71,15 +106,24 @@ public class FavoriteServiceImpl implements FavoriteService {
         if (folderId != null && folderId != 0) {
             favoriteFolderMapper.incrementMovieCount(folderId);
         }
+
     }
 
+
+
     @Override
+
     @Transactional
+
     public void removeFavorite(String userId, Long movieId) {
         // 先查询该电影在哪些收藏夹中
+
         List<Favorite> favorites = favoriteMapper.selectAllByUserAndMovie(userId, movieId);
+
         
+
         // 删除收藏记录
+
         favoriteMapper.deleteByUserAndMovie(userId, movieId);
         FavoriteEvent event = new FavoriteEvent(userId, movieId, null, "REMOVE");
         kafkaEventPublisher.publishFavoriteEvent(event);
@@ -88,13 +132,21 @@ public class FavoriteServiceImpl implements FavoriteService {
         for (Favorite favorite : favorites) {
             Long folderId = favorite.getFolderId();
             if (folderId != null && folderId != 0) {
+
                 favoriteFolderMapper.decrementMovieCount(folderId);
+
             }
+
         }
+
     }
 
+
+
     @Override
+
     @Transactional
+
     public void removeFavoriteFromFolder(String userId, Long movieId, Long folderId) {
         // 从指定收藏夹中删除
         favoriteMapper.deleteByUserMovieAndFolder(userId, movieId, folderId);
@@ -105,33 +157,67 @@ public class FavoriteServiceImpl implements FavoriteService {
         if (folderId != null && folderId != 0) {
             favoriteFolderMapper.decrementMovieCount(folderId);
         }
+
     }
 
+
+
     @Override
+
     public boolean isFavorited(String userId, Long movieId) {
+
         return favoriteMapper.selectByUserAndMovie(userId, movieId) != null;
+
     }
+
     @Override
+
     @SuppressWarnings("resource")
+
     public PageInfo<Movie> getUserFavoriteMovies(String userId, int page, int size) {
+
         PageHelper.startPage(page, size);
+
         List<Movie> list = favoriteMapper.selectFavoriteMoviesByUserId(userId);
+
         return new PageInfo<>(list);
+
     }
+
+
+
+    @Override
+
+    @SuppressWarnings("resource")
+
+    public PageInfo<MovieItemVO> getMyFavoriteList(String userId, int page, int size) {
+
+        PageHelper.startPage(page, size);
+
+        List<MovieItemVO> list = favoriteMapper.selectMyFavoritesByUserId(userId);
+
+        return new PageInfo<>(list);
+
+    }
+
+
 
     @Override
     @SuppressWarnings("resource")
-    public PageInfo<MyFavoriteVO> getMyFavoriteVOList(String userId, int page, int size) {
-        PageHelper.startPage(page, size);
-        List<MyFavoriteVO> list = favoriteMapper.selectMyFavoritesByUserId(userId);
-        return new PageInfo<>(list);
-    }
+    public PageInfo<MovieItemVO> getFolderMovies(String userId, Long folderId, int page, int size) {
+        FavoriteFolder folder = favoriteFolderMapper.selectById(folderId);
+        if (folder == null) {
+            throw new IllegalArgumentException("收藏夹不存在");
+        }
 
-    @Override
-    @SuppressWarnings("resource")
-    public PageInfo<MyFavoriteVO> getFolderMovies(String userId, Long folderId, int page, int size) {
+        boolean isOwner = folder.getUserId() != null && folder.getUserId().equals(userId);
+        boolean isPublic = folder.getIsPublic() != null && folder.getIsPublic() == 1;
+        if (!isOwner && !isPublic) {
+            throw new IllegalArgumentException("无权访问该收藏夹");
+        }
+
         PageHelper.startPage(page, size);
-        List<MyFavoriteVO> list = favoriteMapper.selectByFolderId(userId, folderId);
+        List<MovieItemVO> list = favoriteMapper.selectByFolderId(folderId);
         return new PageInfo<>(list);
     }
 

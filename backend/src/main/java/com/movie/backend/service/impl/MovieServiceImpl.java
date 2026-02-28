@@ -10,13 +10,18 @@ import com.movie.backend.entity.Region;
 import com.movie.backend.mapper.GenreMapper;
 import com.movie.backend.mapper.MovieMapper;
 import com.movie.backend.mapper.RegionMapper;
+import com.movie.backend.messaging.event.SearchEvent;
+import com.movie.backend.messaging.kafka.KafkaEventPublisher;
 import com.movie.backend.service.MovieService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -31,6 +36,9 @@ public class MovieServiceImpl implements MovieService {
     @Autowired
     private RegionMapper regionMapper;
 
+    @Autowired
+    private KafkaEventPublisher kafkaEventPublisher;
+
     @Override
     @Cacheable(value = "movieDetail", key = "#id")
     public Movie getDetail(Long id) {
@@ -44,7 +52,7 @@ public class MovieServiceImpl implements MovieService {
 
     @Override
     @SuppressWarnings("resource")
-    public PageInfo<Movie> search(MovieSearchDTO searchDTO) {
+    public PageInfo<Movie> search(MovieSearchDTO searchDTO, String userId) {
         MovieSearchDTO normalizedDTO = normalizeSearchDTO(searchDTO);
 
         // Start Page
@@ -54,7 +62,9 @@ public class MovieServiceImpl implements MovieService {
         List<Movie> list = movieMapper.search(normalizedDTO);
         
         // Return PageInfo
-        return new PageInfo<>(list);
+        PageInfo<Movie> pageInfo = new PageInfo<>(list);
+        publishSearchEvent(userId, normalizedDTO, pageInfo);
+        return pageInfo;
     }
 
     private MovieSearchDTO normalizeSearchDTO(MovieSearchDTO searchDTO) {
@@ -89,6 +99,65 @@ public class MovieServiceImpl implements MovieService {
         }
 
         return searchDTO;
+    }
+
+    private CatalogQueryDTO normalizeCatalogQuery(CatalogQueryDTO catalogQuery) {
+        if (catalogQuery == null) {
+            return new CatalogQueryDTO();
+        }
+
+        if (catalogQuery.getMinScore() != null
+                && catalogQuery.getMaxScore() != null
+                && catalogQuery.getMinScore() > catalogQuery.getMaxScore()) {
+            throw new IllegalArgumentException("最低评分不能大于最高评分");
+        }
+
+        if (catalogQuery.getStartYear() != null
+                && catalogQuery.getEndYear() != null
+                && catalogQuery.getStartYear() > catalogQuery.getEndYear()) {
+            throw new IllegalArgumentException("起始年份不能大于结束年份");
+        }
+
+        return catalogQuery;
+    }
+
+    private void publishSearchEvent(String userId, MovieSearchDTO searchDTO, PageInfo<Movie> pageInfo) {
+        SearchEvent event = new SearchEvent();
+        event.setUserId(userId);
+        event.setSearchKeyword(searchDTO != null ? searchDTO.getKeyword() : null);
+        event.setFilterConditions(buildFilterConditions(searchDTO));
+        event.setResultCount(pageInfo != null ? pageInfo.getTotal() : 0L);
+        event.setSearchTime(System.currentTimeMillis());
+        kafkaEventPublisher.publishSearchEvent(event);
+    }
+
+    private Map<String, Object> buildFilterConditions(MovieSearchDTO searchDTO) {
+        if (searchDTO == null) {
+            return null;
+        }
+        Map<String, Object> filters = new LinkedHashMap<>();
+        putIfNotEmpty(filters, "genres", searchDTO.getGenres());
+        putIfNotEmpty(filters, "minScore", searchDTO.getMinScore());
+        putIfNotEmpty(filters, "maxScore", searchDTO.getMaxScore());
+        putIfNotEmpty(filters, "year", searchDTO.getYear());
+        putIfNotEmpty(filters, "startYear", searchDTO.getStartYear());
+        putIfNotEmpty(filters, "endYear", searchDTO.getEndYear());
+        putIfNotEmpty(filters, "regions", searchDTO.getRegions());
+        putIfNotEmpty(filters, "directors", searchDTO.getDirectors());
+        putIfNotEmpty(filters, "actors", searchDTO.getActors());
+        putIfNotEmpty(filters, "sortBy", searchDTO.getSortBy());
+        putIfNotEmpty(filters, "sortOrder", searchDTO.getSortOrder());
+        return filters.isEmpty() ? null : filters;
+    }
+
+    private void putIfNotEmpty(Map<String, Object> target, String key, Object value) {
+        if (value == null) {
+            return;
+        }
+        if (value instanceof Collection && ((Collection<?>) value).isEmpty()) {
+            return;
+        }
+        target.put(key, value);
     }
 
     private List<String> cleanStringList(List<String> values) {
@@ -171,31 +240,60 @@ public class MovieServiceImpl implements MovieService {
     }
 
     @Override
+    @Cacheable(value = "movieMetadata", key = "'allLanguages'")
+    public List<String> getAllLanguages() {
+        // Use normalized language table
+        // Cache: 24 hours TTL, cleared when languages are modified
+        return movieMapper.selectAllLanguages();
+    }
+
+    @Override
     @Cacheable(value = "movieMetadata", key = "'allYears'")
     public List<Integer> getAllYears() {
         // Cache: 24 hours TTL, cleared when new movies are added
         return movieMapper.selectAllYears();
     }
 
-    /**
-     * Note: When implementing genre/region/movie modification operations, add @CacheEvict:
-     * - For genre changes: @CacheEvict(value = "movieMetadata", key = "'allGenres'")
-     * - For region changes: @CacheEvict(value = "movieMetadata", key = "'allRegions'")
-     * - For new movies: @CacheEvict(value = "movieMetadata", key = "'allYears'")
-     * - For movie detail updates: @CacheEvict(value = "movieDetail", key = "#movieId")
-     */
-
     @Override
     public PageInfo<Movie> getCatalogMovies(CatalogQueryDTO catalogQuery) {
-        // 1. 开启分页 (直接使用入参中的 page 和 size)
-        PageHelper.startPage(catalogQuery.getPage(), catalogQuery.getSize());
+        CatalogQueryDTO normalizedQuery = normalizeCatalogQuery(catalogQuery);
 
-        // 2. 调用 Mapper (使用注入的 movieMapper，而不是 baseMapper)
-        // 注意：请确保 MovieMapper 接口中已经添加了 List<Movie> selectByCatalog(CatalogQueryDTO dto); 方法
-        List<Movie> list = movieMapper.selectByCatalog(catalogQuery);
+        PageHelper.startPage(normalizedQuery.getPage(), normalizedQuery.getSize());
+        List<Movie> list = movieMapper.selectByCatalog(normalizedQuery);
 
-        // 3. 返回 PageInfo (保持与接口定义一致)
         return new PageInfo<>(list);
+    }
+
+    @Override
+    public Map<String, Object> getFilterMetadata() {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+
+        List<Map<String, Object>> scoreSegments = new ArrayList<>();
+        scoreSegments.add(createSegment("9分以上", 9.0, null));
+        scoreSegments.add(createSegment("8-9分", 8.0, 9.0));
+        scoreSegments.add(createSegment("7-8分", 7.0, 8.0));
+        scoreSegments.add(createSegment("6-7分", 6.0, 7.0));
+        scoreSegments.add(createSegment("6分以下", null, 6.0));
+        metadata.put("scores", scoreSegments);
+
+        List<Map<String, Object>> yearSegments = new ArrayList<>();
+        yearSegments.add(createSegment("2020年代", 2020, null));
+        yearSegments.add(createSegment("2010年代", 2010, 2019));
+        yearSegments.add(createSegment("2000年代", 2000, 2009));
+        yearSegments.add(createSegment("90年代", 1990, 1999));
+        yearSegments.add(createSegment("80年代", 1980, 1989));
+        yearSegments.add(createSegment("更早", null, 1979));
+        metadata.put("eras", yearSegments);
+
+        return metadata;
+    }
+
+    private Map<String, Object> createSegment(String label, Object min, Object max) {
+        Map<String, Object> segment = new LinkedHashMap<>();
+        segment.put("label", label);
+        segment.put("min", min);
+        segment.put("max", max);
+        return segment;
     }
 
 }

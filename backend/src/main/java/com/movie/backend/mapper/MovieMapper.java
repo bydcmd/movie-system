@@ -8,6 +8,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
+import java.util.Map;
 
 @Mapper
 public interface MovieMapper {
@@ -90,6 +91,11 @@ public interface MovieMapper {
     List<Movie> selectByPersonName(@Param("personName") String personName);
 
     /**
+     * 根据ID列表批量查询电影（保持传入顺序）
+     */
+    List<Movie> selectByIds(@Param("ids") List<Long> ids);
+
+    /**
      * 获取所有不重复的类型
      */
     List<String> selectAllGenres();
@@ -100,22 +106,20 @@ public interface MovieMapper {
     List<String> selectAllRegions();
 
     /**
+     * 获取所有不重复的语言
+     */
+    List<String> selectAllLanguages();
+
+    /**
      * 获取所有不重复的年份
      */
     List<Integer> selectAllYears();
 
     /**
-     * 更新电影的豆瓣评分和评分人数
+     * 更新电影的本站评分和评分人数
      */
-    int updateMovieScore(@Param("movieId") Long movieId, @Param("score") Double score, @Param("votes") Integer votes);
+    int updateMovieScore(@Param("movieId") Long movieId,
+                         @Param("siteScore") Double siteScore,
+                         @Param("siteVotes") Integer siteVotes);
 
-    /**
-     * 查询冷门佳作
-     * @param minScore 最低评分 (例如 8.0)
-     * @param maxVotes 最大投票数 (例如 50000，定义什么是"冷门")
-     * @param limit 返回数量
-     */
-    List<Movie> selectColdGems(@Param("minScore") Double minScore,
-                               @Param("maxVotes") Integer maxVotes,
-                               @Param("limit") int limit);
 }

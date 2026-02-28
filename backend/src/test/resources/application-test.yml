@@ -1,0 +1,29 @@
+spring:
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://127.0.0.1:5432/movie_db_test
+    username: test
+    password: test
+    type: com.alibaba.druid.pool.DruidDataSource
+    druid:
+      initial-size: 0
+      min-idle: 0
+      max-active: 2
+      test-on-borrow: false
+      test-while-idle: false
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      database: 0
+  cache:
+    type: simple
+  kafka:
+    bootstrap-servers: 127.0.0.1:9092
+
+hive:
+  datasource:
+    driver-class-name: org.apache.hive.jdbc.HiveDriver
+    url: jdbc:hive2://127.0.0.1:10000/default
+    username: hive
+    password:

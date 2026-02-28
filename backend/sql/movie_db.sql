@@ -190,7 +190,8 @@ CREATE TABLE `ratings`  (
   `rating` int NULL DEFAULT NULL COMMENT '分值(1-5)',
   `rating_time` datetime NULL DEFAULT NULL COMMENT '评分时间',
   PRIMARY KEY (`user_id`, `movie_id`) USING BTREE,
-  INDEX `idx_movie_id`(`movie_id` ASC) USING BTREE
+  INDEX `idx_movie_id`(`movie_id` ASC) USING BTREE,
+  INDEX `idx_movie_id_rating`(`movie_id` ASC, `rating` ASC) USING BTREE
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci ROW_FORMAT = Dynamic;
 
 -- ----------------------------
@@ -313,5 +314,6 @@ CREATE TABLE `view_history`  (
   UNIQUE INDEX `uk_user_movie`(`user_id` ASC, `movie_id` ASC) USING BTREE,
   INDEX `idx_user_time`(`user_id` ASC, `view_time` DESC) USING BTREE
 ) ENGINE = InnoDB AUTO_INCREMENT = 11 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci ROW_FORMAT = Dynamic;
+
 
 SET FOREIGN_KEY_CHECKS = 1;
