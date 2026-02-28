@@ -31,3 +31,7 @@ build/
 
 ### VS Code ###
 .vscode/
+
+ADVANCED_SEARCH_FEATURE.md
+COMMENT_FIX_SUMMARY.md
+RATING_RACE_CONDITION_FIX.md
