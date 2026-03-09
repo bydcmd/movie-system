@@ -6,6 +6,7 @@ import com.movie.backend.dto.CommentVO;
 import com.movie.backend.dto.LongReviewDTO;
 import com.movie.backend.entity.Comment;
 import com.movie.backend.entity.CommentLike;
+import com.movie.backend.exception.BusinessException;
 import com.movie.backend.mapper.CommentLikeMapper;
 import com.movie.backend.mapper.CommentMapper;
 import com.movie.backend.messaging.event.CommentEvent;
@@ -23,6 +24,9 @@ import java.util.List;
 
 @Service
 public class CommentServiceImpl implements CommentService {
+
+    private static final int SHORT_COMMENT_TYPE = 1;
+    private static final int LONG_REVIEW_TYPE = 2;
 
     @Autowired
     private CommentMapper commentMapper;
@@ -80,18 +84,18 @@ public class CommentServiceImpl implements CommentService {
             comment.setUserId(userId);
             comment.setMovieId(movieId);
             comment.setContent(content.trim());
-            comment.setType(1); // 1 = 短评
+            comment.setType(SHORT_COMMENT_TYPE);
             comment.setVotes(0);
             comment.setVersion(0); // 初始版本号
             comment.setCommentTime(new java.util.Date());
 
             commentMapper.insert(comment);
             // 插入后 comment.getId() 会自动填充数据库生成的自增ID
-            CommentEvent event = new CommentEvent(userId, movieId, comment.getId(), 1, "CREATE", content.length());
+            CommentEvent event = new CommentEvent(userId, movieId, comment.getId(), SHORT_COMMENT_TYPE, "CREATE", content.length());
             kafkaEventPublisher.publishCommentEvent(event);
         } catch (org.springframework.dao.DuplicateKeyException e) {
             // 唯一索引冲突，说明用户已发表过短评
-            throw new RuntimeException("您已经发表过短评了，无法重复发布");
+            throw new BusinessException(409, "您已经发表过短评了，无法重复发布");
         }
     }
 
@@ -117,22 +121,22 @@ public class CommentServiceImpl implements CommentService {
             comment.setMovieId(dto.getMovieId());
             comment.setTitle(dto.getTitle().trim());
             comment.setContent(dto.getContent().trim());
-            comment.setType(2);
+            comment.setType(LONG_REVIEW_TYPE);
             comment.setVotes(0);
             comment.setVersion(0);
             comment.setCommentTime(new java.util.Date());
 
             commentMapper.insert(comment);
-            CommentEvent event = new CommentEvent(userId, dto.getMovieId(), comment.getId(), 2, "CREATE", dto.getContent().length());
+            CommentEvent event = new CommentEvent(userId, dto.getMovieId(), comment.getId(), LONG_REVIEW_TYPE, "CREATE", dto.getContent().length());
             kafkaEventPublisher.publishCommentEvent(event);
         } catch (org.springframework.dao.DuplicateKeyException e) {
-            throw new RuntimeException("您已经发表过长评了，如需修改请前往个人中心");
+            throw new BusinessException(409, "您已经发表过长评了，如需修改请前往个人中心");
         }
     }
 
     @Override
-    public Comment getUserComment(String userId, Long movieId) {
-        return commentMapper.selectByUserAndMovie(userId, movieId);
+    public Comment getUserShortComment(String userId, Long movieId) {
+        return commentMapper.selectByUserAndMovieAndType(userId, movieId, SHORT_COMMENT_TYPE);
     }
 
     @Override
@@ -156,11 +160,17 @@ public class CommentServiceImpl implements CommentService {
         ratingService.updateRating(userId, movieId, rating);
 
         // 2. 修改评论
-        int rows = commentMapper.updateByUserAndMovie(userId, movieId, content.trim(), new java.util.Date());
+        int rows = commentMapper.updateByUserAndMovieAndType(
+                userId,
+                movieId,
+                SHORT_COMMENT_TYPE,
+                content.trim(),
+                new java.util.Date()
+        );
         if (rows == 0) {
-            throw new RuntimeException("修改失败，您尚未对该电影发表评论");
+            throw new BusinessException(404, "修改失败，您尚未对该电影发表短评");
         }
-        CommentEvent event = new CommentEvent(userId, movieId, null, 1, "UPDATE", content.length());
+        CommentEvent event = new CommentEvent(userId, movieId, null, SHORT_COMMENT_TYPE, "UPDATE", content.length());
         kafkaEventPublisher.publishCommentEvent(event);
     }
 
@@ -174,11 +184,17 @@ public class CommentServiceImpl implements CommentService {
             throw new IllegalArgumentException("短评内容不能超过500字");
         }
 
-        int rows = commentMapper.updateByUserAndMovie(userId, movieId, content.trim(), new java.util.Date());
+        int rows = commentMapper.updateByUserAndMovieAndType(
+                userId,
+                movieId,
+                SHORT_COMMENT_TYPE,
+                content.trim(),
+                new java.util.Date()
+        );
         if (rows == 0) {
-            throw new RuntimeException("修改失败，您尚未对该电影发表评论");
+            throw new BusinessException(404, "修改失败，您尚未对该电影发表短评");
         }
-        CommentEvent event = new CommentEvent(userId, movieId, null, 1, "UPDATE", content.length());
+        CommentEvent event = new CommentEvent(userId, movieId, null, SHORT_COMMENT_TYPE, "UPDATE", content.length());
         kafkaEventPublisher.publishCommentEvent(event);
     }
 
@@ -206,9 +222,9 @@ public class CommentServiceImpl implements CommentService {
                 new java.util.Date()
         );
         if (rows == 0) {
-            throw new RuntimeException("修改失败，您尚未对该电影发表长评");
+            throw new BusinessException(404, "修改失败，您尚未对该电影发表长评");
         }
-        CommentEvent event = new CommentEvent(userId, movieId, null, 2, "UPDATE", content.length());
+        CommentEvent event = new CommentEvent(userId, movieId, null, LONG_REVIEW_TYPE, "UPDATE", content.length());
         kafkaEventPublisher.publishCommentEvent(event);
     }
 
@@ -224,7 +240,7 @@ public class CommentServiceImpl implements CommentService {
 
             int updated = commentMapper.updateVotes(commentId, 1);
             if (updated <= 0) {
-                throw new IllegalStateException("评论不存在或点赞计数更新失败");
+                throw new BusinessException(404, "评论不存在");
             }
 
             CommentLikeEvent event = new CommentLikeEvent(userId, commentId, "LIKE");
@@ -247,7 +263,7 @@ public class CommentServiceImpl implements CommentService {
 
         int updated = commentMapper.updateVotes(commentId, -1);
         if (updated <= 0) {
-            throw new IllegalStateException("评论不存在或点赞计数更新失败");
+            throw new BusinessException(404, "评论不存在");
         }
 
         CommentLikeEvent event = new CommentLikeEvent(userId, commentId, "UNLIKE");
@@ -276,8 +292,9 @@ public class CommentServiceImpl implements CommentService {
     public void deleteComment(String userId, Long commentId) {
         int rows = commentMapper.deleteByIdAndUserId(commentId, userId);
         if (rows == 0) {
-            throw new RuntimeException("删除失败，评论不存在或您无权删除");
+            throw new BusinessException(404, "删除失败，评论不存在或您无权删除");
         }
+        commentLikeMapper.deleteByCommentId(commentId);
         CommentEvent event = new CommentEvent(userId, null, commentId, null, "DELETE", null);
         kafkaEventPublisher.publishCommentEvent(event);
     }

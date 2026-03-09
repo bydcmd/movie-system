@@ -51,6 +51,8 @@
             c.content as content, 
             c.votes as votes, 
             c.comment_time as commentTime,
+            c.title as title,
+            c.type as type,
             u.user_nickname as userNickname,
             u.user_avatar as userAvatar,
             r.rating as rating,
@@ -68,10 +70,10 @@
         VALUES (#{userId}, #{movieId}, #{content}, #{votes}, #{commentTime}, #{title}, #{type})
     </insert>
 
-    <update id="updateByUserAndMovie">
+    <update id="updateByUserAndMovieAndType">
         UPDATE comments 
         SET content = #{content}, comment_time = #{commentTime}
-        WHERE user_id = #{userId} AND movie_id = #{movieId}
+        WHERE user_id = #{userId} AND movie_id = #{movieId} AND type = #{type}
     </update>
 
     <select id="selectByUserId" resultMap="BaseResultMap">
@@ -85,9 +87,9 @@
         WHERE user_id = #{userId} AND movie_id = #{movieId}
     </select>
 
-    <select id="selectByUserAndMovie" resultMap="BaseResultMap">
+    <select id="selectByUserAndMovieAndType" resultMap="BaseResultMap">
         SELECT <include refid="Base_Column_List"/> FROM comments
-        WHERE user_id = #{userId} AND movie_id = #{movieId}
+        WHERE user_id = #{userId} AND movie_id = #{movieId} AND type = #{type}
     </select>
 
     <update id="updateVotes">

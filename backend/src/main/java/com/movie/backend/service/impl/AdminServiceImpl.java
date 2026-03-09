@@ -6,6 +6,7 @@ import com.movie.backend.entity.Comment;
 import com.movie.backend.entity.Movie;
 import com.movie.backend.entity.Person;
 import com.movie.backend.entity.User;
+import com.movie.backend.mapper.CommentLikeMapper;
 import com.movie.backend.mapper.CommentMapper;
 import com.movie.backend.mapper.MovieMapper;
 import com.movie.backend.mapper.PersonMapper;
@@ -15,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Date;
 import java.util.HashMap;
@@ -35,6 +37,9 @@ public class AdminServiceImpl implements AdminService {
 
     @Autowired
     private CommentMapper commentMapper;
+
+    @Autowired
+    private CommentLikeMapper commentLikeMapper;
 
     @Override
     public Map<String, Object> getDashboardStats() {
@@ -191,6 +196,7 @@ public class AdminServiceImpl implements AdminService {
     }
 
     @Override
+    @Transactional
     public void deleteComment(Long id) {
         if (id == null) {
             throw new IllegalArgumentException("评论ID不能为空");
@@ -199,5 +205,6 @@ public class AdminServiceImpl implements AdminService {
         if (affected == 0) {
             throw new IllegalArgumentException("评论不存在");
         }
+        commentLikeMapper.deleteByCommentId(id);
     }
 }

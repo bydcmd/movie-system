@@ -20,6 +20,32 @@ spring:
     type: simple
   kafka:
     bootstrap-servers: 127.0.0.1:9092
+    listener:
+      auto-startup: false
+
+app:
+  kafka:
+    topics:
+      view-history: movie-view-history-test
+      rating: movie-rating-events-test
+      comment: movie-comment-events-test
+      comment-like: movie-comment-like-events-test
+      favorite: movie-favorite-events-test
+      watched: movie-watched-events-test
+      favorite-folder-action: movie-favorite-folder-action-events-test
+      search: movie-search-events-test
+      user-register: movie-user-register-events-test
+      user-login: movie-user-login-events-test
+    consumer:
+      view-history-group: movie-backend-view-history-test
+    outbox:
+      poll-interval-ms: 36000000
+      cleanup-interval-ms: 36000000
+
+jwt:
+  secret: TestOnlyJwtSecretKeyForMovieSystemThatIsAtLeast64BytesLongForHS512
+  access-token-expiration: 3600000
+  refresh-token-expiration: 2592000000
 
 hive:
   datasource:

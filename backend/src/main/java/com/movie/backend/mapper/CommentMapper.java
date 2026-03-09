@@ -43,9 +43,15 @@ public interface CommentMapper {
     int insert(Comment comment);
 
     /**
-     * 更新用户的评论内容
+     * 按评论类型更新用户的评论内容
      */
-    int updateByUserAndMovie(@Param("userId") String userId, @Param("movieId") Long movieId, @Param("content") String content, @Param("commentTime") java.util.Date commentTime);
+    int updateByUserAndMovieAndType(
+            @Param("userId") String userId,
+            @Param("movieId") Long movieId,
+            @Param("type") Integer type,
+            @Param("content") String content,
+            @Param("commentTime") java.util.Date commentTime
+    );
 
     /**
      * 获取用户的评论列表
@@ -58,9 +64,13 @@ public interface CommentMapper {
     int countByUserAndMovie(@Param("userId") String userId, @Param("movieId") Long movieId);
 
     /**
-     * 获取用户对某部电影的评论
+     * 获取用户对某部电影的指定类型评论
      */
-    Comment selectByUserAndMovie(@Param("userId") String userId, @Param("movieId") Long movieId);
+    Comment selectByUserAndMovieAndType(
+            @Param("userId") String userId,
+            @Param("movieId") Long movieId,
+            @Param("type") Integer type
+    );
 
     /**
      * 更新评论的点赞数

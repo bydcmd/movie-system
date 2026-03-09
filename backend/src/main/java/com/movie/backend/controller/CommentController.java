@@ -30,6 +30,8 @@ import jakarta.validation.Valid;
 @Validated
 public class CommentController {
 
+    private static final int GUEST_COMMENT_LIMIT = 20;
+
     @Autowired
     private CommentService commentService;
 
@@ -41,11 +43,11 @@ public class CommentController {
             @Parameter(description = "页码") @RequestParam(defaultValue = "1") @Min(1) int page,
             @Parameter(description = "每页数量") @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size,
             @AuthenticationPrincipal User user) {
-        validateGuestPageSize(size, user == null);
+        validateGuestPageWindow(page, size, user == null);
         String userId = user != null ? user.getId() : null;
         if (type != null) {
             if (type != 1 && type != 2) {
-                return Result.fail(400, "type 只能为 1(短评) 或 2(长评)");
+                throw new IllegalArgumentException("type 只能为 1(短评) 或 2(长评)");
             }
             return Result.success(commentService.getCommentsByType(movieId, userId, type, page, size));
         }
@@ -92,14 +94,14 @@ public class CommentController {
         return Result.success("评论发布成功");
     }
 
-    @Operation(operationId = "getMyMovieComment", summary = "获取我的单条评论", description = "获取当前登录用户对指定电影的评论内容。")
+    @Operation(operationId = "getMyMovieComment", summary = "获取我的短评", description = "获取当前登录用户对指定电影发布的短评内容。")
     @SecurityRequirement(name = "BearerAuth")
     @PreAuthorize("isAuthenticated()")
     @GetMapping("/movies/{movieId}/comments/me")
     public Result<Comment> getMyMovieComment(
             @Parameter(description = "电影ID", required = true) @PathVariable @NotNull @Min(1) Long movieId,
             @AuthenticationPrincipal User user) {
-        Comment comment = commentService.getUserComment(user.getId(), movieId);
+        Comment comment = commentService.getUserShortComment(user.getId(), movieId);
         return Result.success(comment);
     }
 
@@ -198,9 +200,13 @@ public class CommentController {
         return Result.success(dto);
     }
 
-    private void validateGuestPageSize(int size, boolean guest) {
-        if (guest && size > 20) {
-            throw new IllegalArgumentException("游客最多查看20条评论");
+    private void validateGuestPageWindow(int page, int size, boolean guest) {
+        if (!guest) {
+            return;
+        }
+        long visibleCount = (long) (page - 1) * size + size;
+        if (visibleCount > GUEST_COMMENT_LIMIT) {
+            throw new IllegalArgumentException("游客最多查看前20条评论");
         }
     }
 }

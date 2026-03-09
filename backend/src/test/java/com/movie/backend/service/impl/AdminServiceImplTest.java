@@ -1,6 +1,7 @@
 package com.movie.backend.service.impl;
 
 import com.movie.backend.mapper.CommentMapper;
+import com.movie.backend.mapper.CommentLikeMapper;
 import com.movie.backend.mapper.MovieMapper;
 import com.movie.backend.mapper.UserMapper;
 import org.junit.jupiter.api.Test;
@@ -26,6 +27,9 @@ public class AdminServiceImplTest {
 
     @Mock
     private CommentMapper commentMapper;
+
+    @Mock
+    private CommentLikeMapper commentLikeMapper;
 
     @InjectMocks
     private AdminServiceImpl adminService;

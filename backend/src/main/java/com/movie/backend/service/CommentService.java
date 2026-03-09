@@ -22,9 +22,9 @@ public interface CommentService {
     void submitComment(String userId, Long movieId, String content);
 
     /**
-     * 获取用户对某部电影的评论
+     * 获取用户对某部电影的短评
      */
-    Comment getUserComment(String userId, Long movieId);
+    Comment getUserShortComment(String userId, Long movieId);
 
     /**
      * 修改评论和评分

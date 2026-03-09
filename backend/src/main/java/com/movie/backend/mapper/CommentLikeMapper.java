@@ -17,6 +17,11 @@ public interface CommentLikeMapper {
     int delete(@Param("commentId") Long commentId, @Param("userId") String userId);
 
     /**
+     * 删除某条评论的全部点赞记录
+     */
+    int deleteByCommentId(@Param("commentId") Long commentId);
+
+    /**
      * 查询是否已点赞
      */
     CommentLike selectByCommentAndUser(@Param("commentId") Long commentId, @Param("userId") String userId);

@@ -23,7 +23,7 @@ public class ViewHistoryEventConsumer {
     private final ViewHistoryMapper viewHistoryMapper;
 
     @KafkaListener(
-            topics = "${app.kafka.topics.view-history}",
+            topics = "${app.kafka.topics.view-history:movie-view-history}",
             groupId = "${app.kafka.consumer.view-history-group:movie-backend-view-history}"
     )
     public void onMessage(String message) {
