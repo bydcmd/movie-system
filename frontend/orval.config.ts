@@ -2,9 +2,9 @@ import { defineConfig } from 'orval';
 
 export default defineConfig({
   movieApi: {
-    // 数据源：后端 Swagger/OpenAPI 的 JSON 地址
+    // 数据源：本地后端暴露的 OpenAPI JSON 地址
     input: {
-      target: './api.json',
+      target: 'http://localhost:8080/v3/api-docs',
       // 生成前做一次 OpenAPI 规范修正，减少后端细节对前端生成结果的影响
       override: {
         transformer: './orval-transformer.cjs',
@@ -54,7 +54,8 @@ export default defineConfig({
       },
     },
     hooks: {
-      afterAllFilesWrite: 'npx prettier --write ./src/api/**/*.ts',
+      afterAllFilesWrite:
+        'sh -c \'if [ -x ./node_modules/.bin/prettier ]; then ./node_modules/.bin/prettier --write ./src/api/**/*.ts; fi\'',
     },
   },
 });

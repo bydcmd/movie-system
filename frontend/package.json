@@ -4,9 +4,11 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vue-tsc -b && vite build",
-    "preview": "vite preview"
+    "api:check": "node ./scripts/ensure-generated-api.mjs",
+    "api:generate": "orval --config orval.config.ts",
+    "dev": "pnpm run api:check && vite",
+    "build": "pnpm run api:check && vue-tsc -b && vite build",
+    "preview": "pnpm run api:check && vite preview"
   },
   "dependencies": {
     "@iconify/vue": "^5.0.0",
