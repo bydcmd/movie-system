@@ -82,6 +82,28 @@ public class CommentController {
         return Result.success("长评修改成功");
     }
 
+    @Operation(operationId = "getMyMovieLongReview", summary = "获取我的长评", description = "获取当前登录用户对指定电影发布的长评内容。")
+    @SecurityRequirement(name = "BearerAuth")
+    @PreAuthorize("isAuthenticated()")
+    @GetMapping("/movies/{movieId}/long-reviews/me")
+    public Result<Comment> getMyMovieLongReview(
+            @Parameter(description = "电影ID", required = true) @PathVariable @NotNull @Min(1) Long movieId,
+            @AuthenticationPrincipal User user) {
+        Comment comment = commentService.getUserLongReview(user.getId(), movieId);
+        return Result.success(comment);
+    }
+
+    @Operation(operationId = "getMovieLongReviewDetail", summary = "获取长评详情", description = "根据电影ID和评论ID获取公开长评详情，返回正文、作者信息、点赞状态和作者评分。")
+    @GetMapping("/movies/{movieId}/long-reviews/{commentId}")
+    public Result<CommentVO> getMovieLongReviewDetail(
+            @Parameter(description = "电影ID", required = true) @PathVariable @NotNull @Min(1) Long movieId,
+            @Parameter(description = "评论ID", required = true) @PathVariable @NotNull @Min(1) Long commentId,
+            @AuthenticationPrincipal User user) {
+        String currentUserId = user != null ? user.getId() : null;
+        CommentVO review = commentService.getMovieLongReviewDetail(movieId, commentId, currentUserId);
+        return Result.success(review);
+    }
+
     @Operation(operationId = "submitMovieComment", summary = "发布短评", description = "对指定电影发布短评，每人每部电影仅限一条。")
     @SecurityRequirement(name = "BearerAuth")
     @PreAuthorize("isAuthenticated()")

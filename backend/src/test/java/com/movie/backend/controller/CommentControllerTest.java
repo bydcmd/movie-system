@@ -1,6 +1,7 @@
 package com.movie.backend.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.movie.backend.dto.CommentVO;
 import com.movie.backend.entity.Comment;
 import com.movie.backend.entity.User;
 import com.movie.backend.exception.BusinessException;
@@ -101,6 +102,42 @@ public class CommentControllerTest {
                 .andExpect(jsonPath("$.data.content").value("短评内容"));
 
         verify(commentService).getUserShortComment("user123", 1L);
+    }
+
+    @Test
+    public void getMovieLongReviewDetailReturnsReview() throws Exception {
+        CommentVO review = new CommentVO();
+        review.setId(99L);
+        review.setMovieId(1L);
+        review.setType(2);
+        review.setTitle("一篇长评");
+        review.setContent("长评正文");
+        review.setUserNickname("影迷甲");
+
+        when(commentService.getMovieLongReviewDetail(1L, 99L, null)).thenReturn(review);
+
+        mockMvc.perform(get("/movies/1/long-reviews/99"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.id").value(99))
+                .andExpect(jsonPath("$.data.movieId").value(1))
+                .andExpect(jsonPath("$.data.type").value(2))
+                .andExpect(jsonPath("$.data.title").value("一篇长评"))
+                .andExpect(jsonPath("$.data.userNickname").value("影迷甲"));
+
+        verify(commentService).getMovieLongReviewDetail(1L, 99L, null);
+    }
+
+    @Test
+    public void getMovieLongReviewDetailReturnsNotFoundWhenMissing() throws Exception {
+        doThrow(new BusinessException(404, "长评不存在"))
+                .when(commentService)
+                .getMovieLongReviewDetail(1L, 999L, null);
+
+        mockMvc.perform(get("/movies/1/long-reviews/999"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(404))
+                .andExpect(jsonPath("$.message").value("长评不存在"));
     }
 
     @Test

@@ -1,23 +1,29 @@
-import axios from 'axios'
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
+import { logout as requestLogout, refreshToken as requestRefreshToken } from '@/api/endpoints/auth-management/auth-management'
+import { getCurrentUserInfo } from '@/api/endpoints/user-management/user-management'
+import type { UserVO } from '@/api/model'
 
-type AuthUser = {
-  id?: string
-  nickname?: string
-  avatar?: string
-  email?: string
-  url?: string
-  role?: number
-}
+export const AUTH_ROLE = {
+  ADMIN: 0,
+  USER: 1
+} as const
 
-type AuthPayload = AuthUser & {
-  accessToken?: string
-}
+export type AuthRole = (typeof AUTH_ROLE)[keyof typeof AUTH_ROLE]
+
+export type AuthUser = Pick<
+  UserVO,
+  'id' | 'nickname' | 'avatar' | 'email' | 'url' | 'role' | 'receivedLikes' | 'commentCount' | 'watchedCount'
+>
+
+type AuthPayload = UserVO
 
 const TOKEN_STORAGE_KEY = 'token'
 const USER_STORAGE_KEY = 'auth:user'
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:9090'
+
+function normalizeRole(role: unknown): AuthRole | undefined {
+  return role === AUTH_ROLE.ADMIN || role === AUTH_ROLE.USER ? role : undefined
+}
 
 function readStoredUser(): AuthUser | null {
   const raw = localStorage.getItem(USER_STORAGE_KEY)
@@ -30,32 +36,27 @@ function readStoredUser(): AuthUser | null {
     if (!parsed || typeof parsed !== 'object') {
       return null
     }
-    return parsed as AuthUser
+    return toAuthUser(parsed as AuthPayload)
   } catch {
     return null
   }
 }
 
-function extractPayload(value: unknown): AuthPayload | null {
-  if (!value || typeof value !== 'object') {
+function toAuthUser(payload: AuthPayload | null | undefined): AuthUser | null {
+  if (!payload) {
     return null
   }
 
-  const record = value as Record<string, unknown>
-  if (record.data && typeof record.data === 'object') {
-    return record.data as AuthPayload
-  }
-  return record as AuthPayload
-}
-
-function toAuthUser(payload: AuthPayload): AuthUser {
   return {
     id: payload.id,
     nickname: payload.nickname,
     avatar: payload.avatar,
     email: payload.email,
     url: payload.url,
-    role: payload.role
+    role: normalizeRole(payload.role),
+    receivedLikes: payload.receivedLikes,
+    commentCount: payload.commentCount,
+    watchedCount: payload.watchedCount
   }
 }
 
@@ -68,6 +69,8 @@ export const useAuthStore = defineStore('auth', () => {
   let refreshPromise: Promise<string | null> | null = null
 
   const isAuthenticated = computed(() => Boolean(token.value))
+  const role = computed<AuthRole | undefined>(() => normalizeRole(user.value?.role))
+  const isAdmin = computed(() => role.value === AUTH_ROLE.ADMIN)
 
   function setToken(newToken: string | null) {
     token.value = newToken
@@ -92,6 +95,7 @@ export const useAuthStore = defineStore('auth', () => {
       setToken(payload.accessToken)
     }
     setUser(toAuthUser(payload))
+    initialized.value = true
   }
 
   function clearAuth() {
@@ -99,20 +103,22 @@ export const useAuthStore = defineStore('auth', () => {
     setUser(null)
   }
 
+  function hasRole(...roles: AuthRole[]) {
+    if (roles.length === 0) {
+      return true
+    }
+
+    const currentRole = role.value
+    return currentRole !== undefined && roles.includes(currentRole)
+  }
+
   async function refreshAccessToken(): Promise<string | null> {
     if (refreshPromise) {
       return refreshPromise
     }
 
-    refreshPromise = axios
-      .post('/auth/token/refresh', undefined, {
-        baseURL: API_BASE_URL,
-        withCredentials: true,
-        timeout: 10000
-      })
-      .then((response) => {
-        const payload = extractPayload(response.data)
-        const nextToken = payload?.accessToken
+    refreshPromise = requestRefreshToken()
+      .then((nextToken) => {
         if (!nextToken) {
           clearAuth()
           return null
@@ -138,19 +144,12 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     try {
-      const response = await axios.get('/users/me', {
-        baseURL: API_BASE_URL,
-        timeout: 10000,
-        headers: {
-          Authorization: `Bearer ${token.value}`
-        }
-      })
-      const payload = extractPayload(response.data)
-      if (!payload) {
+      const payload = await getCurrentUserInfo()
+      const nextUser = toAuthUser(payload)
+      if (!nextUser) {
         setUser(null)
         return null
       }
-      const nextUser = toAuthUser(payload)
       setUser(nextUser)
       return nextUser
     } catch {
@@ -198,16 +197,15 @@ export const useAuthStore = defineStore('auth', () => {
     clearAuth()
 
     try {
-      await axios.post('/auth/logout', undefined, {
-        baseURL: API_BASE_URL,
-        withCredentials: true,
-        timeout: 10000,
-        headers: currentToken
+      await requestLogout(
+        currentToken
           ? {
-              Authorization: `Bearer ${currentToken}`
+              headers: {
+                Authorization: `Bearer ${currentToken}`
+              }
             }
           : undefined
-      })
+      )
     } catch {
       // 忽略服务端注销失败，保证前端本地状态已清理
     }
@@ -217,11 +215,14 @@ export const useAuthStore = defineStore('auth', () => {
     token,
     user,
     isAuthenticated,
+    role,
+    isAdmin,
     initialized,
     setToken,
     setUser,
     setAuth,
     clearAuth,
+    hasRole,
     refreshAccessToken,
     fetchCurrentUser,
     initializeAuth,

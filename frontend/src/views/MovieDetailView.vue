@@ -1,58 +1,62 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   NButton,
-  NSpin,
-  NEmpty,
-  NTag,
-  NRate,
-  NTabs,
-  NTabPane,
-  NList,
-  NListItem,
-  NThing,
-  NAvatar,
-  NPagination,
-  NSpace,
   NDivider,
+  NEmpty,
   NIcon,
-  NModal,
-  NForm,
-  NFormItem,
-  NInput,
+  NRate,
+  NSpace,
+  NSpin,
+  NTabPane,
+  NTag,
+  NTabs,
+  useDialog,
   useMessage
 } from 'naive-ui'
-import { ArrowBack, Heart, CheckmarkCircle } from '@vicons/ionicons5'
+import { ArrowBack, CheckmarkCircle, Heart } from '@vicons/ionicons5'
+import type { Comment, Movie, CommentVO, PageInfoCommentVO } from '@/api/model'
+import type { CommentFilter, ReviewComposerTab, ReviewSubmitPayload } from '@/utils/comment'
+import CommentComposerModal from '@/components/comment/CommentComposerModal.vue'
+import CommentList from '@/components/comment/CommentList.vue'
 import NavBar from '@/components/layout/NavBar.vue'
 import MoviePlaceholder from '@/components/movie/MoviePlaceholder.vue'
-import { getMovieDetail } from '@/api/endpoints/movie-management/movie-management'
 import {
-  getMovieComments,
-  submitMovieComment,
-  submitMovieLongReview
+  useDeleteMyComment,
+  useGetMovieComments,
+  useGetMyMovieComment,
+  useGetMyMovieLongReview,
+  useLikeComment,
+  useSubmitMovieComment,
+  useSubmitMovieLongReview,
+  useUnlikeComment,
+  useUpdateMyMovieCommentContent,
+  useUpdateMyMovieLongReview
 } from '@/api/endpoints/comment-management/comment-management'
 import {
-  addFavorite,
-  isFavorited as fetchFavoritedStatusApi,
-  removeFavorite
+  useAddFavorite,
+  useIsFavorited,
+  useRemoveFavorite
 } from '@/api/endpoints/favorite-management/favorite-management'
-import { getUserRating, updateRating } from '@/api/endpoints/rating-management/rating-management'
+import { useGetMovieDetail } from '@/api/endpoints/movie-management/movie-management'
+import { useGetUserRating, useUpdateRating } from '@/api/endpoints/rating-management/rating-management'
 import {
-  addWatched,
-  isWatched as fetchWatchedStatusApi,
-  removeWatched
+  useAddWatched,
+  useIsWatched,
+  useRemoveWatched
 } from '@/api/endpoints/watched-management/watched-management'
 import { useAuthStore } from '@/stores/auth'
-import type { Movie, CommentVO, PageInfoCommentVO } from '@/api/model'
 
 const route = useRoute()
 const router = useRouter()
+const dialog = useDialog()
 const message = useMessage()
 const authStore = useAuthStore()
+const GUEST_COMMENT_LIMIT = 20
 const movieId = computed(() => Number(route.params.id))
+const currentUserId = computed(() => authStore.user?.id ?? null)
 
-// 状态
 const movie = ref<Movie | null>(null)
 const loading = ref(false)
 const favoriteLoading = ref(false)
@@ -64,14 +68,110 @@ const commentsTotal = ref(0)
 const commentsPage = ref(1)
 const commentsPageSize = ref(10)
 const commentsLoading = ref(false)
+const commentFilter = ref<CommentFilter>(route.query.filter === 'long' ? 'long' : 'short')
+const pendingLikeIds = ref<number[]>([])
+const pendingDeleteIds = ref<number[]>([])
 const showReviewModal = ref(false)
-const reviewTab = ref<'short' | 'long'>('short')
-const shortReview = ref('')
-const longReviewTitle = ref('')
-const longReviewContent = ref('')
+const reviewTab = ref<ReviewComposerTab>('short')
+const reviewPrefillLoading = ref(false)
 const submitReviewLoading = ref(false)
 const userRating = ref<number | null>(null)
 const ratingLoading = ref(false)
+const activeTab = ref(route.query.tab === 'comments' ? 'comments' : 'overview')
+const imageLoaded = ref(false)
+const imageError = ref(false)
+const myShortComment = ref<Comment | null>(null)
+const myLongReview = ref<Comment | null>(null)
+const reviewDraftResetToken = ref(0)
+
+const shortReviewInitial = computed(() => myShortComment.value?.content?.trim() ?? '')
+const shortReviewActionLabel = computed(() => (myShortComment.value?.id ? '改短评' : '写短评'))
+const longReviewTitleInitial = computed(() => myLongReview.value?.title?.trim() ?? '')
+const longReviewContentInitial = computed(() => myLongReview.value?.content?.trim() ?? '')
+const longReviewActionLabel = computed(() => (myLongReview.value?.id ? '改长评' : '写长评'))
+const reviewDraftStorageKeyBase = computed(() =>
+  movieId.value > 0 ? `movie-review-draft:${movieId.value}` : ''
+)
+const imdbDisplayId = computed(() => {
+  const rawValue = movie.value?.imdbId?.trim()
+  if (!rawValue) {
+    return ''
+  }
+  return rawValue.startsWith('tt') ? rawValue : `tt${rawValue}`
+})
+const commentTypeParam = computed<number>(() => {
+  return commentFilter.value === 'long' ? 2 : 1
+})
+const commentQueryParams = computed(() => ({
+  page: commentsPage.value,
+  size: commentsPageSize.value,
+  type: commentTypeParam.value
+}))
+const movieDetailQuery = useGetMovieDetail(movieId, {
+  query: {
+    enabled: false,
+    retry: false
+  },
+  request: {
+    timeout: 60000
+  }
+})
+const movieCommentsQuery = useGetMovieComments(movieId, commentQueryParams, {
+  query: {
+    enabled: false,
+    retry: false
+  }
+})
+const myShortCommentQuery = useGetMyMovieComment(movieId, {
+  query: {
+    enabled: false,
+    retry: false
+  }
+})
+const myLongReviewQuery = useGetMyMovieLongReview(movieId, {
+  query: {
+    enabled: false,
+    retry: false
+  }
+})
+const favoriteStatusQuery = useIsFavorited(movieId, {
+  query: {
+    enabled: false,
+    retry: false
+  }
+})
+const watchedStatusQuery = useIsWatched(movieId, {
+  query: {
+    enabled: false,
+    retry: false
+  }
+})
+const userRatingQuery = useGetUserRating(movieId, {
+  query: {
+    enabled: false,
+    retry: false
+  }
+})
+const deleteCommentMutation = useDeleteMyComment()
+const likeCommentMutation = useLikeComment()
+const unlikeCommentMutation = useUnlikeComment()
+const submitMovieCommentMutation = useSubmitMovieComment()
+const submitMovieLongReviewMutation = useSubmitMovieLongReview()
+const updateMyMovieCommentContentMutation = useUpdateMyMovieCommentContent()
+const updateMyMovieLongReviewMutation = useUpdateMyMovieLongReview()
+const addFavoriteMutation = useAddFavorite()
+const removeFavoriteMutation = useRemoveFavorite()
+const addWatchedMutation = useAddWatched()
+const removeWatchedMutation = useRemoveWatched()
+const updateRatingMutation = useUpdateRating()
+
+async function refetchOrThrow<T>(query: { refetch: () => Promise<{ data?: T; error?: unknown }> }) {
+  const result = await query.refetch()
+  if (result.error) {
+    throw result.error
+  }
+  return result.data
+}
 
 const resolveStatus = (value: unknown): boolean => {
   if (typeof value === 'boolean') return value
@@ -108,61 +208,69 @@ const ensureAuthenticated = () => {
   return true
 }
 
-const openReviewModal = (tab: 'short' | 'long') => {
+const openReviewModal = async (tab: ReviewComposerTab) => {
   if (!ensureAuthenticated()) return
+
+  if (tab === 'short' || tab === 'long') {
+    reviewPrefillLoading.value = true
+    try {
+      if (tab === 'short') {
+        await fetchMyShortComment()
+      } else {
+        await fetchMyLongReview()
+      }
+    } finally {
+      reviewPrefillLoading.value = false
+    }
+  }
+
   reviewTab.value = tab
   showReviewModal.value = true
 }
 
-const resetReviewForm = () => {
-  shortReview.value = ''
-  longReviewTitle.value = ''
-  longReviewContent.value = ''
-}
-
-const toTiptapJson = (plainText: string): string => {
-  const lines = plainText.replace(/\r\n/g, '\n').split('\n')
-  const content = lines.map(line =>
-    line.length > 0
-      ? { type: 'paragraph', content: [{ type: 'text', text: line }] }
-      : { type: 'paragraph' }
-  )
-  return JSON.stringify({ type: 'doc', content })
-}
-
-const submitReview = async () => {
-  if (!ensureAuthenticated() || !movieId.value) return
-  submitReviewLoading.value = true
-  try {
-    if (reviewTab.value === 'short') {
-      if (!shortReview.value.trim()) {
-        message.warning('请输入短评内容')
-        return
-      }
-      await submitMovieComment(movieId.value, {
-        content: shortReview.value.trim()
-      })
-      message.success('短评已发布')
-    } else {
-      if (!longReviewTitle.value.trim() || !longReviewContent.value.trim()) {
-        message.warning('请输入长评标题和内容')
-        return
-      }
-      await submitMovieLongReview(movieId.value, {
-        title: longReviewTitle.value.trim(),
-        content: toTiptapJson(longReviewContent.value)
-      })
-      message.success('长评已发布')
-    }
-    showReviewModal.value = false
-    resetReviewForm()
-    fetchComments()
-  } catch (error) {
-    console.error('Failed to submit review:', error)
-    message.error('发布失败，请稍后再试')
-  } finally {
-    submitReviewLoading.value = false
+const extractErrorMessage = (error: unknown): string => {
+  if (!error || typeof error !== 'object') {
+    return ''
   }
+
+  const record = error as {
+    message?: unknown
+    response?: {
+      data?: {
+        message?: unknown
+      }
+    }
+  }
+
+  const responseMessage = record.response?.data?.message
+  if (typeof responseMessage === 'string') {
+    return responseMessage
+  }
+
+  return typeof record.message === 'string' ? record.message : ''
+}
+
+const isDuplicateShortReviewError = (messageText: string): boolean => {
+  return messageText.includes('已经发表过短评')
+}
+
+const isDuplicateLongReviewError = (messageText: string): boolean => {
+  return messageText.includes('已经发表过长评')
+}
+
+const markPending = (
+  target: typeof pendingLikeIds | typeof pendingDeleteIds,
+  id: number,
+  pending: boolean
+) => {
+  if (pending) {
+    if (!target.value.includes(id)) {
+      target.value = [...target.value, id]
+    }
+    return
+  }
+
+  target.value = target.value.filter((item) => item !== id)
 }
 
 const fetchUserRating = async () => {
@@ -171,10 +279,44 @@ const fetchUserRating = async () => {
     return
   }
   try {
-    const rating = await getUserRating(movieId.value)
+    const rating = await refetchOrThrow(userRatingQuery)
     userRating.value = resolveRating(rating)
   } catch (error) {
     console.error('Failed to fetch user rating:', error)
+  }
+}
+
+const fetchMyShortComment = async () => {
+  if (!authStore.isAuthenticated || !movieId.value) {
+    myShortComment.value = null
+    return null
+  }
+
+  try {
+    const comment = await refetchOrThrow(myShortCommentQuery) as Comment | null
+    myShortComment.value = comment ?? null
+    return myShortComment.value
+  } catch (error) {
+    console.error('Failed to fetch my short comment:', error)
+    myShortComment.value = null
+    return null
+  }
+}
+
+const fetchMyLongReview = async () => {
+  if (!authStore.isAuthenticated || !movieId.value) {
+    myLongReview.value = null
+    return null
+  }
+
+  try {
+    const review = await refetchOrThrow(myLongReviewQuery) as Comment | null
+    myLongReview.value = review ?? null
+    return myLongReview.value
+  } catch (error) {
+    console.error('Failed to fetch my long review:', error)
+    myLongReview.value = null
+    return null
   }
 }
 
@@ -182,7 +324,7 @@ const submitUserRating = async (value: number) => {
   if (!ensureAuthenticated() || !movieId.value) return
   ratingLoading.value = true
   try {
-    await updateRating(movieId.value, { rating: value })
+    await updateRatingMutation.mutateAsync({ movieId: movieId.value, params: { rating: value } })
     userRating.value = value
     message.success('评分已提交')
   } catch (error) {
@@ -192,13 +334,7 @@ const submitUserRating = async (value: number) => {
     ratingLoading.value = false
   }
 }
-const activeTab = ref('overview')
 
-// 图片加载状态
-const imageLoaded = ref(false)
-const imageError = ref(false)
-
-// 处理图片 URL
 const imageUrl = computed(() => {
   const cover = movie.value?.cover
   if (!cover) return null
@@ -206,12 +342,27 @@ const imageUrl = computed(() => {
     return cover
   }
   if (cover.startsWith('/')) {
-    return `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:9090'}${cover}`
+    return `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}${cover}`
   }
   return cover
 })
 
-// 计算显示分数
+const maxGuestCommentPage = computed(() => {
+  return Math.max(1, Math.ceil(GUEST_COMMENT_LIMIT / commentsPageSize.value))
+})
+
+const visibleCommentsTotal = computed(() => {
+  if (authStore.isAuthenticated) {
+    return commentsTotal.value
+  }
+
+  return Math.min(commentsTotal.value, GUEST_COMMENT_LIMIT)
+})
+
+const showGuestCommentLimitNotice = computed(() => {
+  return !authStore.isAuthenticated && commentsTotal.value > GUEST_COMMENT_LIMIT
+})
+
 const displayDoubanScore = computed(() => {
   return movie.value?.doubanScore ? movie.value.doubanScore.toFixed(1) : '-'
 })
@@ -220,22 +371,18 @@ const displaySiteScore = computed(() => {
   return movie.value?.score ? (movie.value.score / 2).toFixed(1) : '-'
 })
 
-// 解析类型
 const genresList = computed(() => {
   return movie.value?.genres?.split(',').map(g => g.trim()).filter(Boolean) || []
 })
 
-// 解析地区
 const regionsList = computed(() => {
   return movie.value?.regions?.split(',').map(r => r.trim()).filter(Boolean) || []
 })
 
-// 解析语言
 const languagesList = computed(() => {
   return movie.value?.languages?.split(',').map(l => l.trim()).filter(Boolean) || []
 })
 
-// 解析演员列表
 const getName = (person: any): string => {
   return (person?.name || person?.NAME || '').trim()
 }
@@ -253,30 +400,23 @@ const actorsList = computed(() => {
     .filter(a => a.name)
 })
 
-// 解析导演列表
 const directorsList = computed(() => {
   return (movie.value?.directors || [])
     .map((director: any) => getName(director))
     .filter(Boolean)
 })
 
-// 解析编剧列表
 const writersList = computed(() => {
   return (movie.value?.writers || [])
     .map((writer: any) => getName(writer))
     .filter(Boolean)
 })
 
-// 获取电影详情
 const fetchMovieDetail = async () => {
   if (!movieId.value) return
   loading.value = true
   try {
-    // user 参数是可选的，用于记录登录用户的浏览历史
-    const data = await getMovieDetail(movieId.value, {
-      // 详情聚合查询可能较慢，避免被全局 10s axios 超时提前中断
-      timeout: 60000
-    }) as Movie | null
+    const data = await refetchOrThrow(movieDetailQuery) as Movie | null
     movie.value = data ?? null
   } catch (error) {
     console.error('Failed to fetch movie detail:', error)
@@ -292,7 +432,7 @@ const fetchFavoriteStatus = async () => {
     return
   }
   try {
-    const status = await fetchFavoritedStatusApi(movieId.value)
+    const status = await refetchOrThrow(favoriteStatusQuery)
     isFavorited.value = resolveStatus(status)
   } catch (error) {
     console.error('Failed to fetch favorite status:', error)
@@ -305,7 +445,7 @@ const fetchWatchedStatus = async () => {
     return
   }
   try {
-    const status = await fetchWatchedStatusApi(movieId.value)
+    const status = await refetchOrThrow(watchedStatusQuery)
     isWatched.value = resolveStatus(status)
   } catch (error) {
     console.error('Failed to fetch watched status:', error)
@@ -317,11 +457,11 @@ const toggleFavorite = async () => {
   favoriteLoading.value = true
   try {
     if (isFavorited.value) {
-      await removeFavorite(movieId.value)
+      await removeFavoriteMutation.mutateAsync({ movieId: movieId.value })
       isFavorited.value = false
       message.success('已取消收藏')
     } else {
-      await addFavorite(movieId.value)
+      await addFavoriteMutation.mutateAsync({ movieId: movieId.value })
       isFavorited.value = true
       message.success('已收藏')
     }
@@ -338,11 +478,11 @@ const toggleWatched = async () => {
   watchedLoading.value = true
   try {
     if (isWatched.value) {
-      await removeWatched(movieId.value)
+      await removeWatchedMutation.mutateAsync({ movieId: movieId.value })
       isWatched.value = false
       message.success('已取消看过')
     } else {
-      await addWatched(movieId.value)
+      await addWatchedMutation.mutateAsync({ movieId: movieId.value })
       isWatched.value = true
       message.success('已标记看过')
     }
@@ -354,15 +494,16 @@ const toggleWatched = async () => {
   }
 }
 
-// 获取评论列表
 const fetchComments = async () => {
   if (!movieId.value) return
+
+  if (!authStore.isAuthenticated && commentsPage.value > maxGuestCommentPage.value) {
+    commentsPage.value = maxGuestCommentPage.value
+  }
+
   commentsLoading.value = true
   try {
-    const pageInfo = await getMovieComments(movieId.value, {
-      page: commentsPage.value,
-      size: commentsPageSize.value
-    }) as PageInfoCommentVO | null
+    const pageInfo = await refetchOrThrow(movieCommentsQuery) as PageInfoCommentVO | null
     comments.value = pageInfo?.list || []
     commentsTotal.value = pageInfo?.total || 0
   } catch (error) {
@@ -374,25 +515,212 @@ const fetchComments = async () => {
   }
 }
 
-// 处理评论分页
 const handleCommentsPageChange = (page: number) => {
   commentsPage.value = page
-  fetchComments()
+  void fetchComments()
 }
 
-// 格式化日期
-const formatDate = (dateStr: string) => {
-  if (!dateStr) return ''
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('zh-CN')
+const handleCommentFilterChange = (nextFilter: CommentFilter) => {
+  commentFilter.value = nextFilter
+  commentsPage.value = 1
+  void fetchComments()
 }
 
-// 返回上一页
+const handleReviewSubmit = async (payload: ReviewSubmitPayload) => {
+  if (!ensureAuthenticated() || !movieId.value) {
+    return
+  }
+
+  submitReviewLoading.value = true
+
+  try {
+    if (payload.type === 'short') {
+      let updated = Boolean(myShortComment.value?.id)
+
+      try {
+        if (updated) {
+          await updateMyMovieCommentContentMutation.mutateAsync({
+            movieId: movieId.value,
+            data: {
+              content: payload.content
+            }
+          })
+        } else {
+          await submitMovieCommentMutation.mutateAsync({
+            movieId: movieId.value,
+            data: {
+              content: payload.content
+            }
+          })
+        }
+      } catch (error) {
+        const messageText = extractErrorMessage(error)
+        if (!updated && isDuplicateShortReviewError(messageText)) {
+          await updateMyMovieCommentContentMutation.mutateAsync({
+            movieId: movieId.value,
+            data: {
+              content: payload.content
+            }
+          })
+          updated = true
+        } else {
+          throw error
+        }
+      }
+
+      message.success(updated ? '短评已更新' : '短评已发布')
+      commentFilter.value = 'short'
+    } else {
+      let updated = Boolean(myLongReview.value?.id)
+
+      try {
+        if (updated) {
+          await updateMyMovieLongReviewMutation.mutateAsync({
+            movieId: movieId.value,
+            data: {
+              title: payload.title,
+              content: payload.content
+            }
+          })
+        } else {
+          await submitMovieLongReviewMutation.mutateAsync({
+            movieId: movieId.value,
+            data: {
+              title: payload.title,
+              content: payload.content
+            }
+          })
+        }
+      } catch (error) {
+        const messageText = extractErrorMessage(error)
+        if (updated || !isDuplicateLongReviewError(messageText)) {
+          throw error
+        }
+
+        await updateMyMovieLongReviewMutation.mutateAsync({
+          movieId: movieId.value,
+          data: {
+            title: payload.title,
+            content: payload.content
+          }
+        })
+        updated = true
+      }
+
+      message.success(updated ? '长评已更新' : '长评已发布')
+      commentFilter.value = 'long'
+    }
+
+    commentsPage.value = 1
+    activeTab.value = 'comments'
+    reviewDraftResetToken.value += 1
+    showReviewModal.value = false
+    await Promise.all([fetchComments(), fetchMyShortComment(), fetchMyLongReview()])
+  } catch (error) {
+    console.error('Failed to submit review:', error)
+    if (!extractErrorMessage(error)) {
+      message.error('评论保存失败，请稍后再试')
+    }
+  } finally {
+    submitReviewLoading.value = false
+  }
+}
+
+const handleToggleCommentLike = async (commentId: number) => {
+  if (!ensureAuthenticated()) {
+    return
+  }
+
+  const target = comments.value.find((item) => item.id === commentId)
+  if (!target) {
+    return
+  }
+
+  const previousLiked = Boolean(target.isLiked)
+  const previousVotes = target.votes || 0
+  const nextLiked = !previousLiked
+  const nextVotes = Math.max(0, previousVotes + (nextLiked ? 1 : -1))
+
+  comments.value = comments.value.map((item) =>
+    item.id === commentId
+      ? {
+          ...item,
+          isLiked: nextLiked,
+          votes: nextVotes
+        }
+      : item
+  )
+  markPending(pendingLikeIds, commentId, true)
+
+  try {
+    if (nextLiked) {
+      await likeCommentMutation.mutateAsync({ commentId })
+    } else {
+      await unlikeCommentMutation.mutateAsync({ commentId })
+    }
+  } catch (error) {
+    console.error('Failed to toggle comment like:', error)
+    comments.value = comments.value.map((item) =>
+      item.id === commentId
+        ? {
+            ...item,
+            isLiked: previousLiked,
+            votes: previousVotes
+          }
+        : item
+    )
+    if (!extractErrorMessage(error)) {
+      message.error('点赞操作失败，请稍后再试')
+    }
+  } finally {
+    markPending(pendingLikeIds, commentId, false)
+  }
+}
+
+const confirmDeleteComment = async (commentId?: number) => {
+  if (!commentId || !ensureAuthenticated()) {
+    return
+  }
+
+  markPending(pendingDeleteIds, commentId, true)
+
+  try {
+    await deleteCommentMutation.mutateAsync({ commentId })
+    const shouldFallbackToPreviousPage = comments.value.length === 1 && commentsPage.value > 1
+    if (shouldFallbackToPreviousPage) {
+      commentsPage.value -= 1
+    }
+
+    await Promise.all([fetchComments(), fetchMyShortComment(), fetchMyLongReview()])
+    message.success('评论已删除')
+  } catch (error) {
+    console.error('Failed to delete comment:', error)
+    if (!extractErrorMessage(error)) {
+      message.error('删除评论失败，请稍后再试')
+    }
+  } finally {
+    markPending(pendingDeleteIds, commentId, false)
+  }
+}
+
+const requestDeleteComment = (comment: CommentVO) => {
+  if (!ensureAuthenticated()) {
+    return
+  }
+
+  dialog.warning({
+    title: '删除评论',
+    content: `确定删除这条${comment.type === 2 ? '长评' : '短评'}吗？删除后无法恢复。`,
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: () => confirmDeleteComment(comment.id)
+  })
+}
+
 const goBack = () => {
   router.back()
 }
 
-// 图片加载处理
 const handleImageLoad = () => {
   imageLoaded.value = true
 }
@@ -404,6 +732,8 @@ const handleImageError = () => {
 onMounted(() => {
   fetchMovieDetail()
   fetchComments()
+  fetchMyShortComment()
+  fetchMyLongReview()
   fetchFavoriteStatus()
   fetchWatchedStatus()
   fetchUserRating()
@@ -412,6 +742,9 @@ onMounted(() => {
 watch(
   () => authStore.isAuthenticated,
   () => {
+    fetchComments()
+    fetchMyShortComment()
+    fetchMyLongReview()
     fetchFavoriteStatus()
     fetchWatchedStatus()
     fetchUserRating()
@@ -421,8 +754,13 @@ watch(
 watch(
   () => movieId.value,
   () => {
+    commentsPage.value = 1
+    imageLoaded.value = false
+    imageError.value = false
     fetchMovieDetail()
     fetchComments()
+    fetchMyShortComment()
+    fetchMyLongReview()
     fetchFavoriteStatus()
     fetchWatchedStatus()
     fetchUserRating()
@@ -496,7 +834,7 @@ watch(
                 <span v-if="movie.year">{{ movie.year }}年</span>
                 <span v-if="movie.mins">{{ movie.mins }}</span>
                 <span v-if="movie.releaseDate">{{ movie.releaseDate }}上映</span>
-                <span v-if="movie.imdbId" class="text-slate-500">IMDb: {{ movie.imdbId }}</span>
+                <span v-if="imdbDisplayId" class="text-slate-500">IMDb: {{ imdbDisplayId }}</span>
               </div>
 
               <!-- Tags -->
@@ -648,9 +986,9 @@ watch(
                       <div class="text-slate-900">{{ movie.releaseDate }}</div>
                     </div>
                     
-                    <div v-if="movie.imdbId">
+                    <div v-if="imdbDisplayId">
                       <div class="text-sm text-slate-500">IMDb</div>
-                      <div class="text-slate-900">tt{{ movie.imdbId }}</div>
+                      <div class="text-slate-900">{{ imdbDisplayId }}</div>
                     </div>
                   </div>
                 </section>
@@ -661,59 +999,48 @@ watch(
           <!-- Comments Tab -->
           <n-tab-pane name="comments" :tab="`评论 (${commentsTotal})`">
             <div class="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
-              <div class="flex items-center justify-between mb-6">
+              <div class="flex flex-col gap-4 mb-6 sm:flex-row sm:items-center sm:justify-between">
                 <h2 class="text-xl font-bold text-slate-900">观众评论</h2>
                 <n-space>
-                  <n-button type="primary" @click="openReviewModal('short')">写短评</n-button>
-                  <n-button type="info" @click="openReviewModal('long')">写长评</n-button>
+                  <n-button
+                    type="primary"
+                    :disabled="reviewPrefillLoading"
+                    @click="openReviewModal('short')"
+                  >
+                    {{ shortReviewActionLabel }}
+                  </n-button>
+                  <n-button
+                    type="info"
+                    :disabled="reviewPrefillLoading"
+                    @click="openReviewModal('long')"
+                  >
+                    {{ longReviewActionLabel }}
+                  </n-button>
                 </n-space>
               </div>
 
-              <!-- Comments Loading -->
-              <div v-if="commentsLoading" class="flex justify-center py-10">
-                <n-spin size="medium" />
+              <div
+                v-if="showGuestCommentLimitNotice"
+                class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800"
+              >
+                当前为游客模式，最多查看前 20 条评论。登录后可浏览全部评论并参与互动。
               </div>
 
-              <!-- Empty Comments -->
-              <n-empty v-else-if="comments.length === 0" description="暂无评论，快来发表第一条评论吧！" />
-
-              <!-- Comments List -->
-              <n-list v-else>
-                <n-list-item v-for="comment in comments" :key="comment.id">
-                  <n-thing>
-                    <template #avatar>
-                      <n-avatar :src="comment.userAvatar || undefined" :fallback-src="undefined">
-                        {{ comment.userNickname?.charAt(0) || '?' }}
-                      </n-avatar>
-                    </template>
-                    <template #header>
-                      <div class="flex items-center gap-2">
-                        <span class="font-medium">{{ comment.userNickname }}</span>
-                        <n-rate v-if="comment.rating" :value="comment.rating" readonly size="small" />
-                      </div>
-                    </template>
-                    <template #header-extra>
-                      <span class="text-slate-400 text-sm">{{ formatDate(comment.commentTime || '') }}</span>
-                    </template>
-                    <template #description>
-                      <div class="mt-2">
-                        <h4 v-if="comment.title" class="font-bold text-slate-900 mb-2">{{ comment.title }}</h4>
-                        <p class="text-slate-600">{{ comment.contentSummary || comment.content }}</p>
-                      </div>
-                    </template>
-                  </n-thing>
-                </n-list-item>
-              </n-list>
-
-              <!-- Comments Pagination -->
-              <div v-if="commentsTotal > commentsPageSize" class="flex justify-center mt-6">
-                <n-pagination
-                  v-model:page="commentsPage"
-                  :page-count="Math.ceil(commentsTotal / commentsPageSize)"
-                  :page-size="commentsPageSize"
-                  @update:page="handleCommentsPageChange"
-                />
-              </div>
+              <CommentList
+                v-model:page="commentsPage"
+                v-model:filter="commentFilter"
+                :items="comments"
+                :total="visibleCommentsTotal"
+                :page-size="commentsPageSize"
+                :loading="commentsLoading"
+                :current-user-id="currentUserId"
+                :pending-like-ids="pendingLikeIds"
+                :pending-delete-ids="pendingDeleteIds"
+                @update:page="handleCommentsPageChange"
+                @update:filter="handleCommentFilterChange"
+                @toggle-like="handleToggleCommentLike"
+                @delete="requestDeleteComment"
+              />
             </div>
           </n-tab-pane>
         </n-tabs>
@@ -724,50 +1051,17 @@ watch(
       <p>&copy; 2026 MovieReviews. 保留所有权利</p>
     </footer>
 
-    <n-modal v-model:show="showReviewModal" preset="card" title="发布评论" class="max-w-2xl w-full">
-      <n-tabs v-model:value="reviewTab" type="line" animated>
-        <n-tab-pane name="short" tab="短评">
-          <n-form label-placement="top">
-            <n-form-item label="短评内容">
-              <n-input
-                v-model:value="shortReview"
-                type="textarea"
-                :maxlength="300"
-                show-count
-                placeholder="写下你的简短评价（300字以内）"
-                :autosize="{ minRows: 4, maxRows: 8 }"
-              />
-            </n-form-item>
-          </n-form>
-        </n-tab-pane>
-        <n-tab-pane name="long" tab="长评">
-          <n-form label-placement="top">
-            <n-form-item label="标题">
-              <n-input v-model:value="longReviewTitle" placeholder="请输入标题" />
-            </n-form-item>
-            <n-form-item label="正文">
-              <n-input
-                v-model:value="longReviewContent"
-                type="textarea"
-                :maxlength="5000"
-                show-count
-                placeholder="写下你的长评（支持富文本的纯文本占位）"
-                :autosize="{ minRows: 8, maxRows: 16 }"
-              />
-            </n-form-item>
-          </n-form>
-        </n-tab-pane>
-      </n-tabs>
-
-      <template #footer>
-        <div class="flex justify-end gap-3">
-          <n-button @click="showReviewModal = false">取消</n-button>
-          <n-button type="primary" :loading="submitReviewLoading" @click="submitReview">
-            发布
-          </n-button>
-        </div>
-      </template>
-    </n-modal>
+    <CommentComposerModal
+      v-model:show="showReviewModal"
+      v-model:active-tab="reviewTab"
+      :short-initial="shortReviewInitial"
+      :long-title-initial="longReviewTitleInitial"
+      :long-content-initial="longReviewContentInitial"
+      :draft-storage-key-base="reviewDraftStorageKeyBase"
+      :draft-reset-token="reviewDraftResetToken"
+      :saving="submitReviewLoading"
+      @submit="handleReviewSubmit"
+    />
   </div>
 </template>
 

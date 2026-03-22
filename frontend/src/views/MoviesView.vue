@@ -17,20 +17,32 @@ import {
 import NavBar from '@/components/layout/NavBar.vue'
 import MovieCard from '@/components/movie/MovieCard.vue'
 import {
-  getAllGenres,
-  getAllRegions,
-  getMovieCatalog
+  useGetAllGenres,
+  useGetAllRegions,
+  useGetMovieCatalog,
+  useSearchMovies
 } from '@/api/endpoints/movie-management/movie-management'
-import type { Movie, CatalogQueryDTO, PageInfoMovie } from '@/api/model'
+import type { Movie, CatalogQueryDTO, MovieSearchDTO, PageInfoMovie } from '@/api/model'
 import { getMovieId } from '@/utils/movie'
 
 const route = useRoute()
 const router = useRouter()
+const genresQuery = useGetAllGenres({
+  query: {
+    enabled: false,
+    retry: false
+  }
+})
+const regionsQuery = useGetAllRegions({
+  query: {
+    enabled: false,
+    retry: false
+  }
+})
 
 // 状态
 const movies = ref<Movie[]>([])
 const total = ref(0)
-const loading = ref(false)
 const genres = ref<string[]>([])
 const regions = ref<string[]>([])
 
@@ -52,9 +64,9 @@ const searchKeyword = ref('')
 
 // 排序选项
 const sortOptions = [
-  { label: '评分最高', value: 'score' },
-  { label: '最新上映', value: 'year' },
-  { label: '热度最高', value: 'votes' }
+  { label: '评分', value: 'score' },
+  { label: '时间', value: 'year' },
+  { label: '热度', value: 'votes' }
 ]
 
 // 评分范围
@@ -76,15 +88,9 @@ const initFromQuery = () => {
   filters.value.minScore = query.minScore ? parseFloat(query.minScore as string) : undefined
   filters.value.maxScore = query.maxScore ? parseFloat(query.maxScore as string) : undefined
   
-  if (query.genres) {
-    selectedGenres.value = (query.genres as string).split(',')
-  }
-  if (query.regions) {
-    selectedRegions.value = (query.regions as string).split(',')
-  }
-  if (query.keyword) {
-    searchKeyword.value = query.keyword as string
-  }
+  selectedGenres.value = query.genres ? (query.genres as string).split(',') : []
+  selectedRegions.value = query.regions ? (query.regions as string).split(',') : []
+  searchKeyword.value = query.keyword ? String(query.keyword) : ''
   
   scoreRange.value = [
     filters.value.minScore || 0,
@@ -92,12 +98,85 @@ const initFromQuery = () => {
   ]
 }
 
+const buildCatalogParams = (): Record<string, unknown> => {
+  const params: Record<string, unknown> = {
+    page: filters.value.page,
+    size: filters.value.size,
+    sortBy: filters.value.sortBy,
+    sortOrder: filters.value.sortOrder
+  }
+
+  if (selectedGenres.value.length > 0) {
+    params.genres = selectedGenres.value.join(',')
+  }
+  if (selectedRegions.value.length > 0) {
+    params.regions = selectedRegions.value.join(',')
+  }
+  if (scoreRange.value[0] > 0) {
+    params.minScore = scoreRange.value[0]
+  }
+  if (scoreRange.value[1] < 10) {
+    params.maxScore = scoreRange.value[1]
+  }
+  if (filters.value.startYear) {
+    params.startYear = filters.value.startYear
+  }
+  if (filters.value.endYear) {
+    params.endYear = filters.value.endYear
+  }
+
+  return params
+}
+
+const buildSearchPayload = (): MovieSearchDTO => {
+  const payload: MovieSearchDTO = {
+    page: filters.value.page,
+    size: filters.value.size,
+    keyword: searchKeyword.value.trim(),
+    sortBy: filters.value.sortBy,
+    sortOrder: filters.value.sortOrder
+  }
+
+  if (selectedGenres.value.length > 0) {
+    payload.genres = [...selectedGenres.value]
+  }
+  if (selectedRegions.value.length > 0) {
+    payload.regions = [...selectedRegions.value]
+  }
+  if (scoreRange.value[0] > 0) {
+    payload.minScore = scoreRange.value[0]
+  }
+  if (scoreRange.value[1] < 10) {
+    payload.maxScore = scoreRange.value[1]
+  }
+  if (filters.value.startYear) {
+    payload.startYear = filters.value.startYear
+  }
+  if (filters.value.endYear) {
+    payload.endYear = filters.value.endYear
+  }
+
+  return payload
+}
+
+const catalogQuery = useGetMovieCatalog(computed(() => buildCatalogParams()) as never, {
+  query: {
+    enabled: false,
+    retry: false
+  }
+})
+const searchMoviesMutation = useSearchMovies()
+const loading = computed(() => catalogQuery.isFetching.value || searchMoviesMutation.isPending.value)
+
 // 获取筛选数据
 const fetchFilterData = async () => {
-  const [genreRaw, regionRaw] = await Promise.all([
-    getAllGenres().catch(() => []),
-    getAllRegions().catch(() => [])
+  const [genreResult, regionResult] = await Promise.all([
+    genresQuery.refetch(),
+    regionsQuery.refetch()
   ])
+
+  const genreRaw = genreResult.data
+  const regionRaw = regionResult.data
 
   const genreList = Array.isArray(genreRaw) ? (genreRaw as string[]) : []
   const regionList = Array.isArray(regionRaw) ? (regionRaw as string[]) : []
@@ -114,65 +193,57 @@ const splitMultiValue = (value?: string): string[] => {
     .filter(Boolean)
 }
 
+const applyMoviePage = (pageInfo: PageInfoMovie | null) => {
+  if (!pageInfo) {
+    movies.value = []
+    total.value = 0
+    return
+  }
+
+  const movieList = pageInfo.list || []
+  movies.value = movieList
+  total.value = pageInfo.total || 0
+
+  // 当后端筛选元数据接口超时时，使用当前页数据兜底填充筛选项
+  if (genres.value.length === 0 || regions.value.length === 0) {
+    const genreSet = new Set<string>()
+    const regionSet = new Set<string>()
+
+    movieList.forEach((movie) => {
+      splitMultiValue(movie.genres).forEach((item) => genreSet.add(item))
+      splitMultiValue(movie.regions).forEach((item) => regionSet.add(item))
+    })
+
+    if (genres.value.length === 0 && genreSet.size > 0) {
+      genres.value = Array.from(genreSet)
+    }
+    if (regions.value.length === 0 && regionSet.size > 0) {
+      regions.value = Array.from(regionSet)
+    }
+  }
+}
+
 // 获取电影列表
 const fetchMovies = async () => {
-  loading.value = true
   try {
-    // 构建查询参数
-    const params: Record<string, unknown> = {
-      page: filters.value.page,
-      size: filters.value.size,
-      sortBy: filters.value.sortBy,
-      sortOrder: filters.value.sortOrder
+    if (searchKeyword.value.trim()) {
+      const pageInfo = await searchMoviesMutation.mutateAsync({
+        data: buildSearchPayload()
+      }) as PageInfoMovie | null
+      applyMoviePage(pageInfo)
+      return
     }
-    
-    if (selectedGenres.value.length > 0) {
-      params.genres = selectedGenres.value.join(',')
-    }
-    if (selectedRegions.value.length > 0) {
-      params.regions = selectedRegions.value.join(',')
-    }
-    if (scoreRange.value[0] > 0) {
-      params.minScore = scoreRange.value[0]
-    }
-    if (scoreRange.value[1] < 10) {
-      params.maxScore = scoreRange.value[1]
-    }
-    if (filters.value.startYear) {
-      params.startYear = filters.value.startYear
-    }
-    if (filters.value.endYear) {
-      params.endYear = filters.value.endYear
-    }
-    
-    const pageInfo = await getMovieCatalog(params as never) as PageInfoMovie | null
-    if (pageInfo) {
-      const movieList = pageInfo.list || []
-      movies.value = movieList
-      total.value = pageInfo.total || 0
 
-      // 当后端筛选元数据接口超时时，使用当前页数据兜底填充筛选项
-      if (genres.value.length === 0 || regions.value.length === 0) {
-        const genreSet = new Set<string>()
-        const regionSet = new Set<string>()
-
-        movieList.forEach((movie) => {
-          splitMultiValue(movie.genres).forEach((item) => genreSet.add(item))
-          splitMultiValue(movie.regions).forEach((item) => regionSet.add(item))
-        })
-
-        if (genres.value.length === 0 && genreSet.size > 0) {
-          genres.value = Array.from(genreSet)
-        }
-        if (regions.value.length === 0 && regionSet.size > 0) {
-          regions.value = Array.from(regionSet)
-        }
-      }
+    const result = await catalogQuery.refetch()
+    if (result.error) {
+      throw result.error
     }
+
+    applyMoviePage((result.data ?? null) as PageInfoMovie | null)
   } catch (error) {
     console.error('Failed to fetch movies:', error)
-  } finally {
-    loading.value = false
+    movies.value = []
+    total.value = 0
   }
 }
 
@@ -239,7 +310,6 @@ const handlePageChange = (page: number) => {
 
 // 处理搜索
 const handleSearch = () => {
-  // 搜索功能需要使用 search API，这里简化处理
   handleFilterChange()
 }
 

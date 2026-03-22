@@ -35,7 +35,7 @@ const imageUrl = computed(() => {
   }
   // 如果是相对路径，拼接 API baseURL
   if (cover.startsWith('/')) {
-    return `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:9090'}${cover}`
+    return `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}${cover}`
   }
   return cover
 })

@@ -21,7 +21,7 @@
             m.regions,
             m.mins,
             m.storyline,
-            DATE_FORMAT(vh.view_time, '%Y-%m-%d %H:%i:%s') as favorite_time
+            TO_CHAR(vh.view_time, 'YYYY-MM-DD HH24:MI:SS') as favorite_time
         FROM movies m
         JOIN view_history vh ON m.movie_id = vh.movie_id
         WHERE vh.user_id = #{userId}

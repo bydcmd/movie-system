@@ -131,3 +131,5 @@ checkpoints/
 *.swp
 *.swo
 *.orig
+
+/skills-lock.json

@@ -17,6 +17,11 @@ public interface CommentService {
     PageInfo<CommentVO> getCommentsWithRatingByMovieId(Long movieId, String currentUserId, int page, int size);
 
     /**
+     * 获取指定电影下的长评详情
+     */
+    CommentVO getMovieLongReviewDetail(Long movieId, Long commentId, String currentUserId);
+
+    /**
      * Submit comment
      */
     void submitComment(String userId, Long movieId, String content);
@@ -25,6 +30,11 @@ public interface CommentService {
      * 获取用户对某部电影的短评
      */
     Comment getUserShortComment(String userId, Long movieId);
+
+    /**
+     * 获取用户对某部电影的长评
+     */
+    Comment getUserLongReview(String userId, Long movieId);
 
     /**
      * 修改评论和评分

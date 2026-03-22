@@ -84,6 +84,7 @@
     </delete>
 
     <update id="refreshMovieScoreAndVotes">
+        <![CDATA[
         WITH rating_stats AS (
             SELECT
                 COUNT(*)::int AS votes,
@@ -129,6 +130,7 @@
         FROM score_calc c
         WHERE m.movie_id = c.movie_id
           AND (m.votes IS DISTINCT FROM c.new_votes OR m.score IS DISTINCT FROM c.target_score)
+        ]]>
     </update>
 
     <update id="refreshMovieScoreAndVotesBatch">
@@ -173,9 +175,9 @@
                 b.movie_id,
                 b.new_votes,
                 CASE
-                    WHEN b.new_votes < #{forceUpdateVotesThreshold}
+                    WHEN b.new_votes &lt; #{forceUpdateVotesThreshold}
                          OR b.current_score IS NULL
-                         OR ROUND(b.current_score::numeric, 1) <> b.blended_score
+                         OR ROUND(b.current_score::numeric, 1) &lt;&gt; b.blended_score
                     THEN b.blended_score
                     ELSE b.current_score
                 END AS target_score

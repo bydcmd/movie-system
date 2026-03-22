@@ -116,8 +116,8 @@ def build_wide_table(
         F.col("c.title").alias("comment_title"),
         F.length(F.col("c.content")).cast("int").alias("comment_content_length"),
         F.col("e.folder_id").alias("folder_id"),
-        F.col("f.name").alias("folder_name"),
-        F.col("f.is_public").cast("tinyint").alias("folder_is_public"),
+        F.coalesce(F.col("e.folder_name"), F.col("f.name")).alias("folder_name"),
+        F.coalesce(F.col("e.folder_is_public"), F.col("f.is_public")).cast("tinyint").alias("folder_is_public"),
         F.col("e.operation").alias("operation"),
         F.upper(F.trim(F.col("e.operation"))).alias("operation_norm"),
         F.col("e.rating").cast("int").alias("rating"),
@@ -125,6 +125,8 @@ def build_wide_table(
         F.col("r.rating_time").alias("rating_time"),
         F.col("e.search_keyword").alias("search_keyword"),
         F.col("e.result_count").cast("bigint").alias("result_count"),
+        F.col("e.filter_conditions").alias("filter_conditions"),
+        F.col("e.search_time").cast("bigint").alias("search_time"),
         F.when(event_type == F.lit("view_history"), F.lit(1)).otherwise(F.lit(0)).cast("tinyint").alias("is_view"),
         F.when(event_type == F.lit("rating"), F.lit(1)).otherwise(F.lit(0)).cast("tinyint").alias("is_rating"),
         F.when(event_type == F.lit("comment"), F.lit(1)).otherwise(F.lit(0)).cast("tinyint").alias("is_comment"),
@@ -146,6 +148,10 @@ def build_wide_table(
         .cast("tinyint")
         .alias("is_register"),
         F.when(event_type == F.lit("user_login"), F.lit(1)).otherwise(F.lit(0)).cast("tinyint").alias("is_login"),
+        F.when(event_type == F.lit("favorite_folder_action"), F.lit(1))
+        .otherwise(F.lit(0))
+        .cast("tinyint")
+        .alias("is_favorite_folder_action"),
         F.col("e.event_data").alias("event_data"),
         F.col("e.raw_json").alias("raw_json"),
     )

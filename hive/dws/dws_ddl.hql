@@ -17,6 +17,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS dws.dws_user_action_1d (
   search_cnt bigint,
   login_cnt bigint,
   register_cnt bigint,
+  favorite_folder_action_cnt bigint,
   active_movie_cnt bigint,
   last_event_ts timestamp
 )

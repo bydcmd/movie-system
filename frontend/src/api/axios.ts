@@ -1,4 +1,8 @@
-import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
+import axios, {
+  AxiosError,
+  AxiosHeaders,
+  type InternalAxiosRequestConfig,
+} from "axios";
 import { createDiscreteApi } from "naive-ui";
 import { useAuthStore } from "@/stores/auth";
 
@@ -7,7 +11,7 @@ const { message: messageApi } = createDiscreteApi(["message"]);
 
 const instance = axios.create({
   // 使用 Vite 环境变量，若无则回退至本地地址
-  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:9090",
+  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:8080",
   timeout: 10000,
   withCredentials: true,
 });
@@ -89,6 +93,20 @@ const handleUnauthorized = (message?: string) => {
   }
 };
 
+function handleAuthEndpointUnauthorized(url: string | undefined, message?: string) {
+  if (!url) {
+    return;
+  }
+
+  if (url.includes("/auth/token/refresh") || url.includes("/auth/logout")) {
+    console.warn("[Auth Endpoint Unauthorized]", message);
+    return;
+  }
+
+  console.error("[Auth Endpoint Unauthorized]", message);
+  messageApi.error(message || "认证失败，请重新登录");
+}
+
 // 递归删除对象中的指定 key
 function deleteKey(obj: any, keyToDelete: string): void {
   if (!obj || typeof obj !== "object") return;
@@ -136,7 +154,7 @@ export interface ApiResponse<T = unknown> {
 }
 
 // 业务码处理（HTTP 200 但业务失败的情况）
-function handleBusinessCode(response: ApiResponse): boolean {
+function handleBusinessCode(response: ApiResponse, url?: string): boolean {
   const { code, message, success, failed } = response;
 
   // 兼容 success / failed / code 三种业务状态表达
@@ -152,7 +170,11 @@ function handleBusinessCode(response: ApiResponse): boolean {
         messageApi.warning(message || "操作未成功");
         break;
       case 401:
-        handleUnauthorized(message);
+        if (shouldBypassRefresh(url)) {
+          handleAuthEndpointUnauthorized(url, message);
+        } else {
+          handleUnauthorized(message);
+        }
         break;
       case 403:
         console.error("[Business Forbidden]", message);
@@ -213,7 +235,7 @@ instance.interceptors.response.use(
       typeof data === "object" &&
       ("code" in data || "success" in data || "failed" in data)
     ) {
-      const isSuccess = handleBusinessCode(data);
+      const isSuccess = handleBusinessCode(data, response.config?.url);
       if (!isSuccess) {
         // 业务失败时，构造标准 AxiosError 抛出，而不是普通 Error
         const error = new AxiosError(
@@ -251,10 +273,9 @@ instance.interceptors.response.use(
             `Bearer ${refreshedToken}`,
           );
         } else {
-          originalConfig.headers = {
-            ...(originalConfig.headers || {}),
-            Authorization: `Bearer ${refreshedToken}`,
-          };
+          const headers = new AxiosHeaders(originalConfig.headers);
+          headers.set("Authorization", `Bearer ${refreshedToken}`);
+          originalConfig.headers = headers;
         }
         return instance(originalConfig);
       }
@@ -276,8 +297,7 @@ instance.interceptors.response.use(
           if (!shouldBypassRefresh(error.config?.url)) {
             handleUnauthorized(message);
           } else {
-            console.error("[Unauthorized]", message);
-            messageApi.error(message || "认证失败，请重新登录");
+            handleAuthEndpointUnauthorized(error.config?.url, message);
           }
           break;
         case 403:

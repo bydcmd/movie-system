@@ -1,36 +1,23 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { NButton } from 'naive-ui'
 import NavBar from '@/components/layout/NavBar.vue'
 import MovieCard from '@/components/movie/MovieCard.vue'
-import { getTrendingMovies } from '@/api/endpoints/analytics/analytics'
+import { useGetTrendingMovies } from '@/api/endpoints/analytics/analytics'
 import type { TrendingMovieDTO } from '@/api/model'
 
 const router = useRouter()
-const trendingMovies = ref<TrendingMovieDTO[]>([])
-const isLoading = ref(false)
-
-const fetchTrendingMovies = async () => {
-  isLoading.value = true
-  try {
-    const response = await getTrendingMovies({ period: 'DAILY', limit: 10 })
-    trendingMovies.value = Array.isArray(response) ? (response as TrendingMovieDTO[]) : []
-  } catch (error) {
-    console.error('Failed to fetch trending movies:', error)
-    trendingMovies.value = []
-  } finally {
-    isLoading.value = false
-  }
-}
+const trendingMoviesQuery = useGetTrendingMovies({ period: 'DAILY', limit: 10 })
+const trendingMovies = computed<TrendingMovieDTO[]>(() => {
+  const payload = trendingMoviesQuery.data.value
+  return Array.isArray(payload) ? (payload as TrendingMovieDTO[]) : []
+})
+const isLoading = computed(() => trendingMoviesQuery.isLoading.value || trendingMoviesQuery.isFetching.value)
 
 const goToMovies = () => {
   router.push('/movies')
 }
-
-onMounted(() => {
-  void fetchTrendingMovies()
-})
 </script>
 
 <template>

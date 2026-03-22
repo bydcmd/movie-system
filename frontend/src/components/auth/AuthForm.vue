@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { NCard, NInput, NButton, NForm, NFormItem } from 'naive-ui'
+import { NButton, NCard } from 'naive-ui'
 
 defineProps<{
   title: string
@@ -9,8 +9,6 @@ defineProps<{
 }>()
 
 const emit = defineEmits(['submit'])
-
-const model = defineModel()
 </script>
 
 <template>
@@ -30,24 +28,26 @@ const model = defineModel()
         <h2 class="text-3xl font-display font-bold text-slate-900">{{ title }}</h2>
       </div>
 
-      <slot></slot>
+      <form class="space-y-6" @submit.prevent="emit('submit')">
+        <slot></slot>
 
-      <div class="mt-6">
-        <n-button 
-          type="primary" 
-          block 
-          size="large" 
-          :loading="loading" 
-          class="shadow-lg shadow-accent/30 transition-shadow hover:shadow-accent/50"
-          @click="$emit('submit')"
-        >
-          {{ buttonText }}
-        </n-button>
-      </div>
+        <div class="mt-6">
+          <n-button
+            attr-type="submit"
+            type="primary"
+            block
+            size="large"
+            :loading="loading"
+            class="shadow-lg shadow-accent/30 transition-shadow hover:shadow-accent/50"
+          >
+            {{ buttonText }}
+          </n-button>
+        </div>
 
-      <div class="mt-6 text-center text-slate-500 text-sm">
-        <slot name="footer"></slot>
-      </div>
+        <div class="mt-6 text-center text-slate-500 text-sm">
+          <slot name="footer"></slot>
+        </div>
+      </form>
     </n-card>
   </div>
 </template>

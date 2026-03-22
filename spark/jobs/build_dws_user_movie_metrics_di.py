@@ -52,6 +52,7 @@ def build_user_action_agg(events_df: DataFrame) -> DataFrame:
             F.sum(F.col("is_search")).cast("bigint").alias("search_cnt"),
             F.sum(F.col("is_login")).cast("bigint").alias("login_cnt"),
             F.sum(F.col("is_register")).cast("bigint").alias("register_cnt"),
+            F.sum(F.col("is_favorite_folder_action")).cast("bigint").alias("favorite_folder_action_cnt"),
             F.countDistinct("movie_id").cast("bigint").alias("active_movie_cnt"),
             F.max("event_ts").alias("last_event_ts"),
         )

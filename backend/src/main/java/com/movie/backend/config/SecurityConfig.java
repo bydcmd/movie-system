@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -36,6 +37,7 @@ public class SecurityConfig {
         http
             // 禁用 CSRF（因为使用 JWT，不需要 CSRF 保护）
             .csrf(AbstractHttpConfigurer::disable)
+            .cors(Customizer.withDefaults())
 
             // 禁用 Spring Security 的默认登录页和表单登录
             .formLogin(AbstractHttpConfigurer::disable)
@@ -51,7 +53,7 @@ public class SecurityConfig {
                 .requestMatchers("/auth/login", "/auth/register", "/auth/token/refresh").permitAll()
                 .requestMatchers("/auth/logout", "/auth/me", "/auth/me/**").authenticated()
                 .requestMatchers("/users/me", "/users/me/**").authenticated()
-                .requestMatchers(HttpMethod.GET, "/movies/*/comments/me", "/comments/me/**", "/favorite-folders/count").authenticated()
+                .requestMatchers(HttpMethod.GET, "/movies/*/comments/me", "/movies/*/long-reviews/me", "/comments/me/**", "/favorite-folders/count").authenticated()
                 .requestMatchers(HttpMethod.GET, "/users/*").permitAll()
                 .requestMatchers(HttpMethod.GET, "/movies/**", "/people/**", "/analytics/**", "/comments/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/movies/search").permitAll()

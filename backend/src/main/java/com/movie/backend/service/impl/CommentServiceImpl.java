@@ -67,6 +67,17 @@ public class CommentServiceImpl implements CommentService {
     }
 
     @Override
+    public CommentVO getMovieLongReviewDetail(Long movieId, Long commentId, String currentUserId) {
+        CommentVO review = commentMapper.selectLongReviewDetail(movieId, commentId, currentUserId);
+        if (review == null) {
+            throw new BusinessException(404, "长评不存在");
+        }
+
+        enrichCommentContentSummary(review);
+        return review;
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public void submitComment(String userId, Long movieId, String content) {
         // 参数校验
@@ -137,6 +148,11 @@ public class CommentServiceImpl implements CommentService {
     @Override
     public Comment getUserShortComment(String userId, Long movieId) {
         return commentMapper.selectByUserAndMovieAndType(userId, movieId, SHORT_COMMENT_TYPE);
+    }
+
+    @Override
+    public Comment getUserLongReview(String userId, Long movieId) {
+        return commentMapper.selectByUserAndMovieAndType(userId, movieId, LONG_REVIEW_TYPE);
     }
 
     @Override

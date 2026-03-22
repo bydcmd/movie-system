@@ -36,6 +36,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS ads.ads_user_funnel_1d (
   rating_users bigint,
   comment_users bigint,
   favorite_users bigint,
+  favorite_folder_action_users bigint,
   watched_users bigint,
   view_to_rating_rate decimal(10,4),
   rating_to_comment_rate decimal(10,4),

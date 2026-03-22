@@ -71,7 +71,7 @@
             m.regions,
             m.mins,
             m.storyline,
-            DATE_FORMAT(w.create_time, '%Y-%m-%d %H:%i:%s') as watched_time
+            TO_CHAR(w.create_time, 'YYYY-MM-DD HH24:MI:SS') as watched_time
         FROM movies m
         JOIN watched_movies w ON m.movie_id = w.movie_id
         WHERE w.user_id = #{userId}

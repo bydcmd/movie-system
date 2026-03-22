@@ -6,6 +6,17 @@ type ResultEnvelope<T> = {
   data?: T;
 };
 
+type AbortSignalLike = {
+  aborted: boolean;
+  addEventListener?: (
+    type: "abort",
+    listener: () => void,
+    options?: { once?: boolean },
+  ) => void;
+  onabort?: ((event: Event) => void) | null;
+  reason?: unknown;
+};
+
 function normalizeHeaders(
   headers?: HeadersInit,
 ): AxiosRequestConfig["headers"] {
@@ -23,7 +34,7 @@ function normalizeHeaders(
 
 function mergeAbortSignal(
   controller: AbortController,
-  signal?: AbortSignal | AxiosRequestConfig["signal"] | null,
+  signal?: AbortSignalLike | null,
 ): void {
   if (!signal) {
     return;

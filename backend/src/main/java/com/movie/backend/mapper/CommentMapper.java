@@ -38,6 +38,15 @@ public interface CommentMapper {
     List<CommentVO> selectWithRatingByMovieId(@Param("movieId") Long movieId, @Param("currentUserId") String currentUserId);
 
     /**
+     * 获取指定电影下的长评详情
+     */
+    CommentVO selectLongReviewDetail(
+            @Param("movieId") Long movieId,
+            @Param("commentId") Long commentId,
+            @Param("currentUserId") String currentUserId
+    );
+
+    /**
      * Insert comment
      */
     int insert(Comment comment);

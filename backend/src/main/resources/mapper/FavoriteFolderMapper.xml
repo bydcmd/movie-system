@@ -61,11 +61,11 @@
             description, 
             is_public, 
             movie_count,
-            DATE_FORMAT(create_time, '%Y-%m-%d %H:%i:%s') as create_time,
-            DATE_FORMAT(update_time, '%Y-%m-%d %H:%i:%s') as update_time
+            TO_CHAR(create_time, 'YYYY-MM-DD HH24:MI:SS') as create_time,
+            TO_CHAR(update_time, 'YYYY-MM-DD HH24:MI:SS') as update_time
         FROM favorite_folders
         WHERE user_id = #{userId}
-        ORDER BY create_time DESC
+        ORDER BY favorite_folders.create_time DESC
     </select>
 
     <select id="countByUserId" resultType="int">

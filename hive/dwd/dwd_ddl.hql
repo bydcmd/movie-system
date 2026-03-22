@@ -37,6 +37,8 @@ CREATE EXTERNAL TABLE IF NOT EXISTS dwd.dwd_user_event_wide_di (
   rating_time timestamp,
   search_keyword string,
   result_count bigint,
+  filter_conditions string,
+  search_time bigint,
   is_view tinyint,
   is_rating tinyint,
   is_comment tinyint,
@@ -46,6 +48,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS dwd.dwd_user_event_wide_di (
   is_search tinyint,
   is_register tinyint,
   is_login tinyint,
+  is_favorite_folder_action tinyint,
   event_data string,
   raw_json string
 )
