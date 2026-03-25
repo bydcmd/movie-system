@@ -26,8 +26,10 @@ def parse_args() -> argparse.Namespace:
 
 
 def build_search_funnel(events_df: DataFrame) -> DataFrame:
-    search_events_df = events_df.where((F.col("is_search") == 1) & F.col("user_id").isNotNull())
-    search_user_df = search_events_df.select("user_id").dropDuplicates()
+    search_events_df = events_df.where(
+        (F.col("is_search") == 1) & F.col("user_id").isNotNull() & F.col("event_ts").isNotNull()
+    )
+    search_user_df = search_events_df.groupBy("user_id").agg(F.min("event_ts").alias("first_search_ts"))
 
     search_stats_df = search_events_df.agg(
         F.count(F.lit(1)).cast("bigint").alias("search_cnt"),
@@ -37,13 +39,29 @@ def build_search_funnel(events_df: DataFrame) -> DataFrame:
     search_user_cnt_df = search_user_df.agg(F.count(F.lit(1)).cast("bigint").alias("search_user_cnt"))
 
     search_user_action_df = (
-        search_user_df.join(events_df.where(F.col("user_id").isNotNull()), on="user_id", how="left")
+        search_user_df.join(
+            events_df.where(F.col("user_id").isNotNull() & F.col("event_ts").isNotNull()),
+            on="user_id",
+            how="left",
+        )
+        .where(F.col("event_ts") > F.col("first_search_ts"))
+        .withColumn(
+            "operation_norm",
+            F.upper(F.trim(F.coalesce(F.col("operation_norm"), F.col("operation"), F.lit("")))),
+        )
         .groupBy("user_id")
         .agg(
             F.max(F.coalesce(F.col("is_view"), F.lit(0))).cast("bigint").alias("did_view"),
             F.max(F.coalesce(F.col("is_rating"), F.lit(0))).cast("bigint").alias("did_rating"),
             F.max(F.coalesce(F.col("is_watched"), F.lit(0))).cast("bigint").alias("did_watched"),
-            F.max(F.coalesce(F.col("is_favorite"), F.lit(0))).cast("bigint").alias("did_favorite"),
+            F.max(
+                F.when(
+                    (F.coalesce(F.col("is_favorite"), F.lit(0)) == 1) & (F.col("operation_norm") == F.lit("ADD")),
+                    F.lit(1),
+                ).otherwise(F.lit(0))
+            )
+            .cast("bigint")
+            .alias("did_favorite"),
         )
     )
 

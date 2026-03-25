@@ -9,6 +9,7 @@ from pyspark.sql import functions as F
 import _bootstrap  # noqa: F401
 
 from utils.config_loader import load_config
+from utils.hive_utils import add_partitions
 from utils.spark_factory import build_spark_session
 
 
@@ -70,6 +71,24 @@ def normalize_events(source_df: DataFrame) -> DataFrame:
     )
 
 
+def write_micro_batch(batch_df: DataFrame, batch_id: int, sink_path: str, sink_table: str) -> None:
+    partition_rows = batch_df.select("dt", "hh").dropDuplicates().collect()
+    if not partition_rows:
+        return
+
+    batch_df.write.mode("append").format("orc").partitionBy("dt", "hh").save(sink_path)
+    add_partitions(
+        table_name=sink_table,
+        sink_path=sink_path,
+        partition_specs=[{"dt": row["dt"], "hh": row["hh"]} for row in partition_rows],
+        spark=batch_df.sparkSession,
+    )
+    print(
+        "Kafka micro-batch committed. "
+        f"batch_id={batch_id}, partition_cnt={len(partition_rows)}, sink_table={sink_table}"
+    )
+
+
 def run() -> None:
     args = parse_args()
     config = load_config(args.config)
@@ -102,19 +121,22 @@ def run() -> None:
         source_df = reader.load()
         sink_df = normalize_events(source_df)
 
+        sink_table = kafka_config.get("sink_table", "").strip()
+        if not sink_table:
+            raise ValueError("sink_table is required in kafka config.")
+
         sink_path = kafka_config["sink_path"].rstrip("/")
         checkpoint_root = args.checkpoint_root or spark_config.get("checkpoint_root", "").rstrip("/")
         if not checkpoint_root:
             raise ValueError("checkpoint_root is required in args or config.")
         checkpoint_location = f"{checkpoint_root}/kafka_event_log"
 
-        writer = (
-            sink_df.writeStream.format("orc")
-            .outputMode("append")
-            .option("path", sink_path)
-            .option("checkpointLocation", checkpoint_location)
-            .partitionBy("dt", "hh")
-        )
+        def _write_micro_batch(batch_df: DataFrame, batch_id: int) -> None:
+            write_micro_batch(batch_df=batch_df, batch_id=batch_id, sink_path=sink_path, sink_table=sink_table)
+
+        writer = sink_df.writeStream.outputMode("append").option(
+            "checkpointLocation", checkpoint_location
+        ).foreachBatch(_write_micro_batch)
 
         if args.run_mode == "available-now":
             writer = writer.trigger(availableNow=True)
@@ -126,7 +148,8 @@ def run() -> None:
         query = writer.start()
         print(
             "Kafka -> Hive ODS stream started. "
-            f"mode={args.run_mode}, topics={len(topics)}, sink_path={sink_path}, checkpoint={checkpoint_location}"
+            f"mode={args.run_mode}, topics={len(topics)}, sink_table={sink_table}, "
+            f"sink_path={sink_path}, checkpoint={checkpoint_location}"
         )
         query.awaitTermination()
     finally:

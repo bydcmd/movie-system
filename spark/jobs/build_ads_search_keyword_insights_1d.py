@@ -52,18 +52,58 @@ def build_keyword_insights(events_df: DataFrame, min_search_cnt: int, top_n: int
         .where(F.col("search_cnt") >= F.lit(int(min_search_cnt)))
     )
 
-    user_action_df = (
-        events_df.where(F.col("user_id").isNotNull())
-        .groupBy("user_id")
+    attributed_events_df = (
+        events_df.where(F.col("user_id").isNotNull() & F.col("event_ts").isNotNull())
+        .withColumn(
+            "search_keyword_clean",
+            F.when(F.col("is_search") == 1, F.trim(F.coalesce(F.col("search_keyword"), F.lit("")))).otherwise(F.lit(None)),
+        )
+        .withColumn(
+            "search_keyword_clean",
+            F.when(F.col("search_keyword_clean") != "", F.col("search_keyword_clean")).otherwise(F.lit(None)),
+        )
+        .withColumn(
+            "event_sort",
+            F.when(F.col("is_search") == 1, F.lit(0))
+            .when(
+                (F.coalesce(F.col("is_view"), F.lit(0)) == 1)
+                | (F.coalesce(F.col("is_watched"), F.lit(0)) == 1)
+                | (F.coalesce(F.col("is_rating"), F.lit(0)) == 1),
+                F.lit(1),
+            )
+            .otherwise(F.lit(2)),
+        )
+        .withColumn("event_order_key", F.coalesce(F.col("event_id"), F.col("event_key"), F.col("raw_json"), F.lit("")))
+    )
+
+    attribution_window = (
+        Window.partitionBy("user_id")
+        .orderBy(
+            F.col("event_ts").asc(),
+            F.col("event_sort").asc(),
+            F.col("event_order_key").asc(),
+        )
+        .rowsBetween(Window.unboundedPreceding, -1)
+    )
+
+    keyword_user_action_df = (
+        attributed_events_df.withColumn(
+            "attributed_search_keyword",
+            F.last("search_keyword_clean", ignorenulls=True).over(attribution_window),
+        )
+        .where(
+            (F.coalesce(F.col("is_view"), F.lit(0)) == 1)
+            | (F.coalesce(F.col("is_watched"), F.lit(0)) == 1)
+            | (F.coalesce(F.col("is_rating"), F.lit(0)) == 1)
+        )
+        .where(F.col("attributed_search_keyword").isNotNull())
+        .groupBy(F.col("attributed_search_keyword").alias("search_keyword"), "user_id")
         .agg(
             F.max(F.coalesce(F.col("is_view"), F.lit(0))).cast("bigint").alias("did_view"),
             F.max(F.coalesce(F.col("is_watched"), F.lit(0))).cast("bigint").alias("did_watch"),
             F.max(F.coalesce(F.col("is_rating"), F.lit(0))).cast("bigint").alias("did_rating"),
         )
     )
-
-    keyword_user_df = search_events_df.select("search_keyword", "user_id").dropDuplicates()
-    keyword_user_action_df = keyword_user_df.join(user_action_df, on="user_id", how="left")
 
     conversion_df = keyword_user_action_df.groupBy("search_keyword").agg(
         F.sum(F.coalesce(F.col("did_view"), F.lit(0))).cast("bigint").alias("after_search_view_user_cnt"),

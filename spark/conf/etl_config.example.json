@@ -177,7 +177,8 @@
     "top_n_recommend": 30,
     "event_score_weights": {
       "view": 1.0,
-      "favorite": 2.0,
+      "favorite_add": 2.0,
+      "favorite_remove": -1.0,
       "comment": 2.0,
       "rating": 3.0,
       "watched": 3.0,

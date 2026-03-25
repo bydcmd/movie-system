@@ -38,10 +38,12 @@ def resolve_positive_int(raw_value: Any, name: str) -> int:
 def build_user_item_preference(events_df: DataFrame, weights: dict[str, Any], min_score: float) -> DataFrame:
     rating_value = F.coalesce(F.col("rating"), F.col("rating_snapshot")).cast("double")
     operation_norm = F.upper(F.trim(F.coalesce(F.col("operation_norm"), F.col("operation"))))
+    favorite_add_weight = float(weights.get("favorite_add", weights.get("favorite", 2.0)))
+    favorite_remove_weight = float(weights.get("favorite_remove", -1.0))
     event_score_expr = (
         F.coalesce(F.col("is_view"), F.lit(0)) * F.lit(float(weights.get("view", 1.0)))
-        + F.when((F.col("is_favorite") == 1) & (operation_norm == "ADD"), F.lit(float(weights.get("favorite_add", 2.0))))
-        .when((F.col("is_favorite") == 1) & (operation_norm == "REMOVE"), F.lit(float(weights.get("favorite_remove", -1.0))))
+        + F.when((F.col("is_favorite") == 1) & (operation_norm == "ADD"), F.lit(favorite_add_weight))
+        .when((F.col("is_favorite") == 1) & (operation_norm == "REMOVE"), F.lit(favorite_remove_weight))
         .otherwise(F.lit(0.0))
         + F.coalesce(F.col("is_comment"), F.lit(0)) * F.lit(float(weights.get("comment", 2.0)))
         + F.coalesce(F.col("is_rating"), F.lit(0)) * F.lit(float(weights.get("rating", 3.0)))
