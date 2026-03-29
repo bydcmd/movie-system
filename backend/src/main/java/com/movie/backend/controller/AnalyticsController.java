@@ -27,10 +27,10 @@ public class AnalyticsController {
     @Autowired
     private AnalyticsService analyticsService;
 
-    @Operation(operationId = "getTrendingMovies", summary = "获取趋势榜单", description = "获取今日、本周、本月的热门电影。底层基于 Hive/Spark 计算。")
+    @Operation(operationId = "getTrendingMovies", summary = "获取趋势榜单", description = "获取今日、本周、本月和总榜的热门电影。底层基于 Hive/Spark 计算。")
     @GetMapping("/trending")
     public Result<List<TrendingMovieDTO>> getTrendingMovies(
-            @Parameter(name = "period", description = "周期类型: DAILY, WEEKLY, MONTHLY，默认为 DAILY")
+            @Parameter(name = "period", description = "周期类型: DAILY, WEEKLY, MONTHLY, TOTAL，默认为 DAILY")
             @RequestParam(defaultValue = "DAILY") TrendPeriod period,
             @RequestParam(defaultValue = "10")
             @Min(value = 1, message = "返回数量至少为1")

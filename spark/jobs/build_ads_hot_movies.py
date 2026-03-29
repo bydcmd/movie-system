@@ -12,8 +12,27 @@ from pyspark.sql import functions as F
 import _bootstrap  # noqa: F401
 
 from utils.config_loader import load_config
-from utils.hive_utils import write_partition
+from utils.hive_utils import assert_non_empty_partition, write_partition
 from utils.spark_factory import build_spark_session
+
+DEFAULT_PERIOD_DAYS: dict[str, int] = {"DAILY": 1, "WEEKLY": 7, "MONTHLY": 30}
+TOTAL_PERIOD_TYPE = "TOTAL"
+DEFAULT_TOTAL_SOURCE_TABLE = "dws.dws_movie_engagement_1d"
+SNAPSHOT_SOURCE_TYPE = "movie_metric_snapshot"
+
+
+def ensure_non_empty_partition(
+    df: DataFrame,
+    table_name: str,
+    partition_spec: dict[str, str],
+    spark,
+) -> None:
+    try:
+        assert_non_empty_partition(df, table_name, partition_spec, spark=spark)
+    except TypeError as exc:
+        if "unexpected keyword argument 'spark'" not in str(exc):
+            raise
+        assert_non_empty_partition(df, table_name, partition_spec)
 
 
 def parse_args() -> argparse.Namespace:
@@ -28,14 +47,22 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def resolve_period_days(period_days: dict[str, Any] | None) -> dict[str, int]:
-    defaults = {"DAILY": 1, "WEEKLY": 7, "MONTHLY": 30}
+def resolve_period_days(period_days: dict[str, Any] | None) -> dict[str, int | None]:
+    defaults: dict[str, int | None] = {
+        **DEFAULT_PERIOD_DAYS,
+        TOTAL_PERIOD_TYPE: None,
+    }
     if not period_days:
         return defaults
 
-    resolved: dict[str, int] = {}
+    resolved: dict[str, int | None] = {}
     for period, default_days in defaults.items():
         raw_value = period_days.get(period, default_days)
+        if raw_value is None:
+            if period == TOTAL_PERIOD_TYPE:
+                resolved[period] = None
+                continue
+            raise ValueError(f"Missing period days for {period}")
         value = int(raw_value)
         if value <= 0:
             raise ValueError(f"Invalid period days for {period}: {raw_value}")
@@ -57,21 +84,32 @@ def build_hot_score_expr(weights: dict[str, Any]) -> Column:
     )
 
 
+def filter_rankable_movies(df: DataFrame) -> DataFrame:
+    return df.where(
+        F.col("movie_id").isNotNull()
+        & F.col("movie_name").isNotNull()
+        & (F.length(F.trim(F.col("movie_name"))) > 0)
+    )
+
+
 def build_period_hot_ranking(
     source_df: DataFrame,
     calc_date: str,
     period_type: str,
-    period_days: int,
+    period_days: int | None,
     top_n: int,
     weights: dict[str, Any],
 ) -> DataFrame:
-    calc_date_obj = dt.date.fromisoformat(calc_date)
-    start_date_obj = calc_date_obj - dt.timedelta(days=period_days - 1)
-    start_date = start_date_obj.isoformat()
-
-    filtered_df = source_df.where(
-        (F.col("dt_date") >= F.lit(start_date).cast("date")) & (F.col("dt_date") <= F.lit(calc_date).cast("date"))
-    )
+    if period_days is None:
+        start_date = None
+        filtered_df = source_df.where(F.col("dt_date") <= F.lit(calc_date).cast("date"))
+    else:
+        calc_date_obj = dt.date.fromisoformat(calc_date)
+        start_date_obj = calc_date_obj - dt.timedelta(days=period_days - 1)
+        start_date = start_date_obj.isoformat()
+        filtered_df = source_df.where(
+            (F.col("dt_date") >= F.lit(start_date).cast("date")) & (F.col("dt_date") <= F.lit(calc_date).cast("date"))
+        )
 
     rating_sum = (
         F.sum(F.coalesce(F.col("rating_avg").cast("double"), F.lit(0.0)) * F.coalesce(F.col("rating_cnt"), F.lit(0)))
@@ -107,10 +145,11 @@ def build_period_hot_ranking(
         )
         .drop("rating_sum")
         .withColumn("period_type", F.lit(period_type))
-        .withColumn("window_start", F.lit(start_date))
-        .withColumn("window_end", F.lit(calc_date))
+        .withColumn("window_start", F.lit(start_date).cast("string"))
+        .withColumn("window_end", F.lit(calc_date).cast("string"))
         .withColumn("hot_score", F.round(build_hot_score_expr(weights), 4).cast("decimal(18,4)"))
     )
+    aggregated_df = filter_rankable_movies(aggregated_df)
 
     rank_window = Window.partitionBy("period_type").orderBy(
         F.col("hot_score").desc(),
@@ -145,6 +184,151 @@ def build_period_hot_ranking(
     )
 
 
+def build_snapshot_hot_ranking(
+    source_df: DataFrame,
+    calc_date: str,
+    period_days: dict[str, int | None],
+    top_n: int,
+    weights: dict[str, Any],
+) -> DataFrame:
+    # Snapshot source keeps full-data engagement metrics as of calc_date rather than daily increments.
+    # To stay compatible with downstream PostgreSQL stats tables, materialize the same ranking under
+    # the configured period labels instead of emitting a custom SNAPSHOT period type.
+    base_df = (
+        source_df.select(
+            F.col("movie_id").cast("bigint").alias("movie_id"),
+            F.col("movie_name").alias("movie_name"),
+            F.col("movie_year").cast("int").alias("movie_year"),
+            F.col("movie_genres").alias("movie_genres"),
+            F.col("movie_score").cast("decimal(3,1)").alias("movie_score"),
+            F.col("movie_douban_score").cast("decimal(3,1)").alias("movie_douban_score"),
+            F.coalesce(F.col("view_pv"), F.lit(0)).cast("bigint").alias("view_pv"),
+            F.coalesce(F.col("view_uv"), F.lit(0)).cast("bigint").alias("view_uv"),
+            F.coalesce(F.col("rating_cnt"), F.lit(0)).cast("bigint").alias("rating_cnt"),
+            F.col("rating_avg").cast("decimal(10,2)").alias("rating_avg"),
+            F.coalesce(F.col("comment_cnt"), F.lit(0)).cast("bigint").alias("comment_cnt"),
+            F.coalesce(F.col("comment_like_cnt"), F.lit(0)).cast("bigint").alias("comment_like_cnt"),
+            F.coalesce(F.col("favorite_add_cnt"), F.lit(0)).cast("bigint").alias("favorite_add_cnt"),
+            F.coalesce(F.col("favorite_remove_cnt"), F.lit(0)).cast("bigint").alias("favorite_remove_cnt"),
+            F.coalesce(F.col("watched_cnt"), F.lit(0)).cast("bigint").alias("watched_cnt"),
+            F.coalesce(F.col("active_user_cnt"), F.lit(0)).cast("bigint").alias("active_user_cnt"),
+            F.col("last_event_ts").alias("last_event_ts"),
+        )
+        .withColumn("hot_score", F.round(build_hot_score_expr(weights), 4).cast("decimal(18,4)"))
+    )
+    base_df = filter_rankable_movies(base_df)
+
+    rank_window = Window.orderBy(
+        F.col("hot_score").desc(),
+        F.col("view_pv").desc(),
+        F.col("movie_id").asc(),
+    )
+
+    ranked_df = (
+        base_df.withColumn("rank_no", F.row_number().over(rank_window))
+        .where(F.col("rank_no") <= top_n)
+        .select(
+            "movie_id",
+            "movie_name",
+            "movie_year",
+            "movie_genres",
+            "movie_score",
+            "movie_douban_score",
+            "rank_no",
+            "hot_score",
+            "view_pv",
+            "view_uv",
+            "rating_cnt",
+            "rating_avg",
+            "comment_cnt",
+            "comment_like_cnt",
+            "favorite_add_cnt",
+            "favorite_remove_cnt",
+            "watched_cnt",
+            "active_user_cnt",
+            "last_event_ts",
+        )
+    )
+
+    period_frames: list[DataFrame] = []
+    calc_date_obj = dt.date.fromisoformat(calc_date)
+    for period_type, days in period_days.items():
+        window_start = None
+        if days is not None:
+            window_start = (calc_date_obj - dt.timedelta(days=days - 1)).isoformat()
+        period_frames.append(
+            ranked_df.select(
+                "movie_id",
+                "movie_name",
+                "movie_year",
+                "movie_genres",
+                "movie_score",
+                "movie_douban_score",
+                F.lit(period_type).alias("period_type"),
+                "rank_no",
+                "hot_score",
+                "view_pv",
+                "view_uv",
+                "rating_cnt",
+                "rating_avg",
+                "comment_cnt",
+                "comment_like_cnt",
+                "favorite_add_cnt",
+                "favorite_remove_cnt",
+                "watched_cnt",
+                "active_user_cnt",
+                F.lit(window_start).cast("string").alias("window_start"),
+                F.lit(calc_date).cast("string").alias("window_end"),
+                "last_event_ts",
+            )
+        )
+
+    result_df = period_frames[0]
+    for period_df in period_frames[1:]:
+        result_df = result_df.unionByName(period_df)
+    return result_df
+
+
+def build_total_period_frame(
+    spark,
+    calc_date: str,
+    total_source_table: str,
+    total_source_type: str,
+    top_n: int,
+    weights: dict[str, Any],
+) -> DataFrame:
+    normalized_source_type = total_source_type.strip().lower()
+    if normalized_source_type == SNAPSHOT_SOURCE_TYPE:
+        total_source_df = spark.table(total_source_table).where(F.col("dt") == calc_date)
+        ensure_non_empty_partition(total_source_df, total_source_table, {"dt": calc_date}, spark=spark)
+        return build_snapshot_hot_ranking(
+            source_df=total_source_df,
+            calc_date=calc_date,
+            period_days={TOTAL_PERIOD_TYPE: None},
+            top_n=top_n,
+            weights=weights,
+        )
+
+    total_source_df = (
+        spark.table(total_source_table)
+        .where(F.col("dt") <= calc_date)
+        .withColumn("dt_date", F.to_date(F.col("dt")))
+    )
+    if total_source_df.limit(1).count() == 0:
+        raise ValueError(
+            "No source data found for ADS total hot movie build. "
+            f"source={total_source_table}, source_type={normalized_source_type}, dt_max={calc_date}"
+        )
+    return build_period_hot_ranking(
+        source_df=total_source_df,
+        calc_date=calc_date,
+        period_type=TOTAL_PERIOD_TYPE,
+        period_days=None,
+        top_n=top_n,
+        weights=weights,
+    )
+
+
 def run() -> None:
     args = parse_args()
     config = load_config(args.config)
@@ -155,6 +339,14 @@ def run() -> None:
     source_table = ads_config["source_table"]
     target_table = ads_config["target_table"]
     sink_path = ads_config["sink_path"]
+    source_type = str(ads_config.get("source_type", "movie_action_daily")).strip().lower()
+    total_source_table = str(
+        ads_config.get(
+            "total_source_table",
+            DEFAULT_TOTAL_SOURCE_TABLE if source_type == "movie_metric_daily" else source_table,
+        )
+    ).strip()
+    total_source_type = str(ads_config.get("total_source_type", SNAPSHOT_SOURCE_TYPE if total_source_table != source_table else source_type)).strip().lower()
 
     top_n = args.top_n if args.top_n > 0 else int(ads_config.get("top_n", 100))
     if top_n <= 0:
@@ -167,33 +359,81 @@ def run() -> None:
     try:
         spark.sql("CREATE DATABASE IF NOT EXISTS ads")
 
-        max_days = max(period_days.values())
-        min_date = (dt.date.fromisoformat(calc_date) - dt.timedelta(days=max_days - 1)).isoformat()
-        source_df = (
-            spark.table(source_table)
-            .where((F.col("dt") >= min_date) & (F.col("dt") <= calc_date))
-            .withColumn("dt_date", F.to_date(F.col("dt")))
-        )
-
-        period_frames: list[DataFrame] = []
-        for period_type, days in period_days.items():
-            period_frames.append(
-                build_period_hot_ranking(
-                    source_df=source_df,
-                    calc_date=calc_date,
-                    period_type=period_type,
-                    period_days=days,
-                    top_n=top_n,
-                    weights=weights,
-                )
+        if source_type == "movie_metric_snapshot":
+            source_df = spark.table(source_table).where(F.col("dt") == calc_date)
+            ensure_non_empty_partition(source_df, source_table, {"dt": calc_date}, spark=spark)
+            result_df = build_snapshot_hot_ranking(
+                source_df=source_df,
+                calc_date=calc_date,
+                period_days=period_days,
+                top_n=top_n,
+                weights=weights,
             )
+        else:
+            period_frames: list[DataFrame] = []
+            bounded_period_days = {
+                period_type: days
+                for period_type, days in period_days.items()
+                if period_type != TOTAL_PERIOD_TYPE and days is not None
+            }
+            if bounded_period_days:
+                max_days = max(bounded_period_days.values())
+                min_date = (dt.date.fromisoformat(calc_date) - dt.timedelta(days=max_days - 1)).isoformat()
+                source_df = (
+                    spark.table(source_table)
+                    .where((F.col("dt") >= min_date) & (F.col("dt") <= calc_date))
+                    .withColumn("dt_date", F.to_date(F.col("dt")))
+                )
+                has_bounded_source = source_df.limit(1).count() > 0
+                if not has_bounded_source and TOTAL_PERIOD_TYPE not in period_days:
+                    raise ValueError(
+                        "No source data found for ADS hot movie build. "
+                        f"source={source_table}, source_type={source_type}, dt_range=[{min_date}, {calc_date}]"
+                    )
+                if has_bounded_source:
+                    for period_type, days in bounded_period_days.items():
+                        period_frames.append(
+                            build_period_hot_ranking(
+                                source_df=source_df,
+                                calc_date=calc_date,
+                                period_type=period_type,
+                                period_days=days,
+                                top_n=top_n,
+                                weights=weights,
+                            )
+                        )
 
-        result_df = period_frames[0]
-        for period_df in period_frames[1:]:
-            result_df = result_df.unionByName(period_df)
+            if TOTAL_PERIOD_TYPE in period_days:
+                period_frames.append(
+                    build_total_period_frame(
+                        spark=spark,
+                        calc_date=calc_date,
+                        total_source_table=total_source_table,
+                        total_source_type=total_source_type,
+                        top_n=top_n,
+                        weights=weights,
+                    )
+                )
 
-        write_partition(result_df, target_table, sink_path, calc_date, spark)
-        print(f"ADS hot ranking build finished. source={source_table}, target={target_table}, dt={calc_date}, top_n={top_n}")
+            result_df = period_frames[0]
+            for period_df in period_frames[1:]:
+                result_df = result_df.unionByName(period_df)
+
+        result_df = result_df.cache()
+        try:
+            if result_df.limit(1).count() == 0:
+                raise ValueError(
+                    "ADS hot movie build produced 0 rows; refusing to register an empty target partition. "
+                    f"source={source_table}, source_type={source_type}, target={target_table}, dt={calc_date}"
+                )
+
+            write_partition(result_df, target_table, sink_path, calc_date, spark)
+            print(
+                "ADS hot ranking build finished. "
+                f"source={source_table}, source_type={source_type}, target={target_table}, dt={calc_date}, top_n={top_n}"
+            )
+        finally:
+            result_df.unpersist()
     finally:
         spark.stop()
 

@@ -9,14 +9,14 @@ import java.util.List;
 public interface AnalyticsService {
     /**
      * 获取热门电影
-     * @param period 时间周期: DAILY, WEEKLY, MONTHLY
+     * @param period 时间周期: DAILY, WEEKLY, MONTHLY, TOTAL
      * @param limit 数量
      */
     List<Movie> getHotMoviesByPeriod(String period, int limit);
 
     /**
      * 获取趋势榜单
-     * @param period 周期类型: DAILY, WEEKLY, MONTHLY
+     * @param period 周期类型: DAILY, WEEKLY, MONTHLY, TOTAL
      * @param limit 返回数量
      */
     List<TrendingMovieDTO> getTrendingMovies(TrendPeriod period, int limit);

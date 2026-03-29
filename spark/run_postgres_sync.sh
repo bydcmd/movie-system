@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage:
+  bash run_postgres_sync.sh [batch-date] [config-path] [tables]
+  bash run_postgres_sync.sh [config-path] [tables]
+  bash run_postgres_sync.sh --batch-date YYYY-MM-DD --config conf/etl_config.json --tables public.movies,public.users
+
+Examples:
+  bash run_postgres_sync.sh
+  bash run_postgres_sync.sh 2026-03-25
+  bash run_postgres_sync.sh conf/etl_config.dev.json
+  bash run_postgres_sync.sh conf/etl_config.dev.json public.movies,public.users
+  bash run_postgres_sync.sh 2026-03-25 conf/etl_config.json
+  bash run_postgres_sync.sh 2026-03-25 conf/etl_config.json public.movies,public.users
+
+Arguments:
+  batch-date   Partition date, default: today (YYYY-MM-DD)
+  config-path  Config file path, default: conf/etl_config.json
+  tables       Optional comma-separated source tables
+EOF
+}
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "${SCRIPT_DIR}"
+
+BATCH_DATE="$(date +%F)"
+CONFIG_PATH="conf/etl_config.json"
+TABLES=""
+POSITIONAL_ARGS=()
+
+is_date() {
+  [[ "$1" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --batch-date)
+      BATCH_DATE="${2:-}"
+      shift 2
+      ;;
+    --config)
+      CONFIG_PATH="${2:-}"
+      shift 2
+      ;;
+    --tables)
+      TABLES="${2:-}"
+      shift 2
+      ;;
+    *)
+      POSITIONAL_ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+case "${#POSITIONAL_ARGS[@]}" in
+  0)
+    ;;
+  1)
+    if is_date "${POSITIONAL_ARGS[0]}"; then
+      BATCH_DATE="${POSITIONAL_ARGS[0]}"
+    else
+      CONFIG_PATH="${POSITIONAL_ARGS[0]}"
+    fi
+    ;;
+  2)
+    if is_date "${POSITIONAL_ARGS[0]}"; then
+      BATCH_DATE="${POSITIONAL_ARGS[0]}"
+      if [[ "${POSITIONAL_ARGS[1]}" == *.json ]]; then
+        CONFIG_PATH="${POSITIONAL_ARGS[1]}"
+      else
+        TABLES="${POSITIONAL_ARGS[1]}"
+      fi
+    else
+      CONFIG_PATH="${POSITIONAL_ARGS[0]}"
+      TABLES="${POSITIONAL_ARGS[1]}"
+    fi
+    ;;
+  3)
+    BATCH_DATE="${POSITIONAL_ARGS[0]}"
+    CONFIG_PATH="${POSITIONAL_ARGS[1]}"
+    TABLES="${POSITIONAL_ARGS[2]}"
+    ;;
+  *)
+    usage
+    exit 1
+    ;;
+esac
+
+if ! command -v spark-submit >/dev/null 2>&1; then
+  echo "spark-submit not found in PATH" >&2
+  exit 1
+fi
+
+if [[ ! -f "${CONFIG_PATH}" ]]; then
+  echo "Config file not found: ${CONFIG_PATH}" >&2
+  exit 1
+fi
+
+CMD=(
+  spark-submit
+  --master yarn
+  --deploy-mode client
+  --packages org.postgresql:postgresql:42.7.3
+  jobs/postgres_to_hive_ods.py
+  --config "${CONFIG_PATH}"
+  --batch-date "${BATCH_DATE}"
+)
+
+if [[ -n "${TABLES}" ]]; then
+  CMD+=(--tables "${TABLES}")
+fi
+
+printf 'Running command:\n%s\n' "${CMD[*]}"
+"${CMD[@]}"

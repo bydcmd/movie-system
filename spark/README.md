@@ -103,6 +103,40 @@ spark-submit \
   --snapshot-date 2026-02-25
 ```
 
+If `--snapshot-date` is omitted, the job resolves the latest common PostgreSQL ODS snapshot partition with `dt <= calc-date`.
+
+Two PostgreSQL-driven DWD snapshot jobs are also available:
+
+### 5.1 User snapshot (`dwd.dwd_user_snapshot_di`)
+
+This snapshot intentionally excludes the raw password field and keeps only analytics-safe user profile attributes.
+
+```bash
+spark-submit \
+  --master yarn \
+  --deploy-mode client \
+  jobs/build_dwd_user_snapshot_di.py \
+  --config conf/etl_config.json \
+  --calc-date 2026-02-25 \
+  --snapshot-date 2026-02-25
+```
+
+If `--snapshot-date` is omitted, the job resolves the latest available `ods.ods_pg_users_full.dt` partition with `dt <= calc-date`.
+
+### 5.2 Movie snapshot (`dwd.dwd_movie_snapshot_di`)
+
+```bash
+spark-submit \
+  --master yarn \
+  --deploy-mode client \
+  jobs/build_dwd_movie_snapshot_di.py \
+  --config conf/etl_config.json \
+  --calc-date 2026-02-25 \
+  --snapshot-date 2026-02-25
+```
+
+If `--snapshot-date` is omitted, the job resolves the latest available `ods.ods_pg_movies_full.dt` partition with `dt <= calc-date`.
+
 ## 6) Build DWS aggregates
 
 Create DWS tables:
@@ -122,6 +156,57 @@ spark-submit \
   --calc-date 2026-02-25
 ```
 
+Build daily user/movie profile tables by combining DWD snapshots with DWS action metrics:
+
+```bash
+spark-submit \
+  --master yarn \
+  --deploy-mode client \
+  jobs/build_dws_user_movie_profiles_1d.py \
+  --config conf/etl_config.json \
+  --calc-date 2026-02-25 \
+  --snapshot-date 2026-02-25
+```
+
+If `--snapshot-date` is omitted, the job resolves the latest common DWD snapshot partition with `dt <= calc-date`.
+
+This job outputs:
+
+- `dws.dws_user_profile_1d`
+- `dws.dws_movie_profile_1d`
+
+Wrapper script:
+
+```bash
+bash run_dws_profiles.sh 2026-02-25 conf/etl_config.json
+```
+
+Build PostgreSQL-driven interaction snapshots for recommendation and hot ranking:
+
+```bash
+spark-submit \
+  --master yarn \
+  --deploy-mode client \
+  jobs/build_dws_postgres_interactions_1d.py \
+  --config conf/etl_config.json \
+  --calc-date 2026-02-25 \
+  --snapshot-date 2026-02-25
+```
+
+If `--snapshot-date` is omitted, the job resolves the latest common source snapshot partition with `dt <= calc-date`.
+
+This job outputs:
+
+- `dws.dws_user_item_preference_1d`
+- `dws.dws_movie_engagement_1d`
+- `dws.dws_movie_engagement_daily_1d`
+
+Wrapper script:
+
+```bash
+bash run_dws_postgres_interactions.sh 2026-02-25 conf/etl_config.json
+```
+
 ## 7) Build ADS hot rankings
 
 Create ADS table:
@@ -130,7 +215,23 @@ Create ADS table:
 hive -f ../hive/ads/ads_ddl.hql
 ```
 
-Build daily/weekly/monthly hot ranking from `dws.dws_movie_action_1d`:
+Build hot ranking from the configured DWS source.
+
+Recommended source:
+
+- `dws.dws_movie_engagement_daily_1d` with `ads.source_type=movie_metric_daily`
+
+This source is built from PostgreSQL full snapshot tables but filtered by real event timestamps on each `calc-date`, so `DAILY / WEEKLY / MONTHLY` rankings represent true recent 1/7/30 day windows, while `TOTAL` represents the full history accumulated up to `calc-date`.
+
+Legacy Kafka-driven source is still supported:
+
+- `dws.dws_movie_action_1d` with `ads.source_type=movie_action_daily`
+
+Full snapshot source is still available for lifetime-style ranking snapshots:
+
+- `dws.dws_movie_engagement_1d` with `ads.source_type=movie_metric_snapshot`
+
+Example:
 
 ```bash
 spark-submit \
@@ -145,6 +246,61 @@ Optional override top N result rows per period:
 
 ```bash
 --top-n 200
+```
+
+Sync ADS hot rankings to PostgreSQL table `public.stats_hot_movies`:
+
+```bash
+spark-submit \
+  --master yarn \
+  --deploy-mode client \
+  --packages org.postgresql:postgresql:42.7.3 \
+  jobs/sync_ads_hot_movies_to_postgres.py \
+  --config conf/etl_config.json \
+  --calc-date 2026-02-25
+```
+
+The sync job writes `DAILY`, `WEEKLY`, `MONTHLY`, and `TOTAL` rows from `ads.ads_hot_movies.dt=calc-date`.
+It deletes existing rows for the same `calc_date` before appending, so reruns stay idempotent under the unique key `(movie_id, period_type, calc_date)`.
+
+Wrapper script:
+
+```bash
+bash run_ads_hot_movies_pg_sync.sh 2026-02-25 conf/etl_config.json
+```
+
+Important:
+
+- `ads.source_type=movie_metric_daily` is the recommended mode when weekly and monthly rankings must reflect the true recent 7/30 day windows; in this mode `TOTAL` aggregates all available daily partitions up to `calc-date`.
+- `ads.source_type=movie_metric_snapshot` still labels one full snapshot as `DAILY / WEEKLY / MONTHLY / TOTAL` for compatibility, but those periods share the same full-data snapshot metrics.
+- Old Hive partitions generated before this change may still only contain `period_type='SNAPSHOT'`; rebuild those dates before syncing them to PostgreSQL.
+
+Hybrid hot ranking keeps PostgreSQL full-data hotness as the stable base, then adds recent Kafka trend boosts without directly summing the same behavior counts across both sources.
+
+Recommended prerequisites:
+
+```bash
+bash run_dws_build.sh 2026-02-25 conf/etl_config.json
+bash run_dws_profiles.sh 2026-02-25 conf/etl_config.json
+bash run_dws_postgres_interactions.sh 2026-02-25 conf/etl_config.json
+```
+
+Build hybrid hot ranking (`ads.ads_hybrid_hot_movies`):
+
+```bash
+spark-submit \
+  --master yarn \
+  --deploy-mode client \
+  jobs/build_ads_hybrid_hot_movies.py \
+  --config conf/etl_config.json \
+  --calc-date 2026-02-25 \
+  --top-n 100
+```
+
+Wrapper script:
+
+```bash
+bash run_ads_hybrid_hot.sh 2026-02-25 conf/etl_config.json --top-n 100
 ```
 
 ## 8) Build more ADS reports
@@ -196,7 +352,17 @@ Optional override top N genres:
 
 ## 9) Build ItemCF recommendations (Spark + Hive)
 
-Generate both outputs in one run:
+Generate both outputs in one run.
+
+Recommended source:
+
+- `dws.dws_user_item_preference_1d` with `ads_itemcf.source_type=user_item_preference`
+
+Legacy Kafka-driven source is still supported:
+
+- `dwd.dwd_user_event_wide_di` with `ads_itemcf.source_type=event_wide`
+
+Outputs:
 
 - item-item similarity: `ads.ads_itemcf_similar_movies`
 - personalized recommendations: `ads.ads_itemcf_user_recommendations`
@@ -228,6 +394,10 @@ Main parameters are configurable in `ads_itemcf`:
 
 ### 10.1 User-item recommendation features (`ads.ads_reco_user_item_features_1d`)
 
+Recommended source:
+
+- `dws.dws_user_item_preference_1d` with `ads_reco_user_item_features.source_type=user_item_preference`
+
 ```bash
 spark-submit \
   --master yarn \
@@ -237,7 +407,43 @@ spark-submit \
   --calc-date 2026-02-25
 ```
 
-### 10.2 Search keyword insights (`ads.ads_search_keyword_insights_1d`)
+### 10.2 Hybrid reranked recommendations (`ads.ads_hybrid_user_recommendations`)
+
+This job keeps PostgreSQL-driven ItemCF recall, then reranks candidates with recent Kafka behavior:
+
+- recent user genre preference
+- recent duplicate-interaction suppression
+- recent movie popularity
+- movie quality score
+
+Recommended prerequisites:
+
+```bash
+bash run_dws_build.sh 2026-02-25 conf/etl_config.json
+bash run_dws_profiles.sh 2026-02-25 conf/etl_config.json
+bash run_ads_itemcf.sh 2026-02-25 conf/etl_config.json --top-n 100
+```
+
+Run hybrid rerank:
+
+```bash
+spark-submit \
+  --master yarn \
+  --deploy-mode client \
+  jobs/build_ads_hybrid_user_recommendations.py \
+  --config conf/etl_config.json \
+  --calc-date 2026-02-25 \
+  --top-n 30 \
+  --candidate-top-n 100
+```
+
+Wrapper script:
+
+```bash
+bash run_ads_hybrid_reco.sh 2026-02-25 conf/etl_config.json --top-n 30 --candidate-top-n 100
+```
+
+### 10.3 Search keyword insights (`ads.ads_search_keyword_insights_1d`)
 
 Keyword-level conversion metrics attribute each action to the latest preceding search keyword for the same user on the same day, instead of copying one user's later behavior to every keyword they searched.
 
@@ -256,7 +462,7 @@ Optional top N keywords:
 --top-n 200
 ```
 
-### 10.3 Search conversion funnel (`ads.ads_search_funnel_1d`)
+### 10.4 Search conversion funnel (`ads.ads_search_funnel_1d`)
 
 `after_search_*` metrics are computed from actions whose `event_ts` is later than the user's first search event on the calculation day. Favorite conversion only counts favorite `ADD` actions.
 

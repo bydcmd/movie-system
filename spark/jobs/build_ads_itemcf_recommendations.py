@@ -64,6 +64,19 @@ def build_user_item_preference(events_df: DataFrame, weights: dict[str, Any], mi
     )
 
 
+def load_user_item_preference_snapshot(source_df: DataFrame, min_score: float) -> DataFrame:
+    return (
+        source_df.where(F.col("user_id").isNotNull() & F.col("movie_id").isNotNull())
+        .select(
+            F.col("user_id").cast("string").alias("user_id"),
+            F.col("movie_id").cast("bigint").alias("movie_id"),
+            F.col("preference_score").cast("double").alias("preference_score"),
+            F.col("last_event_ts").alias("last_event_ts"),
+        )
+        .where(F.col("preference_score") >= F.lit(float(min_score)))
+    )
+
+
 def build_item_similarity(
     user_item_df: DataFrame,
     min_co_users: int,
@@ -245,17 +258,21 @@ def run() -> None:
     target_tables: dict[str, str] = itemcf_config["target_tables"]
     sink_paths: dict[str, str] = itemcf_config["sink_paths"]
     weights = itemcf_config.get("event_score_weights", {})
+    source_type = str(itemcf_config.get("source_type", "event_wide")).strip().lower()
 
     spark = build_spark_session("movie-ads-itemcf-recommendations", spark_config)
     try:
         spark.sql("CREATE DATABASE IF NOT EXISTS ads")
 
-        start_date = (dt.date.fromisoformat(calc_date) - dt.timedelta(days=lookback_days - 1)).isoformat()
-        source_df = spark.table(source_table).where((F.col("dt") >= start_date) & (F.col("dt") <= calc_date))
-
         max_items_per_user = resolve_positive_int(itemcf_config.get("max_items_per_user", 200), "max_items_per_user")
+        if source_type == "user_item_preference":
+            source_df = spark.table(source_table).where(F.col("dt") == calc_date)
+            user_item_df = load_user_item_preference_snapshot(source_df, min_user_item_score).cache()
+        else:
+            start_date = (dt.date.fromisoformat(calc_date) - dt.timedelta(days=lookback_days - 1)).isoformat()
+            source_df = spark.table(source_table).where((F.col("dt") >= start_date) & (F.col("dt") <= calc_date))
+            user_item_df = build_user_item_preference(source_df, weights, min_user_item_score).cache()
 
-        user_item_df = build_user_item_preference(source_df, weights, min_user_item_score).cache()
         similarity_df = build_item_similarity(
             user_item_df, min_co_users=min_co_users, shrinkage=shrinkage,
             top_k=top_k, max_items_per_user=max_items_per_user,
@@ -285,7 +302,7 @@ def run() -> None:
         user_item_df.unpersist()
         print(
             "ADS itemCF build finished. "
-            f"source={source_table}, dt={calc_date}, lookback_days={lookback_days}, "
+            f"source={source_table}, source_type={source_type}, dt={calc_date}, lookback_days={lookback_days}, "
             f"top_k={top_k}, top_n={top_n}, similar_cnt={similarity_count}, recommend_cnt={recommendation_count}"
         )
     finally:

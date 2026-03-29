@@ -34,7 +34,7 @@ public interface MovieMapper {
 
     /**
      * 获取趋势榜单
-     * @param period 周期类型: DAILY, WEEKLY, MONTHLY
+     * @param period 周期类型: DAILY, WEEKLY, MONTHLY, TOTAL
      * @param limit 返回数量
      */
     List<TrendingMovieDTO> selectTrendingWithScore(@Param("period") String period,

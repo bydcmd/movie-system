@@ -30,6 +30,41 @@ STORED AS ORC
 LOCATION '/warehouse/movie/ads/hot_movies'
 TBLPROPERTIES ('orc.compress'='SNAPPY');
 
+CREATE EXTERNAL TABLE IF NOT EXISTS ads.ads_hybrid_hot_movies (
+  movie_id bigint,
+  movie_name string,
+  movie_year int,
+  movie_genres string,
+  movie_score decimal(3,1),
+  movie_douban_score decimal(3,1),
+  period_type string,
+  rank_no int,
+  hybrid_hot_score decimal(18,8),
+  base_hot_score decimal(18,4),
+  recent_hot_score decimal(18,4),
+  recent_trend_boost decimal(18,8),
+  trend_ratio_boost decimal(18,8),
+  quality_boost decimal(18,8),
+  recent_view_pv bigint,
+  recent_view_uv bigint,
+  recent_rating_cnt bigint,
+  recent_rating_avg decimal(10,2),
+  recent_comment_cnt bigint,
+  recent_comment_like_cnt bigint,
+  recent_favorite_add_cnt bigint,
+  recent_favorite_remove_cnt bigint,
+  recent_watched_cnt bigint,
+  recent_active_user_cnt bigint,
+  window_start string,
+  window_end string,
+  base_last_event_ts timestamp,
+  recent_last_event_ts timestamp
+)
+PARTITIONED BY (dt string)
+STORED AS ORC
+LOCATION '/warehouse/movie/ads/hybrid_hot_movies'
+TBLPROPERTIES ('orc.compress'='SNAPPY');
+
 CREATE EXTERNAL TABLE IF NOT EXISTS ads.ads_user_funnel_1d (
   total_active_users bigint,
   view_users bigint,
@@ -118,6 +153,33 @@ CREATE EXTERNAL TABLE IF NOT EXISTS ads.ads_reco_user_item_features_1d (
 PARTITIONED BY (dt string)
 STORED AS ORC
 LOCATION '/warehouse/movie/ads/reco_user_item_features_1d'
+TBLPROPERTIES ('orc.compress'='SNAPPY');
+
+CREATE EXTERNAL TABLE IF NOT EXISTS ads.ads_hybrid_user_recommendations (
+  user_id string,
+  movie_id bigint,
+  rank_no int,
+  base_rank_no int,
+  rerank_score decimal(18,8),
+  base_recommend_score decimal(18,8),
+  genre_match_score decimal(18,8),
+  popularity_boost decimal(18,8),
+  quality_boost decimal(18,8),
+  recent_interaction_penalty decimal(18,8),
+  seed_item_cnt bigint,
+  best_similarity decimal(18,8),
+  movie_name string,
+  movie_year int,
+  movie_genres string,
+  movie_score decimal(3,1),
+  movie_douban_score decimal(3,1),
+  movie_hot_score decimal(18,4),
+  is_recently_interacted tinyint,
+  last_recent_event_ts timestamp
+)
+PARTITIONED BY (dt string)
+STORED AS ORC
+LOCATION '/warehouse/movie/ads/hybrid_user_recommendations'
 TBLPROPERTIES ('orc.compress'='SNAPPY');
 
 CREATE EXTERNAL TABLE IF NOT EXISTS ads.ads_search_keyword_insights_1d (

@@ -56,3 +56,52 @@ PARTITIONED BY (dt string)
 STORED AS ORC
 LOCATION '/warehouse/movie/dwd/user_event_wide_di'
 TBLPROPERTIES ('orc.compress'='SNAPPY');
+
+CREATE EXTERNAL TABLE IF NOT EXISTS dwd.dwd_user_snapshot_di (
+  user_id string,
+  user_nickname string,
+  user_avatar string,
+  user_url string,
+  user_role tinyint,
+  user_status int,
+  password_version int,
+  email string,
+  create_time timestamp,
+  update_time timestamp,
+  register_date string,
+  update_date string,
+  source_snapshot_dt string
+)
+PARTITIONED BY (dt string)
+STORED AS ORC
+LOCATION '/warehouse/movie/dwd/user_snapshot_di'
+TBLPROPERTIES ('orc.compress'='SNAPPY');
+
+CREATE EXTERNAL TABLE IF NOT EXISTS dwd.dwd_movie_snapshot_di (
+  movie_id bigint,
+  movie_name string,
+  movie_alias string,
+  movie_actors string,
+  movie_cover string,
+  movie_directors string,
+  movie_douban_score decimal(3,1),
+  movie_score decimal(3,1),
+  movie_douban_votes int,
+  movie_votes int,
+  movie_genres string,
+  imdb_id string,
+  movie_languages string,
+  movie_duration_mins string,
+  movie_regions string,
+  release_date string,
+  storyline string,
+  movie_year int,
+  movie_writers string,
+  rating_weights string,
+  full_search_text string,
+  source_snapshot_dt string
+)
+PARTITIONED BY (dt string)
+STORED AS ORC
+LOCATION '/warehouse/movie/dwd/movie_snapshot_di'
+TBLPROPERTIES ('orc.compress'='SNAPPY');

@@ -11,7 +11,7 @@ from pyspark.sql import Window
 import _bootstrap  # noqa: F401
 
 from utils.config_loader import load_config
-from utils.hive_utils import write_partition
+from utils.hive_utils import resolve_common_dt_partition_date, write_partition
 from utils.spark_factory import build_spark_session
 
 
@@ -26,7 +26,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--snapshot-date",
         default="",
-        help="Snapshot partition date for PostgreSQL ODS full tables. Default equals calc-date.",
+        help="Snapshot partition date for PostgreSQL ODS full tables. "
+        "If omitted, use the latest common dt partition not newer than calc-date.",
     )
     return parser.parse_args()
 
@@ -164,13 +165,25 @@ def run() -> None:
     dwd_config: dict[str, Any] = config["dwd"]
 
     calc_date = args.calc_date
-    snapshot_date = args.snapshot_date or calc_date
+    requested_snapshot_date = args.snapshot_date.strip()
 
     spark = build_spark_session("movie-dwd-user-event-wide-di", spark_config)
     try:
         spark.sql("CREATE DATABASE IF NOT EXISTS dwd")
 
         source_tables = dwd_config["source_tables"]
+        snapshot_date = resolve_common_dt_partition_date(
+            [
+                source_tables["users"],
+                source_tables["movies"],
+                source_tables["comments"],
+                source_tables["favorite_folders"],
+                source_tables["ratings"],
+            ],
+            requested_snapshot_date,
+            spark,
+            fallback_max_date=calc_date,
+        )
         events_df = load_partition(spark, source_tables["events"], calc_date)
         users_df = load_partition(spark, source_tables["users"], snapshot_date)
         movies_df = load_partition(spark, source_tables["movies"], snapshot_date)
@@ -185,7 +198,9 @@ def run() -> None:
         sink_path = dwd_config["sink_path"]
         write_partition(wide_df, target_table, sink_path, calc_date, spark)
 
-        print(f"DWD build finished. table={target_table}, dt={calc_date}")
+        print(
+            f"DWD build finished. table={target_table}, dt={calc_date}, source_snapshot_dt={snapshot_date}"
+        )
     finally:
         spark.stop()
 

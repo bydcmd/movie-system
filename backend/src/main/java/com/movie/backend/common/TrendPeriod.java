@@ -3,7 +3,8 @@ package com.movie.backend.common;
 public enum TrendPeriod {
     DAILY,
     WEEKLY,
-    MONTHLY;
+    MONTHLY,
+    TOTAL;
 
     public static TrendPeriod from(String value) {
         if (value == null) {
