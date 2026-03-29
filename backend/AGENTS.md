@@ -6,7 +6,7 @@
 - `service/` and `service/impl/`: service interfaces and implementations.
 - `mapper/`: MyBatis mappers; SQL XML files live under `src/main/resources/mapper`.
 - `entity/`, `dto/`, `common/`, `config/`, `exception/`, `utils/`, `messaging/`.
-- `src/main/resources`: configuration (`application.yml`, `application-dev.yml`) and mapper XMLs.
+- `src/main/resources`: configuration (`application.yml`, tracked `application-dev.example.yml`, ignored local `application-dev.yml`) and mapper XMLs.
 - `src/test/java/com/movie/backend`: tests for controllers/services; see `controller/README_MOVIE_TEST.md`.
 - `sql/`: schema and migration scripts (e.g., `sql/movie_db.sql`).
 
@@ -41,5 +41,5 @@
   - Screenshots only if UI/API output is user-facing.
 
 ## Security & Configuration Tips
-- Configure local secrets in `src/main/resources/application-dev.yml`.
-- Avoid committing credentials or tokens; use environment-specific overrides when possible.
+- Copy `src/main/resources/application-dev.example.yml` to `src/main/resources/application-dev.yml` for local secrets and machine-specific overrides.
+- Avoid committing credentials or tokens; keep `application-dev.yml` local-only.

@@ -102,6 +102,7 @@ coverage/
 # Local data / runtime artifacts
 # ====================================================
 /data/
+/.venv/
 /dump.rdb
 dump.rdb
 **/__pycache__/
@@ -114,7 +115,10 @@ metastore_db/
 spark-warehouse/
 derby.log
 checkpoints/
+/spark/.venv/
+/spark/conf/etl_config.json
 /spark/.python-version
+/backend/src/main/resources/application-dev.yml
 
 # ====================================================
 # Agent / local tooling state

@@ -1,20 +1,19 @@
 server:
   port: 9090
   tomcat:
-    connection-timeout: 60000  # 连接超时时间 60 秒
-    keep-alive-timeout: 60000  # Keep-Alive 超时时间 60 秒
-    max-keep-alive-requests: 100  # 最大 Keep-Alive 请求数
+    connection-timeout: 60000
+    keep-alive-timeout: 60000
+    max-keep-alive-requests: 100
     threads:
-      max: 200  # 最大线程数
-      min-spare: 10  # 最小空闲线程数
+      max: 200
+      min-spare: 10
 
 spring:
   datasource:
-    # Primary (PostgreSQL)
     driver-class-name: org.postgresql.Driver
-    url: jdbc:postgresql://localhost/movie_db?useUnicode=true&characterEncoding=utf-8&useSSL=false
-    username: postgres
-    password: Hadoop@123
+    url: ${MOVIE_DB_URL:jdbc:postgresql://localhost:5432/movie_db}
+    username: ${MOVIE_DB_USERNAME:postgres}
+    password: ${MOVIE_DB_PASSWORD:change-me}
     type: com.alibaba.druid.pool.DruidDataSource
     druid:
       initial-size: 5
@@ -23,26 +22,22 @@ spring:
       max-wait: 60000
       validation-query: SELECT 1
 
-  # Redis
   data:
     redis:
-      host: localhost
-      port: 6379
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
       database: 0
-      # password:  # Add password if needed
-      timeout: 10000ms  # 增加到 10 秒，适应远程服务器网络延迟
+      timeout: 10000ms
       lettuce:
         pool:
           max-active: 8
           max-wait: -1ms
           max-idle: 8
           min-idle: 0
-        # 连接超时和命令超时配置
         shutdown-timeout: 100ms
 
-  # Kafka
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:8.136.198.88:9093}
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
@@ -78,12 +73,11 @@ app:
       cleanup-retention-ms: 604800000
       cleanup-batch-size: 500
 
-  # Cache Configuration
   cache:
     type: redis
     redis:
-      time-to-live: 3600000  # 1 hour (in milliseconds)
-      cache-null-values: false  # Do not cache null values
+      time-to-live: 3600000
+      cache-null-values: false
       use-key-prefix: true
       key-prefix: "movie:"
 
@@ -101,26 +95,24 @@ app:
     refresh-cookie-secure: false
     refresh-cookie-same-site: Lax
 
-# MyBatis
 mybatis:
   mapper-locations: classpath:mapper/*.xml
   configuration:
     map-underscore-to-camel-case: true
 
-# Logging
 logging:
   level:
     com.movie.backend: DEBUG
     org.springframework: INFO
 
 file:
-  upload-path: D:/project/backend/uploaded/
-  domain: http://localhost:8080
+  upload-path: ${FILE_UPLOAD_PATH:./uploaded/}
+  domain: ${FILE_DOMAIN:http://localhost:8080}
 
-# JWT Configuration
 jwt:
-  secret: ThisIsAVeryLongSecretKeyForMovieProjectThatIsAtLeast64BytesLongToSatisfyHS512SecurityRequirement
-  access-token-expiration: 3600000  # 1 小时 (单位: 毫秒)
-  refresh-token-expiration: 2592000000  # 30 天 (单位: 毫秒)
+  secret: ${JWT_SECRET:replace-this-with-a-local-secret-at-least-64-bytes-long}
+  access-token-expiration: 3600000
+  refresh-token-expiration: 2592000000
+
 pagehelper:
   helperDialect: postgresql

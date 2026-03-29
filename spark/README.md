@@ -15,6 +15,8 @@ cp conf/etl_config.example.json conf/etl_config.json
 
 Set PostgreSQL JDBC info, Kafka brokers, and HDFS locations.
 
+`conf/etl_config.json` is a local working file and is intentionally ignored by Git. A local virtual environment under `spark/.venv/` is also ignored.
+
 ## Local uv runtime notes
 
 For local execution with `uv`:
@@ -35,6 +37,39 @@ uv run python -m jobs.build_ads_itemcf_recommendations --config conf/etl_config.
 # wrong
 uv run python -m build_ads_itemcf_recommendations.py
 ```
+
+## Wrapper Script Naming
+
+Spark job entrypoints live under `jobs/` and keep descriptive `build_*`, `sync_*`, or ingestion-oriented names.
+
+Shell wrappers live at the `spark/` root as `run_*.sh` and provide a stable operator-facing entrypoint with argument parsing, defaults, and `spark-submit` flags.
+
+Naming shorthand used in jobs:
+
+- `_1d`: daily aggregate or profile outputs keyed by `calc-date`
+- `_di`: daily partitioned detail or snapshot-style outputs using downstream Hive naming
+
+Common wrapper to job mappings:
+
+- `run_postgres_sync.sh` -> `jobs/postgres_to_hive_ods.py`
+- `run_kafka_sync.sh` -> `jobs/kafka_events_to_hive_ods.py`
+- `run_dwd_build.sh` -> `jobs/build_dwd_user_event_wide_di.py`
+- `run_dwd_user_snapshot.sh` -> `jobs/build_dwd_user_snapshot_di.py`
+- `run_dwd_movie_snapshot.sh` -> `jobs/build_dwd_movie_snapshot_di.py`
+- `run_dws_build.sh` -> `jobs/build_dws_user_movie_metrics_di.py`
+- `run_dws_postgres_interactions.sh` -> `jobs/build_dws_postgres_interactions_1d.py`
+- `run_dws_profiles.sh` -> `jobs/build_dws_user_movie_profiles_1d.py`
+- `run_ads_hot_movies.sh` -> `jobs/build_ads_hot_movies.py`
+- `run_ads_hot_movies_pg_sync.sh` -> `jobs/sync_ads_hot_movies_to_postgres.py`
+- `run_ads_hybrid_hot.sh` -> `jobs/build_ads_hybrid_hot_movies.py`
+- `run_ads_hybrid_reco.sh` -> `jobs/build_ads_hybrid_user_recommendations.py`
+- `run_ads_itemcf.sh` -> `jobs/build_ads_itemcf_recommendations.py`
+- `run_ads_genre_preference.sh` -> `jobs/build_ads_genre_preference_1d.py`
+- `run_ads_reco_user_item_features.sh` -> `jobs/build_ads_reco_user_item_features_1d.py`
+- `run_ads_search_funnel.sh` -> `jobs/build_ads_search_funnel_1d.py`
+- `run_ads_search_keyword_insights.sh` -> `jobs/build_ads_search_keyword_insights_1d.py`
+- `run_ads_user_funnel.sh` -> `jobs/build_ads_user_funnel_1d.py`
+- `run_ads_user_retention.sh` -> `jobs/build_ads_user_retention.py`
 
 ## 2) Create Hive ODS tables
 
