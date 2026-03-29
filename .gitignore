@@ -104,6 +104,8 @@ coverage/
 /data/
 /dump.rdb
 dump.rdb
+**/__pycache__/
+*.pyc
 *.sqlite
 *.db
 *.db-shm
@@ -119,10 +121,18 @@ checkpoints/
 /.agents/
 /.claude/
 /.qoder/
+/.qoderignore
 /.serena/
+/,
+/backend/.serena/
 /backend/.agent/
 /backend/.qoder/
-/frontend/.serena/cache/
+/frontend/.serena/
+/frontend/api.json
+/plan/
+/review/api_review.txt
+/review/controller_review_*.md
+/spark/ssh.txt
 
 # ====================================================
 # Temporary / backup files
