@@ -64,6 +64,7 @@ Common wrapper to job mappings:
 - `run_ads_hybrid_hot.sh` -> `jobs/build_ads_hybrid_hot_movies.py`
 - `run_ads_hybrid_reco.sh` -> `jobs/build_ads_hybrid_user_recommendations.py`
 - `run_ads_itemcf.sh` -> `jobs/build_ads_itemcf_recommendations.py`
+- `run_ads_itemcf_similar_movies_pg_sync.sh` -> `jobs/sync_ads_itemcf_similar_movies_to_postgres.py`
 - `run_ads_genre_preference.sh` -> `jobs/build_ads_genre_preference_1d.py`
 - `run_ads_reco_user_item_features.sh` -> `jobs/build_ads_reco_user_item_features_1d.py`
 - `run_ads_search_funnel.sh` -> `jobs/build_ads_search_funnel_1d.py`
@@ -424,6 +425,27 @@ Main parameters are configurable in `ads_itemcf`:
 - `min_co_users`: minimum common users for item pairs
 - `shrinkage`: similarity shrinkage factor
 - `event_score_weights`: behavior-to-preference scoring weights (`favorite_add` / `favorite_remove`; legacy `favorite` is still accepted as a fallback for add weight)
+
+Sync ADS ItemCF similar movies to PostgreSQL table `public.stats_similar_movies`:
+
+```bash
+spark-submit \
+  --master yarn \
+  --deploy-mode client \
+  --packages org.postgresql:postgresql:42.7.3 \
+  jobs/sync_ads_itemcf_similar_movies_to_postgres.py \
+  --config conf/etl_config.json \
+  --calc-date 2026-02-25
+```
+
+The sync job writes rows from `ads.ads_itemcf_similar_movies.dt=calc-date`.
+It deletes existing rows for the configured `similarity_type` values first (default: `2` for ItemCF) and then appends the new snapshot, so reruns stay idempotent under the unique key `(movie_id, similar_movie_id, similarity_type)`.
+
+Wrapper script:
+
+```bash
+bash run_ads_itemcf_similar_movies_pg_sync.sh 2026-02-25 conf/etl_config.json
+```
 
 ## 10) Build search & recommendation mining reports
 

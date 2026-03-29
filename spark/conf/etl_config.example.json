@@ -304,6 +304,14 @@
       "rating_value": 2.0
     }
   },
+  "ads_itemcf_similar_movies_postgres_sync": {
+    "source_table": "ads.ads_itemcf_similar_movies",
+    "target_table": "public.stats_similar_movies",
+    "supported_similarity_types": [
+      2
+    ],
+    "batch_size": 1000
+  },
   "ads_reco_user_item_features": {
     "source_table": "dws.dws_user_item_preference_1d",
     "source_type": "user_item_preference",
