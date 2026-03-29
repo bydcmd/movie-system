@@ -11,6 +11,8 @@ import java.util.List;
 public interface CommentMapper {
     int deleteById(@Param("id") Long id);
 
+    Comment selectById(@Param("id") Long id);
+
     List<Comment> selectList(@Param("keyword") String keyword);
 
     /**
@@ -127,4 +129,46 @@ public interface CommentMapper {
      * Count all comments.
      */
     int countAll();
+
+    /**
+     * 获取用户对某部电影的指定类型和状态的评论
+     */
+    Comment selectByUserAndMovieAndTypeAndStatus(
+            @Param("userId") String userId,
+            @Param("movieId") Long movieId,
+            @Param("type") Integer type,
+            @Param("status") Integer status
+    );
+
+    /**
+     * 更新评论状态
+     */
+    int updateStatus(
+            @Param("id") Long id,
+            @Param("userId") String userId,
+            @Param("status") Integer status,
+            @Param("commentTime") java.util.Date commentTime
+    );
+
+    int updateStatusById(
+            @Param("id") Long id,
+            @Param("status") Integer status
+    );
+
+    /**
+     * 更新草稿内容（带标题和状态）
+     */
+    int updateDraftContent(
+            @Param("userId") String userId,
+            @Param("movieId") Long movieId,
+            @Param("type") Integer type,
+            @Param("title") String title,
+            @Param("content") String content,
+            @Param("commentTime") java.util.Date commentTime
+    );
+
+    /**
+     * 根据评论ID和用户ID查询评论
+     */
+    Comment selectByIdAndUserId(@Param("id") Long id, @Param("userId") String userId);
 }

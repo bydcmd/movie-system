@@ -138,9 +138,13 @@ public class KafkaEventPublisher {
             log.error("Failed to serialize kafka event payload: {}", payload.getClass().getSimpleName(), e);
             return;
         }
+        log.info("Sending Kafka message: topic={}, key={}, payload={}", topic, key, json);
         kafkaTemplate.send(topic, key, json).whenComplete((result, ex) -> {
             if (ex != null) {
                 log.error("Failed to send kafka event. topic={}, key={}", topic, key, ex);
+            } else {
+                log.info("Kafka message sent successfully. topic={}, key={}, partition={}, offset={}",
+                        topic, key, result.getRecordMetadata().partition(), result.getRecordMetadata().offset());
             }
         });
     }

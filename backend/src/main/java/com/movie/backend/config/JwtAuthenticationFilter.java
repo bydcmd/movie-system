@@ -1,5 +1,6 @@
 package com.movie.backend.config;
 
+import com.movie.backend.common.UserStatus;
 import com.movie.backend.entity.User;
 import com.movie.backend.mapper.UserMapper;
 import com.movie.backend.service.TokenBlacklistService;
@@ -49,7 +50,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         User user = userMapper.selectById(userId);
                         if (user != null) {
                             Integer status = user.getStatus();
-                            if (status == null || status == 0) {
+                            if (UserStatus.isActive(status)) {
                                 Integer tokenPasswordVersion = claims.get("passwordVersion", Integer.class);
                                 Integer currentPasswordVersion = user.getPasswordVersion() != null
                                         ? user.getPasswordVersion() : 1;

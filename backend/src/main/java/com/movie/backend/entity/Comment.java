@@ -33,4 +33,7 @@ public class Comment {
 
     @Schema(description = "乐观锁版本号", example = "0")
     private Integer version;
+
+    @Schema(description = "评论状态 (1:草稿, 2:发布, 3:隐藏)", example = "2")
+    private Integer status;
 }

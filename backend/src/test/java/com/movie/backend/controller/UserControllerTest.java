@@ -62,7 +62,7 @@ public class UserControllerTest {
         registerDTO.setNickname("TestUser");
         registerDTO.setEmail("test@test.com");
 
-        mockMvc.perform(post("/users/register")
+        mockMvc.perform(post("/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(registerDTO)))
                 .andExpect(status().isOk())
@@ -85,7 +85,7 @@ public class UserControllerTest {
 
         when(userService.login(any(LoginDTO.class))).thenReturn(mockUser);
 
-        mockMvc.perform(post("/users/login")
+        mockMvc.perform(post("/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(loginDTO)))
                 .andExpect(status().isOk())
@@ -137,6 +137,16 @@ public class UserControllerTest {
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.message").value("Success"))
                 .andExpect(jsonPath("$.data").value("个人资料更新成功"));
+    }
+
+    @Test
+    public void testGetPublicUserInfo_NotFoundWhenCancelled() throws Exception {
+        when(userService.getPublicUserInfoWithStats("cancelled_user")).thenReturn(null);
+
+        mockMvc.perform(get("/users/cancelled_user"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(404))
+                .andExpect(jsonPath("$.message").value("用户不存在"));
     }
 
     @Test

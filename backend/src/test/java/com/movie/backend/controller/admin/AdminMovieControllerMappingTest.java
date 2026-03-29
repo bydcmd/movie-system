@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
-class AdminControllerMappingTest {
+class AdminMovieControllerMappingTest {
 
     @Mock
     private AdminService adminService;
@@ -33,7 +33,7 @@ class AdminControllerMappingTest {
     private AnalyticsService analyticsService;
 
     @InjectMocks
-    private AdminController adminController;
+    private AdminMovieController adminMovieController;
 
     @Test
     void updateMovieShouldMapScoreFieldsSeparately() {
@@ -44,7 +44,7 @@ class AdminControllerMappingTest {
         dto.setVotes(321);
         dto.setDoubanVotes(654321);
 
-        adminController.updateMovie(8888L, dto);
+        adminMovieController.updateMovie(8888L, dto);
 
         ArgumentCaptor<Movie> movieCaptor = ArgumentCaptor.forClass(Movie.class);
         verify(adminService).updateMovie(movieCaptor.capture());

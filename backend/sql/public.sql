@@ -221,7 +221,8 @@ CREATE TABLE "public"."comments" (
   "comment_time" timestamp(6),
   "title" varchar(255) COLLATE "pg_catalog"."default" DEFAULT NULL::character varying,
   "type" int2 DEFAULT 1,
-  "version" int4 DEFAULT 0
+  "version" int4 DEFAULT 0,
+  "status" int2 DEFAULT 1
 )
 ;
 COMMENT ON COLUMN "public"."comments"."comment_id" IS '评论唯一ID（自增）';
@@ -233,6 +234,7 @@ COMMENT ON COLUMN "public"."comments"."comment_time" IS '评论时间';
 COMMENT ON COLUMN "public"."comments"."title" IS '评论标题(长评专用)';
 COMMENT ON COLUMN "public"."comments"."type" IS '评论类型: 1-短评, 2-长评';
 COMMENT ON COLUMN "public"."comments"."version" IS '乐观锁版本号';
+COMMENT ON COLUMN "public"."comments"."status" IS '评论状态: 1-草稿, 2-发布, 3-隐藏';
 COMMENT ON TABLE "public"."comments" IS '评论表';
 
 -- ----------------------------

@@ -32,7 +32,7 @@ public class User {
     @Schema(description = "用户角色 (0:管理员, 1:普通用户)", example = "1")
     private Integer role;
 
-    @Schema(description = "账号状态 (0:正常, 1:被禁用/冻结)", example = "0")
+    @Schema(description = "账号状态 (0:正常, 1:被禁用/冻结, 2:已注销)", example = "0")
     private Integer status;
 
     @Schema(description = "密码版本号，用于失效旧 Token（修改密码后递增）", example = "1")

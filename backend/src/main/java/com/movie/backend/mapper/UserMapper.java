@@ -26,7 +26,7 @@ public interface UserMapper {
     /**
      * Search Users (Admin)
      */
-    List<User> selectList(@Param("keyword") String keyword);
+    List<User> selectList(@Param("keyword") String keyword, @Param("status") Integer status);
 
     /**
      * Delete User

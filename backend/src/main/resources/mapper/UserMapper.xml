@@ -40,6 +40,16 @@
             <if test="keyword != null and keyword != ''">
                 AND (user_id LIKE '%' || #{keyword} || '%' OR user_nickname LIKE '%' || #{keyword} || '%')
             </if>
+            <if test="status != null">
+                <choose>
+                    <when test="status == 0">
+                        AND (status IS NULL OR status = 0)
+                    </when>
+                    <otherwise>
+                        AND status = #{status}
+                    </otherwise>
+                </choose>
+            </if>
         </where>
     </select>
 

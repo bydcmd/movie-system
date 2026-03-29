@@ -82,7 +82,7 @@ public class CommentController {
         return Result.success("长评修改成功");
     }
 
-    @Operation(operationId = "getMyMovieLongReview", summary = "获取我的长评", description = "获取当前登录用户对指定电影发布的长评内容。")
+    @Operation(operationId = "getMyMovieLongReview", summary = "获取我的长评", description = "获取当前登录用户对指定电影的可编辑长评内容；如存在草稿则优先返回草稿，否则返回已发布长评。")
     @SecurityRequirement(name = "BearerAuth")
     @PreAuthorize("isAuthenticated()")
     @GetMapping("/movies/{movieId}/long-reviews/me")
@@ -220,6 +220,41 @@ public class CommentController {
         com.movie.backend.dto.TiptapContentDTO dto = 
                 com.movie.backend.utils.TiptapContentConverter.toDto(content);
         return Result.success(dto);
+    }
+
+    @Operation(operationId = "saveLongReviewDraft", summary = "保存长评草稿", description = "保存长评草稿，内容可以为空。如已有草稿则更新；即使已发布过长评，也允许保留一份独立草稿。")
+    @SecurityRequirement(name = "BearerAuth")
+    @PreAuthorize("isAuthenticated()")
+    @PostMapping("/movies/{movieId}/long-reviews/draft")
+    public Result<String> saveLongReviewDraft(
+            @Parameter(description = "电影ID", required = true) @PathVariable @NotNull @Min(1) Long movieId,
+            @RequestBody UpdateLongReviewDTO dto,
+            @AuthenticationPrincipal User user) {
+        commentService.saveLongReviewDraft(user.getId(), movieId, dto.getTitle(), dto.getContent());
+        return Result.success("草稿保存成功");
+    }
+
+    @Operation(operationId = "updateLongReviewDraft", summary = "更新长评草稿", description = "更新已有的长评草稿内容。")
+    @SecurityRequirement(name = "BearerAuth")
+    @PreAuthorize("isAuthenticated()")
+    @PutMapping("/movies/{movieId}/long-reviews/draft")
+    public Result<String> updateLongReviewDraft(
+            @Parameter(description = "电影ID", required = true) @PathVariable @NotNull @Min(1) Long movieId,
+            @RequestBody UpdateLongReviewDTO dto,
+            @AuthenticationPrincipal User user) {
+        commentService.updateLongReviewDraft(user.getId(), movieId, dto.getTitle(), dto.getContent());
+        return Result.success("草稿更新成功");
+    }
+
+    @Operation(operationId = "publishDraft", summary = "发布草稿", description = "将长评草稿发布为正式评论；如已存在正式长评，则用草稿内容覆盖正式长评。")
+    @SecurityRequirement(name = "BearerAuth")
+    @PreAuthorize("isAuthenticated()")
+    @PutMapping("/long-reviews/{commentId}/publish")
+    public Result<String> publishDraft(
+            @Parameter(description = "评论ID", required = true) @PathVariable @NotNull @Min(1) Long commentId,
+            @AuthenticationPrincipal User user) {
+        commentService.publishDraft(user.getId(), commentId);
+        return Result.success("草稿发布成功");
     }
 
     private void validateGuestPageWindow(int page, int size, boolean guest) {

@@ -1,5 +1,6 @@
 package com.movie.backend.service.impl;
 
+import com.movie.backend.common.UserStatus;
 import com.movie.backend.dto.LoginDTO;
 import com.movie.backend.dto.PublicUserVO;
 import com.movie.backend.dto.RegisterDTO;
@@ -45,12 +46,11 @@ public class UserServiceImpl implements UserService {
         }
         
         // 检查用户状态
-        if (user.getStatus() != null) {
-            if (user.getStatus() == 1) {
-                throw new RuntimeException("账号已被禁用，请联系管理员");
-            } else if (user.getStatus() == 2) { // 新增状态 2 判断
-                throw new RuntimeException("该账号已注销，无法登录");
-            }
+        if (UserStatus.isFrozen(user.getStatus())) {
+            throw new RuntimeException("账号已被禁用，请联系管理员");
+        }
+        if (UserStatus.isCancelled(user.getStatus())) {
+            throw new RuntimeException("该账号已注销，无法登录");
         }
         
         // 使用BCrypt验证密码
@@ -86,7 +86,7 @@ public class UserServiceImpl implements UserService {
         // 使用BCrypt加密密码
         user.setPassword(PasswordUtil.encode(registerDTO.getPassword()));
         user.setRole(1); // Default is 1 (User), 0 is Admin
-        user.setStatus(0); // 默认状态为正常
+        user.setStatus(UserStatus.ACTIVE); // 默认状态为正常
         user.setPasswordVersion(1); // 初始密码版本为 1
         user.setCreateTime(new Date());
         user.setUpdateTime(new Date());
@@ -108,7 +108,7 @@ public class UserServiceImpl implements UserService {
     @Override
     public PublicUserVO getPublicUserInfo(String userId) {
         User user = userMapper.selectById(userId);
-        if (user == null) {
+        if (user == null || UserStatus.isCancelled(user.getStatus())) {
             return null;
         }
         
@@ -125,7 +125,7 @@ public class UserServiceImpl implements UserService {
     @Override
     public PublicUserVO getPublicUserInfoWithStats(String userId) {
         User user = userMapper.selectById(userId);
-        if (user == null) {
+        if (user == null || UserStatus.isCancelled(user.getStatus())) {
             return null;
         }
         
@@ -207,7 +207,7 @@ public class UserServiceImpl implements UserService {
         User updateUser = new User();
         updateUser.setId(userId);
         // 设置状态为 2 (已注销)
-        updateUser.setStatus(2);
+        updateUser.setStatus(UserStatus.CANCELLED);
         updateUser.setUpdateTime(new Date());
 
         // 【可选策略】如果希望注销后在评论区隐藏真实身份，可以取消下面两行的注释

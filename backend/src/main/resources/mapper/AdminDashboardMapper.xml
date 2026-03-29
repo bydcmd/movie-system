@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.movie.backend.mapper.AdminDashboardMapper">
+
+    <select id="selectOverview" resultType="com.movie.backend.dto.AdminDashboardOverviewVO">
+        SELECT
+            (SELECT COUNT(*)::int FROM users) AS totalUsers,
+            (SELECT COUNT(*)::int FROM users WHERE status IS NULL OR status = 0) AS activeUsers,
+            (SELECT COUNT(*)::int FROM users WHERE status = 1) AS frozenUsers,
+            (SELECT COUNT(*)::int FROM users WHERE status = 2) AS cancelledUsers,
+            (SELECT COUNT(*)::int FROM users WHERE role = 0) AS adminUsers,
+            (SELECT COUNT(*)::int FROM movies) AS totalMovies,
+            (SELECT COUNT(*)::int FROM persons) AS totalPeople,
+            (SELECT COUNT(*)::int FROM genres) AS totalGenres,
+            (SELECT COUNT(*)::int FROM regions) AS totalRegions,
+            (SELECT COUNT(*)::int FROM comments) AS totalComments,
+            (SELECT COUNT(*)::int FROM comments WHERE status = 2) AS publishedCommentCount,
+            (SELECT COUNT(*)::int FROM comments WHERE status = 1) AS draftCommentCount,
+            (SELECT COUNT(*)::int FROM comments WHERE status = 2 AND type = 1) AS shortCommentCount,
+            (SELECT COUNT(*)::int FROM comments WHERE status = 2 AND type = 2) AS longReviewCount,
+            (SELECT COALESCE(SUM(votes), 0)::int FROM comments WHERE status = 2) AS totalCommentLikes,
+            (SELECT COUNT(*)::int FROM ratings) AS totalRatings,
+            (SELECT COUNT(*)::int FROM favorites) AS totalFavorites,
+            (SELECT COUNT(*)::int FROM view_history) AS totalViewHistories,
+            (SELECT COUNT(*)::int FROM watched_movies) AS totalWatchedMovies
+    </select>
+
+    <select id="selectUserRegistrationTrend" resultType="com.movie.backend.dto.AdminTrendPointVO">
+        WITH dates AS (
+            SELECT generate_series(CURRENT_DATE - INTERVAL '6 day', CURRENT_DATE, INTERVAL '1 day')::date AS trend_date
+        )
+        SELECT
+            TO_CHAR(d.trend_date, 'YYYY-MM-DD') AS date,
+            COALESCE(COUNT(u.user_id), 0)::int AS value
+        FROM dates d
+        LEFT JOIN users u
+            ON u.create_time >= d.trend_date
+           AND u.create_time &lt; d.trend_date + INTERVAL '1 day'
+        GROUP BY d.trend_date
+        ORDER BY d.trend_date
+    </select>
+
+    <select id="selectPublishedCommentTrend" resultType="com.movie.backend.dto.AdminTrendPointVO">
+        WITH dates AS (
+            SELECT generate_series(CURRENT_DATE - INTERVAL '6 day', CURRENT_DATE, INTERVAL '1 day')::date AS trend_date
+        )
+        SELECT
+            TO_CHAR(d.trend_date, 'YYYY-MM-DD') AS date,
+            COALESCE(COUNT(c.comment_id), 0)::int AS value
+        FROM dates d
+        LEFT JOIN comments c
+            ON c.status = 2
+           AND c.comment_time >= d.trend_date
+           AND c.comment_time &lt; d.trend_date + INTERVAL '1 day'
+        GROUP BY d.trend_date
+        ORDER BY d.trend_date
+    </select>
+
+    <select id="selectFavoriteTrend" resultType="com.movie.backend.dto.AdminTrendPointVO">
+        WITH dates AS (
+            SELECT generate_series(CURRENT_DATE - INTERVAL '6 day', CURRENT_DATE, INTERVAL '1 day')::date AS trend_date
+        )
+        SELECT
+            TO_CHAR(d.trend_date, 'YYYY-MM-DD') AS date,
+            COALESCE(COUNT(f.user_id), 0)::int AS value
+        FROM dates d
+        LEFT JOIN favorites f
+            ON f.create_time >= d.trend_date
+           AND f.create_time &lt; d.trend_date + INTERVAL '1 day'
+        GROUP BY d.trend_date
+        ORDER BY d.trend_date
+    </select>
+
+    <select id="selectRatingTrend" resultType="com.movie.backend.dto.AdminTrendPointVO">
+        WITH dates AS (
+            SELECT generate_series(CURRENT_DATE - INTERVAL '6 day', CURRENT_DATE, INTERVAL '1 day')::date AS trend_date
+        )
+        SELECT
+            TO_CHAR(d.trend_date, 'YYYY-MM-DD') AS date,
+            COALESCE(COUNT(r.user_id), 0)::int AS value
+        FROM dates d
+        LEFT JOIN ratings r
+            ON r.rating_time >= d.trend_date
+           AND r.rating_time &lt; d.trend_date + INTERVAL '1 day'
+        GROUP BY d.trend_date
+        ORDER BY d.trend_date
+    </select>
+
+    <select id="selectViewTrend" resultType="com.movie.backend.dto.AdminTrendPointVO">
+        WITH dates AS (
+            SELECT generate_series(CURRENT_DATE - INTERVAL '6 day', CURRENT_DATE, INTERVAL '1 day')::date AS trend_date
+        )
+        SELECT
+            TO_CHAR(d.trend_date, 'YYYY-MM-DD') AS date,
+            COALESCE(COUNT(v.history_id), 0)::int AS value
+        FROM dates d
+        LEFT JOIN view_history v
+            ON v.view_time >= d.trend_date
+           AND v.view_time &lt; d.trend_date + INTERVAL '1 day'
+        GROUP BY d.trend_date
+        ORDER BY d.trend_date
+    </select>
+
+    <select id="selectWatchedTrend" resultType="com.movie.backend.dto.AdminTrendPointVO">
+        WITH dates AS (
+            SELECT generate_series(CURRENT_DATE - INTERVAL '6 day', CURRENT_DATE, INTERVAL '1 day')::date AS trend_date
+        )
+        SELECT
+            TO_CHAR(d.trend_date, 'YYYY-MM-DD') AS date,
+            COALESCE(COUNT(w.user_id), 0)::int AS value
+        FROM dates d
+        LEFT JOIN watched_movies w
+            ON w.create_time >= d.trend_date
+           AND w.create_time &lt; d.trend_date + INTERVAL '1 day'
+        GROUP BY d.trend_date
+        ORDER BY d.trend_date
+    </select>
+
+</mapper>

@@ -27,6 +27,8 @@ public class CommentServiceImpl implements CommentService {
 
     private static final int SHORT_COMMENT_TYPE = 1;
     private static final int LONG_REVIEW_TYPE = 2;
+    private static final int STATUS_DRAFT = 1;
+    private static final int STATUS_PUBLISHED = 2;
 
     @Autowired
     private CommentMapper commentMapper;
@@ -98,6 +100,7 @@ public class CommentServiceImpl implements CommentService {
             comment.setType(SHORT_COMMENT_TYPE);
             comment.setVotes(0);
             comment.setVersion(0); // 初始版本号
+            comment.setStatus(STATUS_PUBLISHED); // 发布状态
             comment.setCommentTime(new java.util.Date());
 
             commentMapper.insert(comment);
@@ -135,9 +138,15 @@ public class CommentServiceImpl implements CommentService {
             comment.setType(LONG_REVIEW_TYPE);
             comment.setVotes(0);
             comment.setVersion(0);
+            comment.setStatus(STATUS_PUBLISHED); // 发布状态
             comment.setCommentTime(new java.util.Date());
 
             commentMapper.insert(comment);
+            Comment existingDraft = commentMapper.selectByUserAndMovieAndTypeAndStatus(
+                    userId, dto.getMovieId(), LONG_REVIEW_TYPE, STATUS_DRAFT);
+            if (existingDraft != null) {
+                commentMapper.deleteByIdAndUserId(existingDraft.getId(), userId);
+            }
             CommentEvent event = new CommentEvent(userId, dto.getMovieId(), comment.getId(), LONG_REVIEW_TYPE, "CREATE", dto.getContent().length());
             kafkaEventPublisher.publishCommentEvent(event);
         } catch (org.springframework.dao.DuplicateKeyException e) {
@@ -152,7 +161,13 @@ public class CommentServiceImpl implements CommentService {
 
     @Override
     public Comment getUserLongReview(String userId, Long movieId) {
-        return commentMapper.selectByUserAndMovieAndType(userId, movieId, LONG_REVIEW_TYPE);
+        Comment draft = commentMapper.selectByUserAndMovieAndTypeAndStatus(
+                userId, movieId, LONG_REVIEW_TYPE, STATUS_DRAFT);
+        if (draft != null) {
+            return draft;
+        }
+        return commentMapper.selectByUserAndMovieAndTypeAndStatus(
+                userId, movieId, LONG_REVIEW_TYPE, STATUS_PUBLISHED);
     }
 
     @Override
@@ -186,7 +201,9 @@ public class CommentServiceImpl implements CommentService {
         if (rows == 0) {
             throw new BusinessException(404, "修改失败，您尚未对该电影发表短评");
         }
-        CommentEvent event = new CommentEvent(userId, movieId, null, SHORT_COMMENT_TYPE, "UPDATE", content.length());
+        Comment comment = commentMapper.selectByUserAndMovieAndType(userId, movieId, SHORT_COMMENT_TYPE);
+        Long commentId = comment != null ? comment.getId() : null;
+        CommentEvent event = new CommentEvent(userId, movieId, commentId, SHORT_COMMENT_TYPE, "UPDATE", content.length());
         kafkaEventPublisher.publishCommentEvent(event);
     }
 
@@ -210,7 +227,9 @@ public class CommentServiceImpl implements CommentService {
         if (rows == 0) {
             throw new BusinessException(404, "修改失败，您尚未对该电影发表短评");
         }
-        CommentEvent event = new CommentEvent(userId, movieId, null, SHORT_COMMENT_TYPE, "UPDATE", content.length());
+        Comment comment = commentMapper.selectByUserAndMovieAndType(userId, movieId, SHORT_COMMENT_TYPE);
+        Long commentId = comment != null ? comment.getId() : null;
+        CommentEvent event = new CommentEvent(userId, movieId, commentId, SHORT_COMMENT_TYPE, "UPDATE", content.length());
         kafkaEventPublisher.publishCommentEvent(event);
     }
 
@@ -240,7 +259,10 @@ public class CommentServiceImpl implements CommentService {
         if (rows == 0) {
             throw new BusinessException(404, "修改失败，您尚未对该电影发表长评");
         }
-        CommentEvent event = new CommentEvent(userId, movieId, null, LONG_REVIEW_TYPE, "UPDATE", content.length());
+        Comment comment = commentMapper.selectByUserAndMovieAndTypeAndStatus(
+                userId, movieId, LONG_REVIEW_TYPE, STATUS_PUBLISHED);
+        Long commentId = comment != null ? comment.getId() : null;
+        CommentEvent event = new CommentEvent(userId, movieId, commentId, LONG_REVIEW_TYPE, "UPDATE", content.length());
         kafkaEventPublisher.publishCommentEvent(event);
     }
 
@@ -356,5 +378,150 @@ public class CommentServiceImpl implements CommentService {
         } else {
             vo.setContentSummary(content);
         }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void saveLongReviewDraft(String userId, Long movieId, String title, String content) {
+        // 校验标题
+        if (StringUtils.hasText(title) && title.length() > 100) {
+            throw new IllegalArgumentException("标题不能超过100字");
+        }
+
+        // 校验内容格式（如果有内容）
+        if (StringUtils.hasText(content)) {
+            TiptapJsonValidator.ValidationResult validationResult =
+                    TiptapJsonValidator.validate(content);
+            if (!validationResult.isValid()) {
+                throw new IllegalArgumentException(validationResult.getMessage());
+            }
+        }
+
+        // 检查是否已有草稿
+        Comment existingDraft = commentMapper.selectByUserAndMovieAndTypeAndStatus(
+                userId, movieId, LONG_REVIEW_TYPE, STATUS_DRAFT);
+
+        if (existingDraft != null) {
+            // 更新现有草稿
+            commentMapper.updateDraftContent(
+                    userId, movieId, LONG_REVIEW_TYPE,
+                    StringUtils.hasText(title) ? title.trim() : null,
+                    content != null ? content.trim() : null,
+                    new java.util.Date()
+            );
+            return;
+        }
+
+        // 创建新草稿
+        Comment draft = new Comment();
+        draft.setUserId(userId);
+        draft.setMovieId(movieId);
+        draft.setTitle(StringUtils.hasText(title) ? title.trim() : null);
+        draft.setContent(content != null ? content.trim() : null);
+        draft.setType(LONG_REVIEW_TYPE);
+        draft.setVotes(0);
+        draft.setVersion(0);
+        draft.setStatus(STATUS_DRAFT);
+        draft.setCommentTime(new java.util.Date());
+
+        commentMapper.insert(draft);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateLongReviewDraft(String userId, Long movieId, String title, String content) {
+        // 校验标题
+        if (StringUtils.hasText(title) && title.length() > 100) {
+            throw new IllegalArgumentException("标题不能超过100字");
+        }
+
+        // 校验内容格式（如果有内容）
+        if (StringUtils.hasText(content)) {
+            TiptapJsonValidator.ValidationResult validationResult =
+                    TiptapJsonValidator.validate(content);
+            if (!validationResult.isValid()) {
+                throw new IllegalArgumentException(validationResult.getMessage());
+            }
+        }
+
+        int rows = commentMapper.updateDraftContent(
+                userId, movieId, LONG_REVIEW_TYPE,
+                StringUtils.hasText(title) ? title.trim() : null,
+                content != null ? content.trim() : null,
+                new java.util.Date()
+        );
+
+        if (rows == 0) {
+            throw new BusinessException(404, "草稿不存在");
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void publishDraft(String userId, Long commentId) {
+        // 获取评论并验证权限
+        Comment draft = commentMapper.selectByIdAndUserId(commentId, userId);
+
+        if (draft == null) {
+            throw new BusinessException(404, "草稿不存在或您无权操作");
+        }
+
+        // 验证评论类型和状态
+        if (draft.getType() != LONG_REVIEW_TYPE) {
+            throw new BusinessException(400, "只能发布长评草稿");
+        }
+        if (draft.getStatus() != STATUS_DRAFT) {
+            throw new BusinessException(400, "该评论已发布，无需重复操作");
+        }
+
+        // 验证草稿内容完整性
+        if (!StringUtils.hasText(draft.getTitle())) {
+            throw new IllegalArgumentException("发布前请填写长评标题");
+        }
+        if (!StringUtils.hasText(draft.getContent())) {
+            throw new IllegalArgumentException("发布前请填写长评内容");
+        }
+
+        String normalizedTitle = draft.getTitle().trim();
+        String normalizedContent = draft.getContent().trim();
+
+        // 检查是否已有发布的长评
+        Comment existingPublished = commentMapper.selectByUserAndMovieAndTypeAndStatus(
+                userId, draft.getMovieId(), LONG_REVIEW_TYPE, STATUS_PUBLISHED);
+        if (existingPublished != null) {
+            int updateRows = commentMapper.updateLongComment(
+                    userId,
+                    draft.getMovieId(),
+                    normalizedTitle,
+                    normalizedContent,
+                    new java.util.Date()
+            );
+            if (updateRows == 0) {
+                throw new BusinessException(500, "发布失败");
+            }
+
+            int deleteRows = commentMapper.deleteByIdAndUserId(commentId, userId);
+            if (deleteRows == 0) {
+                throw new BusinessException(500, "发布失败");
+            }
+
+            CommentEvent event = new CommentEvent(
+                    userId, draft.getMovieId(), existingPublished.getId(), LONG_REVIEW_TYPE, "UPDATE",
+                    normalizedContent.length());
+            kafkaEventPublisher.publishCommentEvent(event);
+            return;
+        }
+
+        // 更新状态为发布
+        int rows = commentMapper.updateStatus(commentId, userId, STATUS_PUBLISHED, new java.util.Date());
+        if (rows == 0) {
+            throw new BusinessException(500, "发布失败");
+        }
+
+        // 发送事件
+        CommentEvent event = new CommentEvent(
+                userId, draft.getMovieId(), commentId, LONG_REVIEW_TYPE, "CREATE", 
+                normalizedContent.length());
+        kafkaEventPublisher.publishCommentEvent(event);
     }
 }

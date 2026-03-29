@@ -13,15 +13,21 @@
         <result column="title" property="title" />
         <result column="type" property="type" />
         <result column="version" property="version" />
+        <result column="status" property="status" />
     </resultMap>
 
     <sql id="Base_Column_List">
-        comment_id, user_id, movie_id, content, votes, comment_time, title, type, version
+        comment_id, user_id, movie_id, content, votes, comment_time, title, type, version, status
     </sql>
 
     <delete id="deleteById">
         DELETE FROM comments WHERE comment_id = #{id}
     </delete>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/> FROM comments
+        WHERE comment_id = #{id}
+    </select>
 
     <select id="selectList" resultMap="BaseResultMap">
         SELECT <include refid="Base_Column_List"/> FROM comments
@@ -40,6 +46,7 @@
     <select id="selectByMovieId" resultMap="BaseResultMap">
         SELECT <include refid="Base_Column_List"/> FROM comments
         WHERE movie_id = #{movieId}
+          AND status = 2
         ORDER BY comment_time DESC
     </select>
 
@@ -53,6 +60,7 @@
             c.comment_time as commentTime,
             c.title as title,
             c.type as type,
+            c.status as status,
             u.user_nickname as userNickname,
             u.user_avatar as userAvatar,
             r.rating as rating,
@@ -61,7 +69,7 @@
         JOIN users u ON c.user_id = u.user_id
         LEFT JOIN ratings r ON c.user_id = r.user_id AND c.movie_id = r.movie_id
         LEFT JOIN comment_likes cl ON c.comment_id = cl.comment_id AND cl.user_id = #{currentUserId}
-        WHERE c.movie_id = #{movieId}
+        WHERE c.movie_id = #{movieId} AND c.status = 2
         ORDER BY c.comment_time DESC
     </select>
 
@@ -76,6 +84,7 @@
             c.title as title,
             c.type as type,
             c.version as version,
+            c.status as status,
             u.user_nickname as userNickname,
             u.user_avatar as userAvatar,
             r.rating as rating,
@@ -87,23 +96,25 @@
         WHERE c.movie_id = #{movieId}
           AND c.comment_id = #{commentId}
           AND c.type = 2
+          AND c.status = 2
         LIMIT 1
     </select>
 
     <insert id="insert" parameterType="com.movie.backend.entity.Comment" useGeneratedKeys="true" keyProperty="id" keyColumn="comment_id">
-        INSERT INTO comments (user_id, movie_id, content, votes, comment_time, title, type)
-        VALUES (#{userId}, #{movieId}, #{content}, #{votes}, #{commentTime}, #{title}, #{type})
+        INSERT INTO comments (user_id, movie_id, content, votes, comment_time, title, type, status)
+        VALUES (#{userId}, #{movieId}, #{content}, #{votes}, #{commentTime}, #{title}, #{type}, #{status})
     </insert>
 
     <update id="updateByUserAndMovieAndType">
         UPDATE comments 
         SET content = #{content}, comment_time = #{commentTime}
-        WHERE user_id = #{userId} AND movie_id = #{movieId} AND type = #{type}
+        WHERE user_id = #{userId} AND movie_id = #{movieId} AND type = #{type} AND status = 2
     </update>
 
     <select id="selectByUserId" resultMap="BaseResultMap">
         SELECT <include refid="Base_Column_List"/> FROM comments
         WHERE user_id = #{userId}
+          AND status = 2
         ORDER BY comment_time DESC
     </select>
 
@@ -137,18 +148,21 @@
         WHERE user_id = #{userId}
           AND movie_id = #{movieId}
           AND type = 2
+          AND status = 2
     </update>
     
     <select id="getTotalReceivedLikes" resultType="java.lang.Integer">
         SELECT COALESCE(SUM(votes), 0)
         FROM comments
         WHERE user_id = #{userId}
+          AND status = 2
     </select>
     
     <select id="getCommentCount" resultType="java.lang.Integer">
         SELECT COUNT(*)
         FROM comments
         WHERE user_id = #{userId}
+          AND status = 2
     </select>
 
     <delete id="deleteByIdAndUserId">
@@ -166,6 +180,7 @@
             c.comment_time as commentTime,
             c.title as title,
             c.type as type,
+            c.status as status,
             u.user_nickname as userNickname,
             u.user_avatar as userAvatar,
             r.rating as rating,
@@ -175,7 +190,9 @@
                  LEFT JOIN ratings r ON c.user_id = r.user_id AND c.movie_id = r.movie_id
                  LEFT JOIN comment_likes cl ON c.comment_id = cl.comment_id AND cl.user_id = #{currentUserId}
         WHERE c.movie_id = #{movieId}
-          AND c.type = #{type}  ORDER BY c.comment_time DESC
+          AND c.type = #{type}
+          AND c.status = 2
+        ORDER BY c.comment_time DESC
     </select>
 
     <select id="countByUserAndMovieAndType" resultType="int">
@@ -183,5 +200,37 @@
         WHERE user_id = #{userId} AND movie_id = #{movieId} AND type = #{type}
     </select>
 
+    <select id="selectByUserAndMovieAndTypeAndStatus" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/> FROM comments
+        WHERE user_id = #{userId} AND movie_id = #{movieId} AND type = #{type} AND status = #{status}
+    </select>
+
+    <update id="updateStatus">
+        UPDATE comments
+        SET status = #{status}, comment_time = #{commentTime}
+        WHERE comment_id = #{id} AND user_id = #{userId}
+    </update>
+
+    <update id="updateStatusById">
+        UPDATE comments
+        SET status = #{status}
+        WHERE comment_id = #{id}
+    </update>
+
+    <update id="updateDraftContent">
+        UPDATE comments
+        SET title = #{title},
+            content = #{content},
+            comment_time = #{commentTime}
+        WHERE user_id = #{userId}
+          AND movie_id = #{movieId}
+          AND type = #{type}
+          AND status = 1
+    </update>
+
+    <select id="selectByIdAndUserId" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/> FROM comments
+        WHERE comment_id = #{id} AND user_id = #{userId}
+    </select>
 
 </mapper>

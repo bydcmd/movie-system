@@ -1,5 +1,6 @@
 package com.movie.backend.utils;
 
+import com.movie.backend.common.UserStatus;
 import com.movie.backend.entity.User;
 import com.movie.backend.mapper.UserMapper;
 import io.jsonwebtoken.Claims;
@@ -139,9 +140,12 @@ public class JwtUtil {
             throw new RuntimeException("用户不存在，请重新登录");
         }
         
-        // 2. 检查用户是否被冻结/禁用
-        if (user.getStatus() != null && user.getStatus() != 0) {
+        // 2. 检查用户是否被冻结或注销
+        if (UserStatus.isFrozen(user.getStatus())) {
             throw new RuntimeException("账号已被禁用，请联系管理员");
+        }
+        if (UserStatus.isCancelled(user.getStatus())) {
+            throw new RuntimeException("该账号已注销，无法登录");
         }
         
         // 3. 检查密码版本是否一致（修改密码后旧 Token 失效）

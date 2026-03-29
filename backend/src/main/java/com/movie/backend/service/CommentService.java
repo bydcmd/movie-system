@@ -88,4 +88,19 @@ public interface CommentService {
      */
     void updateLongReview(String userId, Long movieId, String title, String content);
 
+    /**
+     * 保存长评草稿
+     */
+    void saveLongReviewDraft(String userId, Long movieId, String title, String content);
+
+    /**
+     * 更新长评草稿
+     */
+    void updateLongReviewDraft(String userId, Long movieId, String title, String content);
+
+    /**
+     * 发布草稿
+     */
+    void publishDraft(String userId, Long commentId);
+
 }

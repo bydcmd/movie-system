@@ -14,7 +14,8 @@ public interface UserService {
     PublicUserVO getPublicUserInfo(String userId);
     
     /**
-     * 获取用户的公开信息（包含统计数据）
+     * 获取用户的公开信息（包含统计数据）。
+     * 已注销账号不再对外暴露，返回 null。
      */
     PublicUserVO getPublicUserInfoWithStats(String userId);
     
