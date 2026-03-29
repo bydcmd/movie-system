@@ -114,6 +114,7 @@ metastore_db/
 spark-warehouse/
 derby.log
 checkpoints/
+/spark/.python-version
 
 # ====================================================
 # Agent / local tooling state
