@@ -22,6 +22,7 @@ declare module 'vue' {
     HelloWorld: typeof import('./src/components/HelloWorld.vue')['default']
     LongReviewArticle: typeof import('./src/components/comment/LongReviewArticle.vue')['default']
     MovieCard: typeof import('./src/components/movie/MovieCard.vue')['default']
+    MovieDetailSimilarMovies: typeof import('./src/components/movie/MovieDetailSimilarMovies.vue')['default']
     MoviePlaceholder: typeof import('./src/components/movie/MoviePlaceholder.vue')['default']
     NavBar: typeof import('./src/components/layout/NavBar.vue')['default']
     ProfileActivityTabs: typeof import('./src/components/profile/ProfileActivityTabs.vue')['default']

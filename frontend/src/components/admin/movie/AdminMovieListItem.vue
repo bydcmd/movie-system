@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, shallowRef, watch } from 'vue'
 import { NButton, NTag } from 'naive-ui'
 import type { Movie } from '@/api/model'
 import { isRecord } from '@/utils/admin'
@@ -18,13 +18,26 @@ const emit = defineEmits<{
 }>()
 
 const coverUrl = computed(() => resolveAssetUrl(props.movie.cover) || undefined)
+const imageError = shallowRef(false)
 const title = computed(() => props.movie.name || '未命名电影')
 const genres = computed(() => splitCsvLike(props.movie.genres).slice(0, 4))
 const summary = computed(() => truncateText(props.movie.alias || props.movie.storyline || '暂无简介', 140))
 const hasActionableId = computed(() => typeof props.movie.id === 'number')
+const hasCoverImage = computed(() => Boolean(coverUrl.value) && !imageError.value)
 const directorSummary = computed(() => formatPeopleSummary(props.movie.directors, '导演'))
 const actorSummary = computed(() => formatPeopleSummary(props.movie.actors, '主演'))
 const writerSummary = computed(() => formatPeopleSummary(props.movie.writers, '编剧'))
+
+watch(
+  () => props.movie.cover,
+  () => {
+    imageError.value = false
+  }
+)
+
+function handleCoverError(): void {
+  imageError.value = true
+}
 
 function getPersonName(item: unknown): string {
   if (typeof item === 'string') {
@@ -67,10 +80,11 @@ function formatPeopleSummary(value: unknown, label: string): string {
     <div class="flex min-w-0 flex-1 items-start gap-4">
       <div class="flex h-[104px] w-[76px] items-center justify-center overflow-hidden rounded-2xl bg-slate-900 text-white">
         <img
-          v-if="coverUrl"
+          v-if="hasCoverImage"
           :src="coverUrl"
           :alt="title"
           class="h-full w-full object-cover"
+          @error="handleCoverError"
         />
         <span v-else class="font-display text-2xl font-bold">
           {{ getNameInitial(title) }}

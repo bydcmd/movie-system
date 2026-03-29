@@ -21,7 +21,9 @@ import type { CommentFilter, ReviewSubmitPayload } from '@/utils/comment'
 import CommentComposerModal from '@/components/comment/CommentComposerModal.vue'
 import CommentList from '@/components/comment/CommentList.vue'
 import NavBar from '@/components/layout/NavBar.vue'
+import MovieDetailSimilarMovies from '@/components/movie/MovieDetailSimilarMovies.vue'
 import MoviePlaceholder from '@/components/movie/MoviePlaceholder.vue'
+import { useGetSimilarMovies } from '@/api/endpoints/analytics/analytics'
 import {
   useDeleteMyComment,
   useGetMovieComments,
@@ -67,6 +69,8 @@ const commentsTotal = ref(0)
 const commentsPage = ref(1)
 const commentsPageSize = ref(10)
 const commentsLoading = ref(false)
+const similarMovies = ref<Movie[]>([])
+const similarMoviesLoading = ref(false)
 const commentFilter = ref<CommentFilter>(route.query.filter === 'long' ? 'long' : 'short')
 const pendingLikeIds = ref<number[]>([])
 const pendingDeleteIds = ref<number[]>([])
@@ -106,6 +110,10 @@ const commentQueryParams = computed(() => ({
   size: commentsPageSize.value,
   type: commentTypeParam.value
 }))
+const similarMoviesQueryParams = computed(() => ({
+  type: 2,
+  limit: 6
+}))
 const movieDetailQuery = useGetMovieDetail(movieId, {
   query: {
     enabled: false,
@@ -116,6 +124,12 @@ const movieDetailQuery = useGetMovieDetail(movieId, {
   }
 })
 const movieCommentsQuery = useGetMovieComments(movieId, commentQueryParams, {
+  query: {
+    enabled: false,
+    retry: false
+  }
+})
+const similarMoviesQuery = useGetSimilarMovies(movieId, similarMoviesQueryParams, {
   query: {
     enabled: false,
     retry: false
@@ -199,6 +213,10 @@ const resolveRating = (value: unknown): number | null => {
     if (typeof record.rating === 'number') return record.rating
   }
   return null
+}
+
+const normalizeMovieList = (value: unknown): Movie[] => {
+  return Array.isArray(value) ? (value as Movie[]) : []
 }
 
 const ensureAuthenticated = () => {
@@ -483,6 +501,33 @@ const fetchFavoriteStatus = async () => {
   }
 }
 
+const fetchSimilarMovies = async () => {
+  if (!movieId.value) {
+    similarMovies.value = []
+    return
+  }
+
+  const targetMovieId = movieId.value
+  similarMoviesLoading.value = true
+  try {
+    const data = await refetchOrThrow(similarMoviesQuery)
+    if (targetMovieId !== movieId.value) {
+      return
+    }
+
+    similarMovies.value = normalizeMovieList(data).filter((item) => item.id !== targetMovieId)
+  } catch (error) {
+    console.error('Failed to fetch similar movies:', error)
+    if (targetMovieId === movieId.value) {
+      similarMovies.value = []
+    }
+  } finally {
+    if (targetMovieId === movieId.value) {
+      similarMoviesLoading.value = false
+    }
+  }
+}
+
 const fetchWatchedStatus = async () => {
   if (!authStore.isAuthenticated || !movieId.value) {
     isWatched.value = false
@@ -734,6 +779,7 @@ const handleImageError = () => {
 
 onMounted(() => {
   fetchMovieDetail()
+  fetchSimilarMovies()
   fetchComments()
   fetchMyShortComment()
   fetchMyLongReview()
@@ -761,6 +807,7 @@ watch(
     imageLoaded.value = false
     imageError.value = false
     fetchMovieDetail()
+    fetchSimilarMovies()
     fetchComments()
     fetchMyShortComment()
     fetchMyLongReview()
@@ -925,6 +972,11 @@ watch(
                   <h2 class="text-xl font-bold text-slate-900 mb-4">剧情简介</h2>
                   <p class="text-slate-600 leading-relaxed whitespace-pre-line">{{ movie.storyline }}</p>
                 </section>
+
+                <MovieDetailSimilarMovies
+                  :movies="similarMovies"
+                  :loading="similarMoviesLoading"
+                />
 
                 <!-- Cast & Crew -->
                 <section class="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
