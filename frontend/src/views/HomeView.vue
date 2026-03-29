@@ -1,22 +1,37 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
 import { NButton } from 'naive-ui'
 import NavBar from '@/components/layout/NavBar.vue'
 import MovieCard from '@/components/movie/MovieCard.vue'
-import { useGetTrendingMovies } from '@/api/endpoints/analytics/analytics'
-import type { TrendingMovieDTO } from '@/api/model'
+import TrendingPeriodTabs from '@/components/movie/TrendingPeriodTabs.vue'
+import { getTrendingPeriodLabel, useTrendingMovies } from '@/composables/useTrendingMovies'
+import { GetTrendingMoviesPeriod, type GetTrendingMoviesPeriod as TrendingPeriod } from '@/api/model'
 
 const router = useRouter()
-const trendingMoviesQuery = useGetTrendingMovies({ period: 'DAILY', limit: 10 })
-const trendingMovies = computed<TrendingMovieDTO[]>(() => {
-  const payload = trendingMoviesQuery.data.value
-  return Array.isArray(payload) ? (payload as TrendingMovieDTO[]) : []
+const previewLimit = 10
+const selectedPeriod = shallowRef<TrendingPeriod>(GetTrendingMoviesPeriod.DAILY)
+
+const { query: trendingMoviesQuery, movies: trendingMovies, isLoading } = useTrendingMovies({
+  period: selectedPeriod,
+  limit: previewLimit,
 })
-const isLoading = computed(() => trendingMoviesQuery.isLoading.value || trendingMoviesQuery.isFetching.value)
+
+const trendingSummary = computed(() => {
+  return `当前展示${getTrendingPeriodLabel(selectedPeriod.value)}前 ${previewLimit} 名`
+})
 
 const goToMovies = () => {
-  router.push('/movies')
+  void router.push('/movies')
+}
+
+const goToTrendingTop = () => {
+  void router.push({
+    name: 'trending',
+    query: {
+      period: selectedPeriod.value,
+    },
+  })
 }
 </script>
 
@@ -39,7 +54,7 @@ const goToMovies = () => {
           发现、评分、评论全球精彩电影，与影迷共建社区
         </p>
         <div class="flex gap-4">
-          <n-button type="primary" size="large" class="px-8 py-6 text-lg rounded-full font-bold">
+          <n-button type="primary" size="large" class="px-8 py-6 text-lg rounded-full font-bold" @click="goToMovies">
             立即探索
           </n-button>
         </div>
@@ -48,17 +63,30 @@ const goToMovies = () => {
 
     <!-- Main Content -->
     <main class="container mx-auto px-4 py-16 flex-1">
-      <div class="flex items-center justify-between mb-8">
-        <h2 class="text-3xl font-display font-bold text-slate-900">今日热门</h2>
-        <n-button text class="text-accent hover:underline" @click="goToMovies">查看全部</n-button>
+      <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <h2 class="text-3xl font-display font-bold text-slate-900">热门电影</h2>
+          <p class="mt-2 text-sm text-slate-500">
+            {{ trendingSummary }}，支持切换日榜、周榜、月榜和总榜。
+          </p>
+        </div>
+
+        <n-button type="primary" secondary class="rounded-full" @click="goToTrendingTop">
+          查看 Top 100
+        </n-button>
       </div>
+
+      <TrendingPeriodTabs v-model="selectedPeriod" class="mt-6" />
 
       <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-8">
         <div v-if="isLoading" class="col-span-full py-10 text-center text-slate-500">
           正在加载热门电影...
         </div>
+        <div v-else-if="trendingMoviesQuery.isError.value" class="col-span-full py-10 text-center text-slate-500">
+          热门电影加载失败
+        </div>
         <div v-else-if="trendingMovies.length === 0" class="col-span-full py-10 text-center text-slate-500">
-          暂无热门电影
+          当前周期暂无热榜数据
         </div>
         <template v-else>
           <MovieCard v-for="movie in trendingMovies" :key="movie.movieId" :movie="movie" />

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NAvatar, NButton, NDropdown, NInput, type DropdownOption } from 'naive-ui'
 import { useAuthz } from '@/composables/useAuthz'
@@ -11,14 +11,48 @@ const authStore = useAuthStore()
 const { isAdmin } = useAuthz()
 
 const searchValue = ref('')
+const routeKeyword = computed(() => (
+  typeof route.query.keyword === 'string' ? route.query.keyword : ''
+))
+
+watch(routeKeyword, (keyword) => {
+  searchValue.value = keyword
+}, { immediate: true })
+
 const avatarFallback = computed(() => {
   const seed = authStore.user?.nickname ?? authStore.user?.id ?? 'U'
   return String(seed).trim().charAt(0).toUpperCase() || 'U'
 })
 
-const handleSearch = () => {
-  console.log('Search:', searchValue.value)
-  // Implement search logic or navigation
+const handleSearch = async () => {
+  const keyword = searchValue.value.trim()
+  const nextQuery: Record<string, string> = {}
+
+  if (route.name === 'movies') {
+    Object.entries(route.query).forEach(([key, value]) => {
+      if (key === 'page' || key === 'keyword') {
+        return
+      }
+
+      if (typeof value === 'string' && value) {
+        nextQuery[key] = value
+        return
+      }
+
+      if (Array.isArray(value) && value.length > 0) {
+        nextQuery[key] = value.join(',')
+      }
+    })
+  }
+
+  if (keyword) {
+    nextQuery.keyword = keyword
+  }
+
+  await router.push({
+    name: 'movies',
+    query: Object.keys(nextQuery).length > 0 ? nextQuery : undefined
+  })
 }
 
 const handleGuestEntry = (path: '/login' | '/register') => {

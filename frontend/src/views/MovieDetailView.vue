@@ -17,7 +17,7 @@ import {
 } from 'naive-ui'
 import { ArrowBack, CheckmarkCircle, Heart } from '@vicons/ionicons5'
 import type { Comment, Movie, CommentVO, PageInfoCommentVO } from '@/api/model'
-import type { CommentFilter, ReviewComposerTab, ReviewSubmitPayload } from '@/utils/comment'
+import type { CommentFilter, ReviewSubmitPayload } from '@/utils/comment'
 import CommentComposerModal from '@/components/comment/CommentComposerModal.vue'
 import CommentList from '@/components/comment/CommentList.vue'
 import NavBar from '@/components/layout/NavBar.vue'
@@ -29,10 +29,8 @@ import {
   useGetMyMovieLongReview,
   useLikeComment,
   useSubmitMovieComment,
-  useSubmitMovieLongReview,
   useUnlikeComment,
   useUpdateMyMovieCommentContent,
-  useUpdateMyMovieLongReview
 } from '@/api/endpoints/comment-management/comment-management'
 import {
   useAddFavorite,
@@ -41,6 +39,7 @@ import {
 } from '@/api/endpoints/favorite-management/favorite-management'
 import { useGetMovieDetail } from '@/api/endpoints/movie-management/movie-management'
 import { useGetUserRating, useUpdateRating } from '@/api/endpoints/rating-management/rating-management'
+import { useRecordViewHistory } from '@/api/endpoints/view-history-management/view-history-management'
 import {
   useAddWatched,
   useIsWatched,
@@ -72,7 +71,6 @@ const commentFilter = ref<CommentFilter>(route.query.filter === 'long' ? 'long' 
 const pendingLikeIds = ref<number[]>([])
 const pendingDeleteIds = ref<number[]>([])
 const showReviewModal = ref(false)
-const reviewTab = ref<ReviewComposerTab>('short')
 const reviewPrefillLoading = ref(false)
 const submitReviewLoading = ref(false)
 const userRating = ref<number | null>(null)
@@ -83,11 +81,12 @@ const imageError = ref(false)
 const myShortComment = ref<Comment | null>(null)
 const myLongReview = ref<Comment | null>(null)
 const reviewDraftResetToken = ref(0)
+const optionalAuthRequest = {
+  skipUnauthorizedRedirect: true
+} as const
 
 const shortReviewInitial = computed(() => myShortComment.value?.content?.trim() ?? '')
 const shortReviewActionLabel = computed(() => (myShortComment.value?.id ? '改短评' : '写短评'))
-const longReviewTitleInitial = computed(() => myLongReview.value?.title?.trim() ?? '')
-const longReviewContentInitial = computed(() => myLongReview.value?.content?.trim() ?? '')
 const longReviewActionLabel = computed(() => (myLongReview.value?.id ? '改长评' : '写长评'))
 const reviewDraftStorageKeyBase = computed(() =>
   movieId.value > 0 ? `movie-review-draft:${movieId.value}` : ''
@@ -126,44 +125,50 @@ const myShortCommentQuery = useGetMyMovieComment(movieId, {
   query: {
     enabled: false,
     retry: false
-  }
+  },
+  request: optionalAuthRequest
 })
 const myLongReviewQuery = useGetMyMovieLongReview(movieId, {
   query: {
     enabled: false,
     retry: false
-  }
+  },
+  request: optionalAuthRequest
 })
 const favoriteStatusQuery = useIsFavorited(movieId, {
   query: {
     enabled: false,
     retry: false
-  }
+  },
+  request: optionalAuthRequest
 })
 const watchedStatusQuery = useIsWatched(movieId, {
   query: {
     enabled: false,
     retry: false
-  }
+  },
+  request: optionalAuthRequest
 })
 const userRatingQuery = useGetUserRating(movieId, {
   query: {
     enabled: false,
     retry: false
-  }
+  },
+  request: optionalAuthRequest
 })
 const deleteCommentMutation = useDeleteMyComment()
 const likeCommentMutation = useLikeComment()
 const unlikeCommentMutation = useUnlikeComment()
 const submitMovieCommentMutation = useSubmitMovieComment()
-const submitMovieLongReviewMutation = useSubmitMovieLongReview()
 const updateMyMovieCommentContentMutation = useUpdateMyMovieCommentContent()
-const updateMyMovieLongReviewMutation = useUpdateMyMovieLongReview()
 const addFavoriteMutation = useAddFavorite()
 const removeFavoriteMutation = useRemoveFavorite()
 const addWatchedMutation = useAddWatched()
 const removeWatchedMutation = useRemoveWatched()
 const updateRatingMutation = useUpdateRating()
+const recordViewHistoryMutation = useRecordViewHistory({
+  request: optionalAuthRequest
+})
 
 async function refetchOrThrow<T>(query: { refetch: () => Promise<{ data?: T; error?: unknown }> }) {
   const result = await query.refetch()
@@ -208,24 +213,37 @@ const ensureAuthenticated = () => {
   return true
 }
 
-const openReviewModal = async (tab: ReviewComposerTab) => {
+const openReviewModal = async () => {
   if (!ensureAuthenticated()) return
 
-  if (tab === 'short' || tab === 'long') {
-    reviewPrefillLoading.value = true
-    try {
-      if (tab === 'short') {
-        await fetchMyShortComment()
-      } else {
-        await fetchMyLongReview()
-      }
-    } finally {
-      reviewPrefillLoading.value = false
-    }
+  reviewPrefillLoading.value = true
+  try {
+    await fetchMyShortComment()
+  } finally {
+    reviewPrefillLoading.value = false
   }
 
-  reviewTab.value = tab
   showReviewModal.value = true
+}
+
+const goToLongReviewEditor = () => {
+  if (!ensureAuthenticated() || !movieId.value) return
+
+  if (myLongReview.value?.id) {
+    void router.push({
+      name: 'long-review-editor-edit',
+      params: {
+        movieId: String(movieId.value),
+        commentId: String(myLongReview.value.id)
+      }
+    })
+    return
+  }
+
+  void router.push({
+    name: 'long-review-editor',
+    params: { movieId: String(movieId.value) }
+  })
 }
 
 const extractErrorMessage = (error: unknown): string => {
@@ -252,10 +270,6 @@ const extractErrorMessage = (error: unknown): string => {
 
 const isDuplicateShortReviewError = (messageText: string): boolean => {
   return messageText.includes('已经发表过短评')
-}
-
-const isDuplicateLongReviewError = (messageText: string): boolean => {
-  return messageText.includes('已经发表过长评')
 }
 
 const markPending = (
@@ -412,17 +426,47 @@ const writersList = computed(() => {
     .filter(Boolean)
 })
 
+const recordMovieViewHistory = async (targetMovieId: number) => {
+  if (!authStore.isAuthenticated || !targetMovieId) {
+    return
+  }
+
+  try {
+    await recordViewHistoryMutation.mutateAsync({
+      data: {
+        movieId: targetMovieId
+      }
+    })
+  } catch (error) {
+    console.error('Failed to record view history:', error)
+  }
+}
+
 const fetchMovieDetail = async () => {
   if (!movieId.value) return
+
+  const targetMovieId = movieId.value
   loading.value = true
   try {
     const data = await refetchOrThrow(movieDetailQuery) as Movie | null
+    if (targetMovieId !== movieId.value) {
+      return
+    }
+
     movie.value = data ?? null
+
+    if (movie.value) {
+      await recordMovieViewHistory(targetMovieId)
+    }
   } catch (error) {
     console.error('Failed to fetch movie detail:', error)
-    movie.value = null
+    if (targetMovieId === movieId.value) {
+      movie.value = null
+    }
   } finally {
-    loading.value = false
+    if (targetMovieId === movieId.value) {
+      loading.value = false
+    }
   }
 }
 
@@ -534,82 +578,41 @@ const handleReviewSubmit = async (payload: ReviewSubmitPayload) => {
   submitReviewLoading.value = true
 
   try {
-    if (payload.type === 'short') {
-      let updated = Boolean(myShortComment.value?.id)
+    let updated = Boolean(myShortComment.value?.id)
 
-      try {
-        if (updated) {
-          await updateMyMovieCommentContentMutation.mutateAsync({
-            movieId: movieId.value,
-            data: {
-              content: payload.content
-            }
-          })
-        } else {
-          await submitMovieCommentMutation.mutateAsync({
-            movieId: movieId.value,
-            data: {
-              content: payload.content
-            }
-          })
-        }
-      } catch (error) {
-        const messageText = extractErrorMessage(error)
-        if (!updated && isDuplicateShortReviewError(messageText)) {
-          await updateMyMovieCommentContentMutation.mutateAsync({
-            movieId: movieId.value,
-            data: {
-              content: payload.content
-            }
-          })
-          updated = true
-        } else {
-          throw error
-        }
-      }
-
-      message.success(updated ? '短评已更新' : '短评已发布')
-      commentFilter.value = 'short'
-    } else {
-      let updated = Boolean(myLongReview.value?.id)
-
-      try {
-        if (updated) {
-          await updateMyMovieLongReviewMutation.mutateAsync({
-            movieId: movieId.value,
-            data: {
-              title: payload.title,
-              content: payload.content
-            }
-          })
-        } else {
-          await submitMovieLongReviewMutation.mutateAsync({
-            movieId: movieId.value,
-            data: {
-              title: payload.title,
-              content: payload.content
-            }
-          })
-        }
-      } catch (error) {
-        const messageText = extractErrorMessage(error)
-        if (updated || !isDuplicateLongReviewError(messageText)) {
-          throw error
-        }
-
-        await updateMyMovieLongReviewMutation.mutateAsync({
+    try {
+      if (updated) {
+        await updateMyMovieCommentContentMutation.mutateAsync({
           movieId: movieId.value,
           data: {
-            title: payload.title,
+            content: payload.content
+          }
+        })
+      } else {
+        await submitMovieCommentMutation.mutateAsync({
+          movieId: movieId.value,
+          data: {
+            content: payload.content
+          }
+        })
+      }
+    } catch (error) {
+      const messageText = extractErrorMessage(error)
+      if (!updated && isDuplicateShortReviewError(messageText)) {
+        await updateMyMovieCommentContentMutation.mutateAsync({
+          movieId: movieId.value,
+          data: {
             content: payload.content
           }
         })
         updated = true
+      } else {
+        throw error
       }
-
-      message.success(updated ? '长评已更新' : '长评已发布')
-      commentFilter.value = 'long'
     }
+
+    message.success(updated ? '短评已更新' : '短评已发布')
+    commentFilter.value = 'short'
 
     commentsPage.value = 1
     activeTab.value = 'comments'
@@ -1005,14 +1008,13 @@ watch(
                   <n-button
                     type="primary"
                     :disabled="reviewPrefillLoading"
-                    @click="openReviewModal('short')"
+                    @click="openReviewModal"
                   >
                     {{ shortReviewActionLabel }}
                   </n-button>
                   <n-button
                     type="info"
-                    :disabled="reviewPrefillLoading"
-                    @click="openReviewModal('long')"
+                    @click="goToLongReviewEditor"
                   >
                     {{ longReviewActionLabel }}
                   </n-button>
@@ -1053,10 +1055,7 @@ watch(
 
     <CommentComposerModal
       v-model:show="showReviewModal"
-      v-model:active-tab="reviewTab"
       :short-initial="shortReviewInitial"
-      :long-title-initial="longReviewTitleInitial"
-      :long-content-initial="longReviewContentInitial"
       :draft-storage-key-base="reviewDraftStorageKeyBase"
       :draft-reset-token="reviewDraftResetToken"
       :saving="submitReviewLoading"

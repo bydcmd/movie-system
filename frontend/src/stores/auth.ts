@@ -1,3 +1,4 @@
+import { AxiosError, type AxiosRequestConfig } from 'axios'
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { logout as requestLogout, refreshToken as requestRefreshToken } from '@/api/endpoints/auth-management/auth-management'
@@ -20,6 +21,9 @@ type AuthPayload = UserVO
 
 const TOKEN_STORAGE_KEY = 'token'
 const USER_STORAGE_KEY = 'auth:user'
+const SILENT_AUTH_REQUEST: AxiosRequestConfig = {
+  skipUnauthorizedRedirect: true
+}
 
 function normalizeRole(role: unknown): AuthRole | undefined {
   return role === AUTH_ROLE.ADMIN || role === AUTH_ROLE.USER ? role : undefined
@@ -58,6 +62,14 @@ function toAuthUser(payload: AuthPayload | null | undefined): AuthUser | null {
     commentCount: payload.commentCount,
     watchedCount: payload.watchedCount
   }
+}
+
+function isUnauthorizedError(error: unknown): boolean {
+  if (!(error instanceof AxiosError)) {
+    return false
+  }
+
+  return error.response?.status === 401 || error.code === '401'
 }
 
 export const useAuthStore = defineStore('auth', () => {
@@ -126,9 +138,13 @@ export const useAuthStore = defineStore('auth', () => {
         setToken(nextToken)
         return nextToken
       })
-      .catch(() => {
-        clearAuth()
-        return null
+      .catch((error: unknown) => {
+        if (isUnauthorizedError(error)) {
+          clearAuth()
+          return null
+        }
+
+        throw error
       })
       .finally(() => {
         refreshPromise = null
@@ -137,14 +153,14 @@ export const useAuthStore = defineStore('auth', () => {
     return refreshPromise
   }
 
-  async function fetchCurrentUser(): Promise<AuthUser | null> {
+  async function fetchCurrentUser(options?: AxiosRequestConfig): Promise<AuthUser | null> {
     if (!token.value) {
       setUser(null)
       return null
     }
 
     try {
-      const payload = await getCurrentUserInfo()
+      const payload = await getCurrentUserInfo(options)
       const nextUser = toAuthUser(payload)
       if (!nextUser) {
         setUser(null)
@@ -152,9 +168,13 @@ export const useAuthStore = defineStore('auth', () => {
       }
       setUser(nextUser)
       return nextUser
-    } catch {
-      setUser(null)
-      return null
+    } catch (error: unknown) {
+      if (isUnauthorizedError(error)) {
+        setUser(null)
+        return null
+      }
+
+      throw error
     }
   }
 
@@ -166,26 +186,40 @@ export const useAuthStore = defineStore('auth', () => {
       return initializePromise
     }
 
+    let resolved = false
+
     initializePromise = (async () => {
-      if (!token.value) {
-        const refreshedToken = await refreshAccessToken()
-        if (!refreshedToken) {
+      try {
+        if (!token.value) {
+          const refreshedToken = await refreshAccessToken()
+          if (!refreshedToken) {
+            resolved = true
+            return
+          }
+        }
+
+        const profile = await fetchCurrentUser(SILENT_AUTH_REQUEST)
+        if (profile) {
+          resolved = true
           return
         }
-      }
 
-      const profile = await fetchCurrentUser()
-      if (profile) {
-        return
-      }
+        const refreshedToken = await refreshAccessToken()
+        if (!refreshedToken) {
+          resolved = true
+          return
+        }
 
-      const refreshedToken = await refreshAccessToken()
-      if (!refreshedToken) {
-        return
+        const refreshedProfile = await fetchCurrentUser(SILENT_AUTH_REQUEST)
+        if (!refreshedProfile) {
+          clearAuth()
+        }
+        resolved = true
+      } catch (error) {
+        console.error('[Auth Init Error]', error)
       }
-      await fetchCurrentUser()
     })().finally(() => {
-      initialized.value = true
+      initialized.value = resolved
       initializePromise = null
     })
 

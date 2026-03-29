@@ -1,6 +1,8 @@
 import axios, {
   AxiosError,
   AxiosHeaders,
+  type AxiosRequestConfig,
+  type AxiosResponse,
   type InternalAxiosRequestConfig,
 } from "axios";
 import { createDiscreteApi } from "naive-ui";
@@ -15,6 +17,12 @@ const instance = axios.create({
   timeout: 10000,
   withCredentials: true,
 });
+
+declare module "axios" {
+  interface AxiosRequestConfig {
+    skipUnauthorizedRedirect?: boolean;
+  }
+}
 
 // 安全的获取 auth store，避免在 pinia 未初始化时出错
 function getAuthStore() {
@@ -45,6 +53,12 @@ function shouldBypassRefresh(url?: string): boolean {
   return REFRESH_BYPASS_URLS.some((path) => url.includes(path));
 }
 
+function shouldSkipUnauthorizedRedirect(
+  config?: Pick<AxiosRequestConfig, "skipUnauthorizedRedirect"> | null,
+): boolean {
+  return Boolean(config?.skipUnauthorizedRedirect);
+}
+
 async function refreshTokenSilently(): Promise<string | null> {
   const authStore = getAuthStore();
   if (!authStore) {
@@ -70,7 +84,7 @@ const handleUnauthorized = (message?: string) => {
     messageApi.warning(message || "登录已过期，请重新登录");
 
     const authStore = getAuthStore();
-    authStore?.logout();
+    authStore?.clearAuth();
 
     // 动态导入 router 避免由于组件内引入 API 导致的顶层循环依赖
     import("@/router")
@@ -123,6 +137,88 @@ function deleteKey(obj: any, keyToDelete: string): void {
   }
 }
 
+function setAuthorizationHeader(
+  config: RetriableRequestConfig,
+  token: string,
+): void {
+  if (config.headers && typeof config.headers.set === "function") {
+    config.headers.set("Authorization", `Bearer ${token}`);
+    return;
+  }
+
+  const headers = new AxiosHeaders(config.headers);
+  headers.set("Authorization", `Bearer ${token}`);
+  config.headers = headers;
+}
+
+function createBusinessError(
+  response: AxiosResponse<ApiResponse>,
+  data: ApiResponse,
+): AxiosError {
+  const businessStatus =
+    typeof data.code === "number" ? data.code : response.status;
+  const businessResponse = {
+    ...response,
+    status: businessStatus,
+    statusText: response.statusText || String(businessStatus),
+  };
+  const error = new AxiosError(
+    data.message || "业务错误",
+    data.code?.toString() || "BUSINESS_ERROR",
+    response.config,
+    response.request,
+    businessResponse,
+  );
+
+  Object.assign(error, { isBusinessError: true });
+  return error;
+}
+
+async function handleUnauthorizedResponse(
+  error: AxiosError,
+  originalConfig: RetriableRequestConfig | undefined,
+  message?: string,
+) {
+  const shouldSkipUnauthorized = shouldSkipUnauthorizedRedirect(originalConfig);
+
+  if (
+    originalConfig &&
+    !originalConfig._retry &&
+    !shouldBypassRefresh(originalConfig.url)
+  ) {
+    // 部分页面会发起“可选登录态”请求来补充收藏/评分等信息。
+    // 这类请求收到 401 时不应触发刷新或清空全局登录态，否则会造成进入公共页面时被动掉线。
+    if (shouldSkipUnauthorized) {
+      console.warn("[Optional Unauthorized]", message || error.message);
+      return Promise.reject(error);
+    }
+
+    originalConfig._retry = true;
+
+    try {
+      const refreshedToken = await refreshTokenSilently();
+      if (refreshedToken) {
+        setAuthorizationHeader(originalConfig, refreshedToken);
+        return instance(originalConfig);
+      }
+    } catch (refreshError) {
+      return Promise.reject(refreshError);
+    }
+  }
+
+  if (!shouldBypassRefresh(originalConfig?.url)) {
+    if (shouldSkipUnauthorized) {
+      console.warn("[Optional Unauthorized]", message || error.message);
+    } else {
+      handleUnauthorized(message || error.message);
+    }
+  } else {
+    handleAuthEndpointUnauthorized(originalConfig?.url, message || error.message);
+  }
+
+  return Promise.reject(error);
+}
+
 instance.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const authStore = getAuthStore();
@@ -154,7 +250,7 @@ export interface ApiResponse<T = unknown> {
 }
 
 // 业务码处理（HTTP 200 但业务失败的情况）
-function handleBusinessCode(response: ApiResponse, url?: string): boolean {
+function handleBusinessCode(response: ApiResponse): boolean {
   const { code, message, success, failed } = response;
 
   // 兼容 success / failed / code 三种业务状态表达
@@ -168,13 +264,6 @@ function handleBusinessCode(response: ApiResponse, url?: string): boolean {
         // success === false 但 code 为 200，可能是特殊业务逻辑
         console.warn("[Business Warning]", message);
         messageApi.warning(message || "操作未成功");
-        break;
-      case 401:
-        if (shouldBypassRefresh(url)) {
-          handleAuthEndpointUnauthorized(url, message);
-        } else {
-          handleUnauthorized(message);
-        }
         break;
       case 403:
         console.error("[Business Forbidden]", message);
@@ -235,18 +324,18 @@ instance.interceptors.response.use(
       typeof data === "object" &&
       ("code" in data || "success" in data || "failed" in data)
     ) {
-      const isSuccess = handleBusinessCode(data, response.config?.url);
-      if (!isSuccess) {
-        // 业务失败时，构造标准 AxiosError 抛出，而不是普通 Error
-        const error = new AxiosError(
-          data.message || "业务错误",
-          data.code?.toString() || "BUSINESS_ERROR",
-          response.config,
-          response.request,
-          response,
+      if (data.code === 401) {
+        const businessError = createBusinessError(response, data);
+        return handleUnauthorizedResponse(
+          businessError,
+          response.config as RetriableRequestConfig | undefined,
+          data.message,
         );
-        Object.assign(error, { isBusinessError: true }); // 附加业务错误标识
-        return Promise.reject(error);
+      }
+
+      const isSuccess = handleBusinessCode(data);
+      if (!isSuccess) {
+        return Promise.reject(createBusinessError(response, data));
       }
     }
     return response;
@@ -255,32 +344,12 @@ instance.interceptors.response.use(
     const status = error.response?.status;
     const originalConfig = error.config as RetriableRequestConfig | undefined;
 
-    if (
-      status === 401 &&
-      originalConfig &&
-      !originalConfig._retry &&
-      !shouldBypassRefresh(originalConfig.url)
-    ) {
-      originalConfig._retry = true;
-      const refreshedToken = await refreshTokenSilently();
-      if (refreshedToken) {
-        if (
-          originalConfig.headers &&
-          typeof originalConfig.headers.set === "function"
-        ) {
-          originalConfig.headers.set(
-            "Authorization",
-            `Bearer ${refreshedToken}`,
-          );
-        } else {
-          const headers = new AxiosHeaders(originalConfig.headers);
-          headers.set("Authorization", `Bearer ${refreshedToken}`);
-          originalConfig.headers = headers;
-        }
-        return instance(originalConfig);
-      }
-      handleUnauthorized(error.message);
-      return Promise.reject(error);
+    if (status === 401) {
+      return handleUnauthorizedResponse(
+        error,
+        originalConfig,
+        (error.response?.data as any)?.message || error.message,
+      );
     }
 
     // 处理 HTTP 错误状态
@@ -292,13 +361,6 @@ instance.interceptors.response.use(
         case 400:
           console.error("[Bad Request]", message);
           messageApi.error(message || "请求参数错误");
-          break;
-        case 401:
-          if (!shouldBypassRefresh(error.config?.url)) {
-            handleUnauthorized(message);
-          } else {
-            handleAuthEndpointUnauthorized(error.config?.url, message);
-          }
           break;
         case 403:
           console.error("[Forbidden]", message);

@@ -11,12 +11,30 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    AdminMovieFormModal: typeof import('./src/components/admin/movie/AdminMovieFormModal.vue')['default']
+    AdminMovieListItem: typeof import('./src/components/admin/movie/AdminMovieListItem.vue')['default']
+    AdminMovieManager: typeof import('./src/components/admin/movie/AdminMovieManager.vue')['default']
+    AdminSidebar: typeof import('./src/components/admin/AdminSidebar.vue')['default']
     AuthForm: typeof import('./src/components/auth/AuthForm.vue')['default']
+    CommentCard: typeof import('./src/components/comment/CommentCard.vue')['default']
+    CommentComposerModal: typeof import('./src/components/comment/CommentComposerModal.vue')['default']
+    CommentList: typeof import('./src/components/comment/CommentList.vue')['default']
     HelloWorld: typeof import('./src/components/HelloWorld.vue')['default']
+    LongReviewArticle: typeof import('./src/components/comment/LongReviewArticle.vue')['default']
     MovieCard: typeof import('./src/components/movie/MovieCard.vue')['default']
     MoviePlaceholder: typeof import('./src/components/movie/MoviePlaceholder.vue')['default']
     NavBar: typeof import('./src/components/layout/NavBar.vue')['default']
+    ProfileActivityTabs: typeof import('./src/components/profile/ProfileActivityTabs.vue')['default']
+    ProfileCommentList: typeof import('./src/components/profile/ProfileCommentList.vue')['default']
+    ProfileEditForm: typeof import('./src/components/profile/ProfileEditForm.vue')['default']
+    ProfileFolderList: typeof import('./src/components/profile/ProfileFolderList.vue')['default']
+    ProfileHeroCard: typeof import('./src/components/profile/ProfileHeroCard.vue')['default']
+    ProfileMovieGrid: typeof import('./src/components/profile/ProfileMovieGrid.vue')['default']
+    ProfileRatingList: typeof import('./src/components/profile/ProfileRatingList.vue')['default']
+    ProfileStatsGrid: typeof import('./src/components/profile/ProfileStatsGrid.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    TiptapEditor: typeof import('./src/components/comment/TiptapEditor.vue')['default']
+    TrendingPeriodTabs: typeof import('./src/components/movie/TrendingPeriodTabs.vue')['default']
   }
 }

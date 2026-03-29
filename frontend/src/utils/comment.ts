@@ -2,20 +2,12 @@ import type { Comment, CommentVO } from '@/api/model'
 
 type JsonRecord = Record<string, unknown>
 
-export type ReviewComposerTab = 'short' | 'long'
 export type CommentFilter = 'short' | 'long'
 
-export type ReviewSubmitPayload =
-  | {
-      type: 'short'
-      content: string
-    }
-  | {
-      type: 'long'
-      title: string
-      content: string
-      plainText: string
-    }
+export type ReviewSubmitPayload = {
+  type: 'short'
+  content: string
+}
 
 const EMPTY_TIPTAP_DOCUMENT: JsonRecord = {
   type: 'doc',

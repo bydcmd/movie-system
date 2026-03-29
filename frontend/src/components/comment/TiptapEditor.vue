@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, shallowRef, useTemplateRef, watch } from 'vu
 import { NButton, useMessage } from 'naive-ui'
 import Placeholder from '@tiptap/extension-placeholder'
 import StarterKit from '@tiptap/starter-kit'
+import Underline from '@tiptap/extension-underline'
 import { EditorContent, useEditor } from '@tiptap/vue-3'
 import { useUploadImage } from '@/api/endpoints/file-management/file-management'
 import { RichImage } from '@/components/comment/extensions/RichImage'
@@ -156,7 +157,8 @@ function extractImageFiles(dataTransfer?: DataTransfer | null): File[] {
   return Array.from(dataTransfer?.items ?? [])
     .filter((item) => item.kind === 'file')
     .map((item) => item.getAsFile())
-    .filter((file): file is File => Boolean(file) && isAcceptedImageFile(file))
+    .filter((file): file is File => file instanceof File)
+    .filter((file) => isAcceptedImageFile(file))
 }
 
 async function uploadAndInsertImage(file: File) {
@@ -262,6 +264,7 @@ const editor = useEditor({
           }
         : {})
     }),
+    Underline,
     RichImage,
     Placeholder.configure({
       placeholder: props.placeholder,
@@ -671,7 +674,8 @@ defineExpose({
 }
 
 .editor-root.is-focused {
-  border-color: rgb(148 163 184);
+  border-color: rgb(59 130 246);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
 .editor-root.is-readonly {
@@ -682,14 +686,20 @@ defineExpose({
 .editor-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
-  padding: 0.875rem 1rem 0.25rem;
+  gap: 0.875rem;
+  padding: 0.75rem 1rem 0.5rem;
+  background: rgb(249 250 251);
+  border-bottom: 1px solid rgb(241 245 249);
 }
 
 .editor-toolbar-group {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.375rem;
+  padding: 0.25rem;
+  background: rgb(255 255 255);
+  border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
 }
 
 .editor-shell {
@@ -715,9 +725,13 @@ defineExpose({
 
 .editor-root :deep(.ProseMirror) {
   min-height: var(--comment-editor-min-height);
-  padding: 1rem 1rem 1.125rem;
+  padding: 1.125rem 1.25rem 1.25rem;
   color: rgb(15 23 42);
-  line-height: 1.8;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', 'Roboto',
+               'Microsoft YaHei', 'PingFang SC', sans-serif;
+  font-size: 0.975rem;
+  line-height: 1.75;
+  text-rendering: optimizeLegibility;
   outline: none;
   white-space: pre-wrap;
   word-break: break-word;
@@ -737,21 +751,23 @@ defineExpose({
 }
 
 .editor-root :deep(.ProseMirror h2) {
-  margin: 0.4rem 0 0.9rem;
+  margin: 0.5rem 0 1rem;
   font-size: 1.35rem;
   font-weight: 700;
-  line-height: 1.4;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
 }
 
 .editor-root :deep(.ProseMirror h3) {
-  margin: 0.35rem 0 0.8rem;
+  margin: 0.4rem 0 0.85rem;
   font-size: 1.1rem;
   font-weight: 700;
-  line-height: 1.5;
+  line-height: 1.45;
+  letter-spacing: -0.005em;
 }
 
 .editor-root :deep(.ProseMirror p) {
-  margin: 0 0 0.95rem;
+  margin: 0 0 1rem;
 }
 
 .editor-root :deep(.ProseMirror img) {
@@ -800,7 +816,8 @@ defineExpose({
 }
 
 .editor-root :deep(.ProseMirror li) {
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.4rem;
+  line-height: 1.65;
 }
 
 .editor-root :deep(.ProseMirror blockquote) {
@@ -821,14 +838,28 @@ defineExpose({
   border-top: 1px solid rgb(203 213 225);
 }
 
+/* 覆盖 Tailwind preflight 对 em/i 的 font-style: normal 重置 */
+.editor-root :deep(.ProseMirror) em,
+.editor-root :deep(.ProseMirror) i {
+  font-style: italic !important;
+}
+
+.editor-root :deep(.ProseMirror ul) {
+  list-style-type: disc;
+}
+
+.editor-root :deep(.ProseMirror ol) {
+  list-style-type: decimal;
+}
+
 .editor-footer {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
   gap: 0.75rem 1rem;
   border-top: 1px solid rgb(226 232 240);
-  background: transparent;
-  padding: 0.8rem 1rem 0.9rem;
+  background: rgb(249 250 251);
+  padding: 0.75rem 1rem 0.85rem;
 }
 
 .editor-stats,
@@ -842,14 +873,19 @@ defineExpose({
 .editor-shortcut {
   display: inline-flex;
   align-items: center;
-  padding: 0;
+  padding: 0.25rem 0.5rem;
   color: rgb(71 85 105);
-  font-size: 0.79rem;
+  font-size: 0.75rem;
   line-height: 1.4;
+  background: rgb(255 255 255);
+  border-radius: 4px;
+  border: 1px solid rgb(226 232 240);
 }
 
 .editor-stat--accent {
   color: rgb(14 116 144);
-  font-weight: 700;
+  font-weight: 600;
+  background: rgb(240 249 255);
+  border-color: rgb(186 230 253);
 }
 </style>

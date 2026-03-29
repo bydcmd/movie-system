@@ -28,6 +28,7 @@ export default defineConfig({
     })
   ],
   resolve: {
+    extensions: ['.ts', '.tsx', '.mjs', '.js', '.jsx', '.json', '.vue'],
     alias: {
       '@': path.resolve(__dirname, './src')
     }
@@ -38,7 +39,7 @@ export default defineConfig({
     proxy: {
       // 匹配所有以 /api 开头的请求路径
       '/api': {
-        target: 'http://localhost:9090', // 你的真实后端接口地址
+        target: 'http://localhost:8080', // 你的真实后端接口地址
         changeOrigin: true, // 允许跨域
         // 如果后端接口本身不带 /api 前缀，需要将其重写（去掉 /api）
         // rewrite: (path) => path.replace(/^\/api/, '') 
