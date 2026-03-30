@@ -83,6 +83,10 @@
         UPDATE favorite_folders SET movie_count = movie_count + 1 WHERE id = #{id}
     </update>
 
+    <update id="incrementMovieCountBy">
+        UPDATE favorite_folders SET movie_count = movie_count + #{count} WHERE id = #{id}
+    </update>
+
     <update id="decrementMovieCount">
         UPDATE favorite_folders SET movie_count = movie_count - 1 WHERE id = #{id} AND movie_count > 0
     </update>

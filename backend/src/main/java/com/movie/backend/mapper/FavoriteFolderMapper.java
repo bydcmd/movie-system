@@ -34,6 +34,9 @@ public interface FavoriteFolderMapper {
     // 增加收藏夹的电影数量
     int incrementMovieCount(@Param("id") Long id);
 
+    // 批量增加收藏夹的电影数量
+    int incrementMovieCountBy(@Param("id") Long id, @Param("count") int count);
+
     // 减少收藏夹的电影数量
     int decrementMovieCount(@Param("id") Long id);
 

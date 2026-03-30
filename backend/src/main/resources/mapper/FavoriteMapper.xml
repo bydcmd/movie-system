@@ -131,10 +131,21 @@
 
     <select id="selectByUserMovieAndFolder" resultType="com.movie.backend.entity.Favorite">
         SELECT user_id as userId, movie_id as movieId, folder_id as folderId, create_time as createTime
-        FROM favorites 
-        WHERE user_id = #{userId} 
-        AND movie_id = #{movieId} 
+        FROM favorites
+        WHERE user_id = #{userId}
+        AND movie_id = #{movieId}
         AND folder_id = #{folderId}
         LIMIT 1
     </select>
+
+    <update id="updateFolderBatch">
+        UPDATE favorites
+        SET folder_id = #{toFolderId}
+        WHERE user_id = #{userId}
+        AND folder_id = #{fromFolderId}
+        AND movie_id IN
+        <foreach collection="movieIds" item="movieId" open="(" separator="," close=")">
+            #{movieId}
+        </foreach>
+    </update>
 </mapper>
