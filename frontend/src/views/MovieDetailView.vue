@@ -23,7 +23,6 @@ import CommentList from '@/components/comment/CommentList.vue'
 import NavBar from '@/components/layout/NavBar.vue'
 import MovieDetailSimilarMovies from '@/components/movie/MovieDetailSimilarMovies.vue'
 import MoviePlaceholder from '@/components/movie/MoviePlaceholder.vue'
-import { useGetSimilarMovies } from '@/api/endpoints/analytics/analytics'
 import {
   useDeleteMyComment,
   useGetMovieComments,
@@ -39,7 +38,10 @@ import {
   useIsFavorited,
   useRemoveFavorite
 } from '@/api/endpoints/favorite-management/favorite-management'
-import { useGetMovieDetail } from '@/api/endpoints/movie-management/movie-management'
+import {
+  useGetMovieDetail,
+  useGetSimilarMoviesByMovie
+} from '@/api/endpoints/movie-management/movie-management'
 import { useGetUserRating, useUpdateRating } from '@/api/endpoints/rating-management/rating-management'
 import { useRecordViewHistory } from '@/api/endpoints/view-history-management/view-history-management'
 import {
@@ -48,6 +50,7 @@ import {
   useRemoveWatched
 } from '@/api/endpoints/watched-management/watched-management'
 import { useAuthStore } from '@/stores/auth'
+import { getMovieId } from '@/utils/movie'
 
 const route = useRoute()
 const router = useRouter()
@@ -55,6 +58,8 @@ const dialog = useDialog()
 const message = useMessage()
 const authStore = useAuthStore()
 const GUEST_COMMENT_LIMIT = 20
+const SIMILAR_MOVIES_DISPLAY_LIMIT = 6
+const SIMILAR_MOVIES_FETCH_LIMIT = SIMILAR_MOVIES_DISPLAY_LIMIT * 3
 const movieId = computed(() => Number(route.params.id))
 const currentUserId = computed(() => authStore.user?.id ?? null)
 
@@ -111,8 +116,7 @@ const commentQueryParams = computed(() => ({
   type: commentTypeParam.value
 }))
 const similarMoviesQueryParams = computed(() => ({
-  type: 2,
-  limit: 6
+  limit: SIMILAR_MOVIES_FETCH_LIMIT
 }))
 const movieDetailQuery = useGetMovieDetail(movieId, {
   query: {
@@ -129,7 +133,7 @@ const movieCommentsQuery = useGetMovieComments(movieId, commentQueryParams, {
     retry: false
   }
 })
-const similarMoviesQuery = useGetSimilarMovies(movieId, similarMoviesQueryParams, {
+const similarMoviesQuery = useGetSimilarMoviesByMovie(movieId, similarMoviesQueryParams, {
   query: {
     enabled: false,
     retry: false
@@ -217,6 +221,27 @@ const resolveRating = (value: unknown): number | null => {
 
 const normalizeMovieList = (value: unknown): Movie[] => {
   return Array.isArray(value) ? (value as Movie[]) : []
+}
+
+const normalizeSimilarMovieList = (value: unknown, targetMovieId: number): Movie[] => {
+  const result: Movie[] = []
+  const seenMovieIds = new Set<number>()
+
+  for (const movie of normalizeMovieList(value)) {
+    const id = getMovieId(movie)
+    if (!id || id <= 0 || id === targetMovieId || seenMovieIds.has(id)) {
+      continue
+    }
+
+    seenMovieIds.add(id)
+    result.push(movie)
+
+    if (result.length >= SIMILAR_MOVIES_DISPLAY_LIMIT) {
+      break
+    }
+  }
+
+  return result
 }
 
 const ensureAuthenticated = () => {
@@ -515,7 +540,7 @@ const fetchSimilarMovies = async () => {
       return
     }
 
-    similarMovies.value = normalizeMovieList(data).filter((item) => item.id !== targetMovieId)
+    similarMovies.value = normalizeSimilarMovieList(data, targetMovieId)
   } catch (error) {
     console.error('Failed to fetch similar movies:', error)
     if (targetMovieId === movieId.value) {
