@@ -3,12 +3,14 @@ import { useMessage } from 'naive-ui'
 import {
   useGetMyComments
 } from '@/api/endpoints/comment-management/comment-management'
+import { useGetMyFavoriteFolders } from '@/api/endpoints/favorite-folder-management/favorite-folder-management'
 import { useGetMyFavorites } from '@/api/endpoints/favorite-management/favorite-management'
 import { useGetMyRatings } from '@/api/endpoints/rating-management/rating-management'
 import { useGetMyProfile, useUpdateMyProfile } from '@/api/endpoints/user-management/user-management'
 import { useGetMyWatchedList } from '@/api/endpoints/watched-management/watched-management'
 import type {
   Comment,
+  FavoriteFolderVO,
   MovieItemVO,
   MyRatingVO,
   UpdateUserProfileDTO,
@@ -88,6 +90,12 @@ export function useProfileDashboard() {
       retry: false
     }
   })
+  const favoriteFoldersQuery = useGetMyFavoriteFolders({
+    query: {
+      enabled: false,
+      retry: false
+    }
+  })
   const watchedQuery = useGetMyWatchedList(previewParams, {
     query: {
       enabled: false,
@@ -109,6 +117,7 @@ export function useProfileDashboard() {
   const updateProfileMutation = useUpdateMyProfile()
 
   const profile = ref<UserProfileVO | null>(toFallbackProfile(authStore.user))
+  const favoriteFolders = ref<FavoriteFolderVO[]>([])
   const favoriteMovies = ref<MovieItemVO[]>([])
   const watchedMovies = ref<MovieItemVO[]>([])
   const ratings = ref<MyRatingVO[]>([])
@@ -140,12 +149,14 @@ export function useProfileDashboard() {
 
     const [
       profileResult,
+      favoriteFoldersResult,
       favoriteResult,
       watchedResult,
       ratingResult,
       commentResult
     ] = await Promise.allSettled([
       refetchOrThrow(profileQuery),
+      refetchOrThrow(favoriteFoldersQuery),
       refetchOrThrow(favoritesQuery),
       refetchOrThrow(watchedQuery),
       refetchOrThrow(ratingsQuery),
@@ -154,6 +165,12 @@ export function useProfileDashboard() {
 
     if (profileResult.status === 'fulfilled') {
       profile.value = normalizeProfile(profileResult.value) ?? profile.value
+    }
+
+    if (favoriteFoldersResult.status === 'fulfilled') {
+      favoriteFolders.value = Array.isArray(favoriteFoldersResult.value)
+        ? (favoriteFoldersResult.value as FavoriteFolderVO[])
+        : []
     }
 
     if (favoriteResult.status === 'fulfilled') {
@@ -182,6 +199,7 @@ export function useProfileDashboard() {
 
     const failures = [
       profileResult,
+      favoriteFoldersResult,
       favoriteResult,
       watchedResult,
       ratingResult,
@@ -236,6 +254,7 @@ export function useProfileDashboard() {
 
   return {
     profile,
+    favoriteFolders,
     favoriteMovies,
     watchedMovies,
     ratings,

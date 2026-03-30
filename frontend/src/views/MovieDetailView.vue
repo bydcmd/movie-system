@@ -48,6 +48,7 @@ import {
 } from '@/api/endpoints/favorite-folder-management/favorite-folder-management'
 import {
   useAddFavorite,
+  useGetMovieFolderIds,
   useIsFavorited,
   useRemoveFavorite
 } from '@/api/endpoints/favorite-management/favorite-management'
@@ -106,12 +107,24 @@ const myShortComment = ref<Comment | null>(null)
 const myLongReview = ref<Comment | null>(null)
 const reviewDraftResetToken = ref(0)
 const showFavoriteFolderPicker = ref(false)
+const selectedFavoriteFolderIds = ref<number[]>([])
+const currentFavoriteFolderIds = ref<number[]>([])
 const showCreateFavoriteFolderModal = ref(false)
-const favoriteFolderSubmittingId = ref<number | null>(null)
+const favoriteFolderSubmitting = ref(false)
 const creatingFavoriteFolder = ref(false)
 const optionalAuthRequest = {
   skipUnauthorizedRedirect: true
 } as const
+
+type FavoriteFolderChangeAction = 'add' | 'remove'
+type FavoriteFolderSubmitStatus = 'success' | 'duplicate' | 'failed'
+
+type FavoriteFolderSubmitResult = {
+  folder: FavoriteFolderVO & { id: number }
+  action: FavoriteFolderChangeAction
+  status: FavoriteFolderSubmitStatus
+  errorMessage?: string
+}
 
 const shortReviewInitial = computed(() => myShortComment.value?.content?.trim() ?? '')
 const shortReviewActionLabel = computed(() => (myShortComment.value?.id ? '改短评' : '写短评'))
@@ -179,6 +192,13 @@ const favoriteStatusQuery = useIsFavorited(movieId, {
   },
   request: optionalAuthRequest
 })
+const movieFavoriteFolderIdsQuery = useGetMovieFolderIds(movieId, {
+  query: {
+    enabled: false,
+    retry: false
+  },
+  request: optionalAuthRequest
+})
 const favoriteFoldersQuery = useGetMyFavoriteFolders({
   query: {
     enabled: false,
@@ -216,11 +236,17 @@ const recordViewHistoryMutation = useRecordViewHistory({
 const favoriteFoldersLoading = computed(() => {
   return favoriteFoldersQuery.isLoading.value || favoriteFoldersQuery.isFetching.value
 })
+const favoriteFolderMembershipLoading = computed(() => {
+  return movieFavoriteFolderIdsQuery.isLoading.value || movieFavoriteFolderIdsQuery.isFetching.value
+})
+const favoriteFolderPickerLoading = computed(() => {
+  return favoriteFoldersLoading.value || favoriteFolderMembershipLoading.value
+})
 const favoriteActionLabel = computed(() => {
   return isFavorited.value ? '取消收藏' : '收藏'
 })
 const favoriteFolderActionLabel = computed(() => {
-  return isFavorited.value ? '已在收藏夹中' : '添加到收藏夹'
+  return isFavorited.value ? '管理收藏夹' : '添加到收藏夹'
 })
 
 async function refetchOrThrow<T>(query: { refetch: () => Promise<{ data?: T; error?: unknown }> }) {
@@ -285,6 +311,22 @@ const normalizeFavoriteFolderList = (value: unknown): FavoriteFolderVO[] => {
   }
 
   return sortFavoriteFolders(value as FavoriteFolderVO[])
+}
+
+const normalizeFolderIdList = (value: unknown): number[] => {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return Array.from(
+    new Set(value.filter((folderId): folderId is number => typeof folderId === 'number' && folderId > 0))
+  )
+}
+
+const isSelectableFavoriteFolder = (
+  folder?: FavoriteFolderVO | null
+): folder is FavoriteFolderVO & { id: number } => {
+  return Boolean(folder && typeof folder.id === 'number' && folder.id > 0)
 }
 
 const ensureAuthenticated = () => {
@@ -589,6 +631,25 @@ const fetchFavoriteStatus = async () => {
   }
 }
 
+const fetchMovieFavoriteFolderIds = async () => {
+  if (!authStore.isAuthenticated || !movieId.value) {
+    currentFavoriteFolderIds.value = []
+    return []
+  }
+
+  try {
+    const data = await refetchOrThrow(movieFavoriteFolderIdsQuery)
+    const folderIds = normalizeFolderIdList(data)
+    currentFavoriteFolderIds.value = folderIds
+    return folderIds
+  } catch (error) {
+    console.error('Failed to fetch movie favorite folder ids:', error)
+    currentFavoriteFolderIds.value = []
+    message.error(extractErrorMessage(error) || '电影收藏夹状态加载失败，请稍后再试')
+    return []
+  }
+}
+
 const loadFavoriteFolders = async () => {
   if (!authStore.isAuthenticated) {
     favoriteFolders.value = []
@@ -655,12 +716,20 @@ const toggleFavorite = async () => {
     if (shouldRemoveFavorite) {
       await removeFavoriteMutation.mutateAsync({ movieId: movieId.value })
       isFavorited.value = false
+      currentFavoriteFolderIds.value = []
+      selectedFavoriteFolderIds.value = []
       message.success('已取消收藏')
       return
     }
 
     await addFavoriteMutation.mutateAsync({ movieId: movieId.value })
     isFavorited.value = true
+    const defaultFolder = favoriteFolders.value.find(
+      (folder) => isDefaultFavoriteFolder(folder)
+    )
+    if (isSelectableFavoriteFolder(defaultFolder) && !currentFavoriteFolderIds.value.includes(defaultFolder.id)) {
+      currentFavoriteFolderIds.value = [...currentFavoriteFolderIds.value, defaultFolder.id]
+    }
     message.success('已添加到默认收藏夹')
   } catch (error) {
     if (shouldRemoveFavorite) {
@@ -680,36 +749,202 @@ const openFavoriteFolderPicker = async () => {
     return
   }
 
+  selectedFavoriteFolderIds.value = []
+  currentFavoriteFolderIds.value = []
   showFavoriteFolderPicker.value = true
-  await loadFavoriteFolders()
-}
+  const [, folderIds] = await Promise.all([loadFavoriteFolders(), fetchMovieFavoriteFolderIds()])
 
-const handleAddToFavoriteFolder = async (folder: FavoriteFolderVO) => {
-  const folderId = typeof folder.id === 'number' ? folder.id : null
-  const isDefaultFolder = isDefaultFavoriteFolder(folder)
-  if ((!isDefaultFolder && folderId === null) || !ensureAuthenticated() || !movieId.value) {
+  if (!showFavoriteFolderPicker.value) {
     return
   }
 
-  favoriteFolderSubmittingId.value = folderId
+  selectedFavoriteFolderIds.value = [...folderIds]
+}
+
+const describeFolderSelection = (folders: Array<FavoriteFolderVO & { id: number }>) => {
+  if (folders.length === 1) {
+    const folder = folders[0]!
+    return isDefaultFavoriteFolder(folder) ? '默认收藏夹' : `“${folder.name || '未命名收藏夹'}”`
+  }
+
+  return `${folders.length} 个收藏夹`
+}
+
+const handleFavoriteFolderSubmit = async (folderIds: number[]) => {
+  if (!ensureAuthenticated() || !movieId.value) {
+    return
+  }
+
+  const nextFolderIds = normalizeFolderIdList(folderIds)
+  const favoriteFolderMap = new Map(
+    favoriteFolders.value
+      .filter(isSelectableFavoriteFolder)
+      .map((folder) => [folder.id, folder] as const)
+  )
+  const currentFolderIdSet = new Set(currentFavoriteFolderIds.value)
+  const nextFolderIdSet = new Set(nextFolderIds)
+  const targetAddFolders = nextFolderIds
+    .filter((folderId) => !currentFolderIdSet.has(folderId))
+    .map((folderId) => favoriteFolderMap.get(folderId))
+    .filter((folder): folder is FavoriteFolderVO & { id: number } => Boolean(folder))
+  const targetRemoveFolders = currentFavoriteFolderIds.value
+    .filter((folderId) => !nextFolderIdSet.has(folderId))
+    .map((folderId) => favoriteFolderMap.get(folderId))
+    .filter((folder): folder is FavoriteFolderVO & { id: number } => Boolean(folder))
+
+  if (!targetAddFolders.length && !targetRemoveFolders.length) {
+    showFavoriteFolderPicker.value = false
+    message.info('收藏夹未发生变化')
+    return
+  }
+
+  favoriteFolderSubmitting.value = true
+  const results: FavoriteFolderSubmitResult[] = []
 
   try {
-    await addFavoriteMutation.mutateAsync({
-      movieId: movieId.value,
-      params: !isDefaultFolder && folderId !== null ? { folderId } : undefined
-    })
-    isFavorited.value = true
-    showFavoriteFolderPicker.value = false
-    message.success(
-      isDefaultFolder
-        ? '已添加到默认收藏夹'
-        : `已添加到“${folder.name || '未命名收藏夹'}”`
-    )
+    for (const folder of targetAddFolders) {
+      try {
+        await addFavoriteMutation.mutateAsync({
+          movieId: movieId.value,
+          params: { folderId: folder.id }
+        })
+        results.push({
+          folder,
+          action: 'add',
+          status: 'success'
+        })
+      } catch (error) {
+        const messageText = extractErrorMessage(error)
+
+        if (messageText && isDuplicateFavoriteError(messageText)) {
+          results.push({
+            folder,
+            action: 'add',
+            status: 'duplicate',
+            errorMessage: messageText
+          })
+          continue
+        }
+
+        console.error('Failed to add movie to favorite folder:', error)
+        results.push({
+          folder,
+          action: 'add',
+          status: 'failed',
+          errorMessage: messageText || '添加到收藏夹失败'
+        })
+      }
+    }
+
+    for (const folder of targetRemoveFolders) {
+      try {
+        await removeFavoriteMutation.mutateAsync({
+          movieId: movieId.value,
+          params: { folderId: folder.id }
+        })
+        results.push({
+          folder,
+          action: 'remove',
+          status: 'success'
+        })
+      } catch (error) {
+        const messageText = extractErrorMessage(error)
+        console.error('Failed to remove movie from favorite folder:', error)
+        results.push({
+          folder,
+          action: 'remove',
+          status: 'failed',
+          errorMessage: messageText || '取消收藏失败'
+        })
+      }
+    }
+
+    const succeededFolders = results
+      .filter((result) => result.action === 'add' && result.status === 'success')
+      .map((result) => result.folder)
+    const removedFolders = results
+      .filter((result) => result.action === 'remove' && result.status === 'success')
+      .map((result) => result.folder)
+    const duplicateFolders = results
+      .filter((result) => result.action === 'add' && result.status === 'duplicate')
+      .map((result) => result.folder)
+    const failedResults = results.filter((result) => result.status === 'failed')
+    const [, latestFolderIds] = await Promise.all([loadFavoriteFolders(), fetchMovieFavoriteFolderIds()])
+
+    isFavorited.value = latestFolderIds.length > 0
+    selectedFavoriteFolderIds.value = failedResults.length > 0 ? [...nextFolderIds] : [...latestFolderIds]
+
+    if (failedResults.length === 0) {
+      showFavoriteFolderPicker.value = false
+    }
+
+    if (
+      succeededFolders.length > 0 &&
+      removedFolders.length === 0 &&
+      duplicateFolders.length === 0 &&
+      failedResults.length === 0
+    ) {
+      message.success(`已添加到${describeFolderSelection(succeededFolders)}`)
+      return
+    }
+
+    if (
+      succeededFolders.length === 0 &&
+      removedFolders.length === 0 &&
+      duplicateFolders.length > 0 &&
+      failedResults.length === 0
+    ) {
+      message.info(`所选的${describeFolderSelection(duplicateFolders)}中已包含这部电影`)
+      return
+    }
+
+    if (
+      succeededFolders.length === 0 &&
+      removedFolders.length > 0 &&
+      duplicateFolders.length === 0 &&
+      failedResults.length === 0
+    ) {
+      message.success(`已从${describeFolderSelection(removedFolders)}移除`)
+      return
+    }
+
+    if (failedResults.length === 0) {
+      const changeSummary: string[] = []
+
+      if (succeededFolders.length > 0) {
+        changeSummary.push(`添加到${describeFolderSelection(succeededFolders)}`)
+      }
+
+      if (removedFolders.length > 0) {
+        changeSummary.push(`从${describeFolderSelection(removedFolders)}移除`)
+      }
+
+      if (duplicateFolders.length > 0) {
+        changeSummary.push(`${duplicateFolders.length} 个收藏夹已存在`)
+      }
+
+      message.success(
+        changeSummary.length > 0 ? `已更新收藏夹：${changeSummary.join('，')}` : '收藏夹已更新'
+      )
+      return
+    }
+
+    if (
+      failedResults.length > 0 &&
+      (succeededFolders.length > 0 || removedFolders.length > 0 || duplicateFolders.length > 0)
+    ) {
+      message.warning(
+        `已处理 ${succeededFolders.length + removedFolders.length + duplicateFolders.length} 个收藏夹，仍有 ${failedResults.length} 个收藏夹处理失败`
+      )
+      return
+    }
+
+    message.error(failedResults[0]?.errorMessage || '收藏夹更新失败')
   } catch (error) {
-    console.error('Failed to add movie to favorite folder:', error)
-    handleFavoriteActionError(error, '添加到收藏夹失败')
+    console.error('Failed to update movie favorite folders:', error)
+    handleFavoriteActionError(error, '收藏夹更新失败')
   } finally {
-    favoriteFolderSubmittingId.value = null
+    favoriteFolderSubmitting.value = false
   }
 }
 
@@ -978,7 +1213,9 @@ watch(
       showFavoriteFolderPicker.value = false
       showCreateFavoriteFolderModal.value = false
       favoriteFolders.value = []
-      favoriteFolderSubmittingId.value = null
+      selectedFavoriteFolderIds.value = []
+      currentFavoriteFolderIds.value = []
+      favoriteFolderSubmitting.value = false
     }
 
     fetchComments()
@@ -998,7 +1235,9 @@ watch(
     imageError.value = false
     showFavoriteFolderPicker.value = false
     showCreateFavoriteFolderModal.value = false
-    favoriteFolderSubmittingId.value = null
+    selectedFavoriteFolderIds.value = []
+    currentFavoriteFolderIds.value = []
+    favoriteFolderSubmitting.value = false
     fetchMovieDetail()
     fetchSimilarMovies()
     fetchComments()
@@ -1319,10 +1558,12 @@ watch(
 
     <MovieFavoriteFolderPickerModal
       v-model:show="showFavoriteFolderPicker"
+      v-model:selected-folder-ids="selectedFavoriteFolderIds"
+      :initial-folder-ids="currentFavoriteFolderIds"
       :folders="favoriteFolders"
-      :loading="favoriteFoldersLoading"
-      :submitting-folder-id="favoriteFolderSubmittingId"
-      @select-folder="handleAddToFavoriteFolder"
+      :loading="favoriteFolderPickerLoading"
+      :submitting="favoriteFolderSubmitting"
+      @submit="handleFavoriteFolderSubmit"
       @create-folder="openCreateFavoriteFolder"
     />
 

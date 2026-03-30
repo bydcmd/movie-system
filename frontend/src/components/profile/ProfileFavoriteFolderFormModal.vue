@@ -2,6 +2,7 @@
 import { computed, reactive, watch } from 'vue'
 import { NButton, NForm, NFormItem, NInput, NModal, NSwitch, useMessage } from 'naive-ui'
 import type { FavoriteFolderDTO, FavoriteFolderVO } from '@/api/model'
+import { isDefaultFavoriteFolder } from '@/utils/favorite-folder'
 
 type FolderFormMode = 'create' | 'edit'
 
@@ -36,11 +37,37 @@ const form = reactive<FolderFormState>({
   isPublic: false
 })
 
-const dialogTitle = computed(() => (props.mode === 'edit' ? '编辑收藏夹' : '新建收藏夹'))
+const isEditingDefaultFolder = computed(() => {
+  return props.mode === 'edit' && isDefaultFavoriteFolder(props.initialFolder)
+})
+const dialogTitle = computed(() => {
+  if (props.mode !== 'edit') {
+    return '新建收藏夹'
+  }
+
+  return isEditingDefaultFolder.value ? '编辑默认收藏夹' : '编辑收藏夹'
+})
 const submitLabel = computed(() => (props.mode === 'edit' ? '保存修改' : '创建收藏夹'))
 const modalStyle = computed(() => ({
   width: 'min(720px, calc(100vw - 1.5rem))'
 }))
+const introText = computed(() => {
+  if (props.mode !== 'edit') {
+    return '设置片单名称、说明和可见性，方便后续整理不同主题的电影。'
+  }
+
+  if (isEditingDefaultFolder.value) {
+    return '默认收藏夹名称由系统维护，这里可以更新说明和公开状态。'
+  }
+
+  return '修改收藏夹名称、说明和公开状态，让片单信息保持清晰。'
+})
+const nameInputPlaceholder = computed(() => {
+  return props.mode === 'create' ? '例如：午夜科幻、年度十佳、想再看一遍' : ''
+})
+const descriptionPlaceholder = computed(() => {
+  return isEditingDefaultFolder.value ? '补充这个默认收藏夹的用途说明' : '添加说明'
+})
 
 function applyFormState(folder?: FavoriteFolderVO | null) {
   form.name = folder?.name ?? ''
@@ -57,7 +84,7 @@ function closeModal() {
 }
 
 function handleSubmit() {
-  const name = form.name.trim()
+  const name = (isEditingDefaultFolder.value ? props.initialFolder?.name ?? form.name : form.name).trim()
   const description = form.description.trim()
 
   if (!name) {
@@ -98,24 +125,28 @@ watch(
   >
     <div class="space-y-6">
       <section class="rounded-[24px] bg-slate-50 px-4 py-4 text-sm leading-6 text-slate-600">
-        自定义片单名称、说明和可见性。默认收藏夹由系统维护，不支持在这里修改。
+        {{ introText }}
       </section>
 
       <n-form label-placement="top" class="space-y-4">
-        <n-form-item label="收藏夹名称" required>
+        <n-form-item label="收藏夹名称" :required="!isEditingDefaultFolder">
           <n-input
             v-model:value="form.name"
-            placeholder="例如：午夜科幻、年度十佳、想再看一遍"
+            :readonly="isEditingDefaultFolder"
+            :placeholder="nameInputPlaceholder"
             maxlength="100"
             show-count
           />
+          <p v-if="isEditingDefaultFolder" class="mt-2 text-xs leading-5 text-slate-500">
+            默认收藏夹名称由系统维护，暂不支持在这里修改名称。
+          </p>
         </n-form-item>
 
         <n-form-item label="收藏夹说明">
           <n-input
             v-model:value="form.description"
             type="textarea"
-            placeholder="给这份片单留一段说明，帮助以后快速回想起它的主题。"
+            :placeholder="descriptionPlaceholder"
             maxlength="500"
             :autosize="{ minRows: 4, maxRows: 8 }"
             show-count
@@ -127,7 +158,7 @@ watch(
             <div>
               <h3 class="text-sm font-semibold text-slate-900">公开设置</h3>
               <p class="mt-1 text-sm leading-6 text-slate-500">
-                公开后，其他用户可以查看这个收藏夹的详情页与片单内容。
+                公开后，其他用户可以查看这个{{ isEditingDefaultFolder ? '默认' : '' }}收藏夹的详情页与片单内容。
               </p>
             </div>
 

@@ -1,25 +1,28 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { NButton, NEmpty, NModal, NSpin, NTag } from 'naive-ui'
+import { computed, watch } from 'vue'
+import { NButton, NCheckbox, NEmpty, NModal, NSpin, NTag } from 'naive-ui'
 import type { FavoriteFolderVO } from '@/api/model'
 import { isDefaultFavoriteFolder, sortFavoriteFolders } from '@/utils/favorite-folder'
 
 const show = defineModel<boolean>('show', { required: true })
+const selectedFolderIds = defineModel<number[]>('selectedFolderIds', { required: true })
 
 const props = withDefaults(
   defineProps<{
     folders: FavoriteFolderVO[]
+    initialFolderIds?: number[]
     loading?: boolean
-    submittingFolderId?: number | null
+    submitting?: boolean
   }>(),
   {
+    initialFolderIds: () => [],
     loading: false,
-    submittingFolderId: null
+    submitting: false
   }
 )
 
 const emit = defineEmits<{
-  selectFolder: [folder: FavoriteFolderVO]
+  submit: [folderIds: number[]]
   createFolder: []
 }>()
 
@@ -27,13 +30,35 @@ const modalStyle = computed(() => ({
   width: 'min(780px, calc(100vw - 1.5rem))'
 }))
 
-const sortedFolders = computed(() => sortFavoriteFolders(props.folders))
-const hasFolders = computed(() => sortedFolders.value.length > 0)
-const hasPendingSubmission = computed(() => props.submittingFolderId !== null && props.submittingFolderId !== undefined)
+const selectableFolders = computed(() => {
+  return sortFavoriteFolders(props.folders).filter(
+    (folder): folder is FavoriteFolderVO & { id: number } =>
+      typeof folder.id === 'number' && folder.id > 0
+  )
+})
+const hasFolders = computed(() => selectableFolders.value.length > 0)
+const hasPendingSubmission = computed(() => props.submitting)
+const selectedCount = computed(() => selectedFolderIds.value.length)
+const initialSelectedFolderIds = computed(() => {
+  return Array.from(
+    new Set(
+      (props.initialFolderIds ?? []).filter(
+        (folderId): folderId is number => typeof folderId === 'number' && folderId > 0
+      )
+    )
+  )
+})
+const initialFolderIdSet = computed(() => new Set(initialSelectedFolderIds.value))
+const initialSelectedCount = computed(() => initialSelectedFolderIds.value.length)
+const hasChanges = computed(() => {
+  if (selectedFolderIds.value.length !== initialSelectedFolderIds.value.length) {
+    return true
+  }
 
-function isSubmitting(folderId?: number) {
-  return folderId !== undefined && folderId !== null && props.submittingFolderId === folderId
-}
+  const selectedFolderIdSet = new Set(selectedFolderIds.value)
+  return initialSelectedFolderIds.value.some((folderId) => !selectedFolderIdSet.has(folderId))
+})
+const canSubmit = computed(() => hasChanges.value && !hasPendingSubmission.value)
 
 function getVisibilityLabel(folder: FavoriteFolderVO) {
   if (isDefaultFavoriteFolder(folder)) {
@@ -47,22 +72,79 @@ function getMovieCountLabel(folder: FavoriteFolderVO) {
   const count = typeof folder.movieCount === 'number' ? folder.movieCount : 0
   return `${count} 部电影`
 }
+
+function isSelected(folderId: number) {
+  return selectedFolderIds.value.includes(folderId)
+}
+
+function isInitiallySelected(folderId: number) {
+  return initialFolderIdSet.value.has(folderId)
+}
+
+function willAdd(folderId: number) {
+  return isSelected(folderId) && !isInitiallySelected(folderId)
+}
+
+function willRemove(folderId: number) {
+  return !isSelected(folderId) && isInitiallySelected(folderId)
+}
+
+function handleFolderSelection(folderId: number, checked: boolean) {
+  if (hasPendingSubmission.value) {
+    return
+  }
+
+  if (checked) {
+    if (!selectedFolderIds.value.includes(folderId)) {
+      selectedFolderIds.value = [...selectedFolderIds.value, folderId]
+    }
+    return
+  }
+
+  selectedFolderIds.value = selectedFolderIds.value.filter((id) => id !== folderId)
+}
+
+function handleSubmit() {
+  if (!canSubmit.value) {
+    return
+  }
+
+  emit('submit', [...selectedFolderIds.value])
+}
+
+watch(
+  selectableFolders,
+  (nextFolders) => {
+    const validFolderIds = new Set(nextFolders.map((folder) => folder.id))
+    selectedFolderIds.value = selectedFolderIds.value.filter((folderId) => validFolderIds.has(folderId))
+  },
+  { immediate: true }
+)
+
+watch(
+  () => show.value,
+  (visible) => {
+    if (!visible) {
+      selectedFolderIds.value = []
+    }
+  }
+)
 </script>
 
 <template>
   <n-modal
     v-model:show="show"
     preset="card"
-    title="添加到收藏夹"
+    title="管理收藏夹"
     class="movie-favorite-folder-picker-modal"
     :style="modalStyle"
   >
     <div class="picker-layout">
       <section class="picker-intro">
         <div>
-          <h3 class="picker-title">选择一个收藏夹来保存这部电影</h3>
+          <h3 class="picker-title">勾选想保留这部电影的收藏夹</h3>
           <p class="picker-description">
-            直接添加会进入默认收藏夹；如果你想按主题整理片单，可以在这里选择或新建自定义收藏夹。
+            当前已在 {{ initialSelectedCount }} 个收藏夹中。勾选表示提交后保留在该收藏夹，取消勾选会移除电影，包括默认收藏夹。
           </p>
         </div>
 
@@ -88,18 +170,34 @@ function getMovieCountLabel(folder: FavoriteFolderVO) {
 
       <div v-else class="picker-list">
         <article
-          v-for="folder in sortedFolders"
-          :key="folder.id ?? folder.name"
+          v-for="folder in selectableFolders"
+          :key="folder.id"
           class="picker-card"
+          :class="{ 'picker-card-selected': isSelected(folder.id) }"
         >
           <div class="picker-card-copy">
             <div class="picker-card-header">
-              <div>
-                <h4 class="picker-card-title">{{ folder.name || '未命名收藏夹' }}</h4>
+              <div class="picker-card-main">
+                <n-checkbox
+                  :checked="isSelected(folder.id)"
+                  :disabled="hasPendingSubmission"
+                  @update:checked="handleFolderSelection(folder.id, $event)"
+                >
+                  <span class="picker-card-title">{{ folder.name || '未命名收藏夹' }}</span>
+                </n-checkbox>
                 <p class="picker-card-meta">{{ getMovieCountLabel(folder) }}</p>
               </div>
 
               <div class="picker-card-tags">
+                <n-tag v-if="isInitiallySelected(folder.id)" size="small" type="success">
+                  当前已收藏
+                </n-tag>
+                <n-tag v-if="willAdd(folder.id)" size="small" type="info">
+                  将添加
+                </n-tag>
+                <n-tag v-if="willRemove(folder.id)" size="small" type="warning">
+                  将移除
+                </n-tag>
                 <n-tag size="small" :type="isDefaultFavoriteFolder(folder) ? 'warning' : 'default'">
                   {{ getVisibilityLabel(folder) }}
                 </n-tag>
@@ -110,18 +208,24 @@ function getMovieCountLabel(folder: FavoriteFolderVO) {
               {{ folder.description || '还没有填写这个收藏夹的说明。' }}
             </p>
           </div>
-
-          <n-button
-            type="primary"
-            class="rounded-full px-5"
-            :loading="isSubmitting(folder.id)"
-            :disabled="hasPendingSubmission && !isSubmitting(folder.id)"
-            @click="emit('selectFolder', folder)"
-          >
-            {{ isDefaultFavoriteFolder(folder) ? '添加到默认收藏夹' : '添加到此夹' }}
-          </n-button>
         </article>
       </div>
+
+      <section v-if="hasFolders" class="picker-actions">
+        <p class="picker-selection-summary">
+          当前 {{ initialSelectedCount }} 个，已选 {{ selectedCount }} 个收藏夹
+        </p>
+
+        <n-button
+          type="primary"
+          class="rounded-full px-6"
+          :loading="submitting"
+          :disabled="!canSubmit"
+          @click="handleSubmit"
+        >
+          保存收藏夹变更
+        </n-button>
+      </section>
     </div>
   </n-modal>
 </template>
@@ -175,14 +279,18 @@ function getMovieCountLabel(folder: FavoriteFolderVO) {
 
 .picker-card {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  align-items: flex-start;
   padding: 1rem 1.1rem;
   border: 1px solid rgba(226, 232, 240, 0.95);
   border-radius: 1.25rem;
   background: #ffffff;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.picker-card-selected {
+  border-color: rgba(245, 158, 11, 0.6);
+  background: linear-gradient(135deg, rgba(255, 251, 235, 0.92), rgba(255, 255, 255, 1));
+  box-shadow: 0 18px 42px rgba(245, 158, 11, 0.12);
 }
 
 .picker-card-copy {
@@ -198,8 +306,11 @@ function getMovieCountLabel(folder: FavoriteFolderVO) {
   gap: 0.75rem;
 }
 
+.picker-card-main {
+  min-width: 0;
+}
+
 .picker-card-title {
-  margin: 0;
   font-size: 1rem;
   font-weight: 700;
   color: #0f172a;
@@ -224,9 +335,27 @@ function getMovieCountLabel(folder: FavoriteFolderVO) {
   color: #475569;
 }
 
+.picker-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.9rem 1.1rem;
+  border-radius: 1.25rem;
+  background: #f8fafc;
+}
+
+.picker-selection-summary {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #475569;
+}
+
 @media (max-width: 640px) {
-  .picker-card {
-    align-items: flex-start;
+  .picker-actions {
+    justify-content: flex-start;
   }
 }
 </style>

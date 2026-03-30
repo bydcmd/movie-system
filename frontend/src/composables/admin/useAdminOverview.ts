@@ -109,10 +109,10 @@ export function useAdminOverview() {
       },
       {
         key: 'admins',
-        label: '管理员席位',
+        label: '管理员人数',
         tone: 'slate',
         value: stats.adminUsers || 0,
-        description: '后台路由与权限守卫已经从前台页面中分离出来'
+        description: '拥有后台管理权限的账户数量'
       }
     ]
   })

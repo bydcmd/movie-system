@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   NButton,
@@ -30,6 +30,7 @@ import {
 } from '@/utils/profile'
 
 type FolderFormMode = 'create' | 'edit'
+type IdentifiedFavoriteFolder = FavoriteFolderVO & { id: number }
 
 type PageResult<T> = {
   list: T[]
@@ -64,6 +65,7 @@ const deletingFolderId = ref<number | null>(null)
 const selectedMovieIds = ref<number[]>([])
 const removingMovieIds = ref<number[]>([])
 const bulkRemoving = ref(false)
+const posterLoadErrors = reactive<Record<string, boolean>>({})
 
 const folderMoviesQuery = useGetFolderMovies<PageInfoMovieItemVO>(
   computed(() => activeFolderId.value ?? 0),
@@ -109,9 +111,19 @@ const partiallySelected = computed(() => {
 const isFolderMoviesTruncated = computed(() => {
   return folderMoviesTotal.value > folderMovies.value.length && folderMovies.value.length > 0
 })
+const canManageActiveFolder = computed(() => canManageFolder(activeFolder.value))
+const canEditActiveFolder = computed(() => canEditFolder(activeFolder.value))
 
-function canManageFolder(folder?: FavoriteFolderVO | null): folder is FavoriteFolderVO {
+function canManageFolder(folder?: FavoriteFolderVO | null): folder is IdentifiedFavoriteFolder {
   return Boolean(folder && !isDefaultFavoriteFolder(folder) && typeof folder.id === 'number' && folder.id > 0)
+}
+
+function canEditFolder(folder?: FavoriteFolderVO | null): folder is IdentifiedFavoriteFolder {
+  return Boolean(folder && typeof folder.id === 'number' && folder.id > 0)
+}
+
+function canViewFolderDetail(folder?: FavoriteFolderVO | null): folder is IdentifiedFavoriteFolder {
+  return Boolean(folder && typeof folder.id === 'number' && folder.id > 0)
 }
 
 function normalizePage(value: unknown): PageResult<MovieItemVO> {
@@ -160,6 +172,24 @@ function getPoster(movie: MovieItemVO) {
   return resolveAssetUrl(movie.cover)
 }
 
+function getPosterStateKey(movie: MovieItemVO) {
+  const posterUrl = getPoster(movie) || 'empty'
+  const identity =
+    movie.movieId && movie.movieId > 0
+      ? String(movie.movieId)
+      : `${movie.movieName || 'unknown'}-${movie.year ?? 'unknown'}`
+
+  return `${identity}::${posterUrl}`
+}
+
+function hasPoster(movie: MovieItemVO) {
+  return Boolean(getPoster(movie)) && !posterLoadErrors[getPosterStateKey(movie)]
+}
+
+function handlePosterError(movie: MovieItemVO) {
+  posterLoadErrors[getPosterStateKey(movie)] = true
+}
+
 function getGenres(movie: MovieItemVO) {
   return splitCsvLike(movie.genres).slice(0, 3)
 }
@@ -179,8 +209,8 @@ function openCreateFolder() {
 }
 
 function openEditFolder(folder: FavoriteFolderVO) {
-  if (!canManageFolder(folder)) {
-    message.info('默认收藏夹由系统维护，暂不支持在这里编辑。')
+  if (!canEditFolder(folder)) {
+    message.info('当前收藏夹暂不支持编辑。')
     return
   }
 
@@ -246,8 +276,7 @@ async function loadActiveFolderMovies() {
 }
 
 function openFolderDetail(folder: FavoriteFolderVO) {
-  if (!canManageFolder(folder)) {
-    message.info('默认收藏夹暂不支持在这里管理片单内容。')
+  if (!canViewFolderDetail(folder)) {
     return
   }
 
@@ -426,6 +455,20 @@ watch(
   },
   { deep: true }
 )
+
+watch(
+  folderMovies,
+  (nextMovies) => {
+    const activePosterKeys = new Set(nextMovies.map((movie) => getPosterStateKey(movie)))
+
+    for (const key of Object.keys(posterLoadErrors)) {
+      if (!activePosterKeys.has(key)) {
+        delete posterLoadErrors[key]
+      }
+    }
+  },
+  { deep: true, immediate: true }
+)
 </script>
 
 <template>
@@ -496,13 +539,19 @@ watch(
         </div>
 
         <div class="mt-5 flex flex-wrap gap-2">
+          <n-button size="small" secondary class="rounded-full" @click="openFolderDetail(folder)">
+            {{ canManageFolder(folder) ? '管理内容' : '查看片单' }}
+          </n-button>
+          <n-button
+            v-if="canEditFolder(folder)"
+            size="small"
+            tertiary
+            class="rounded-full"
+            @click="openEditFolder(folder)"
+          >
+            编辑信息
+          </n-button>
           <template v-if="canManageFolder(folder)">
-            <n-button size="small" secondary class="rounded-full" @click="openFolderDetail(folder)">
-              管理内容
-            </n-button>
-            <n-button size="small" tertiary class="rounded-full" @click="openEditFolder(folder)">
-              编辑信息
-            </n-button>
             <n-button
               size="small"
               type="error"
@@ -519,7 +568,7 @@ watch(
             v-else
             class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-500"
           >
-            默认收藏夹由系统维护，暂不支持在此编辑
+            默认收藏夹名称由系统维护，可编辑说明与公开状态
           </span>
         </div>
       </article>
@@ -574,50 +623,65 @@ watch(
           <n-button tertiary class="rounded-full" @click="loadActiveFolderMovies">
             刷新内容
           </n-button>
-          <n-button secondary class="rounded-full" @click="openEditFolder(activeFolder)">
+          <n-button
+            v-if="canEditActiveFolder"
+            secondary
+            class="rounded-full"
+            @click="openEditFolder(activeFolder)"
+          >
             编辑信息
           </n-button>
-          <n-button
-            type="error"
-            quaternary
-            class="rounded-full"
-            :loading="isDeletingFolder(activeFolder.id)"
-            @click="confirmDeleteFolder(activeFolder)"
-          >
-            删除收藏夹
-          </n-button>
+          <template v-if="canManageActiveFolder">
+            <n-button
+              type="error"
+              quaternary
+              class="rounded-full"
+              :loading="isDeletingFolder(activeFolder.id)"
+              @click="confirmDeleteFolder(activeFolder)"
+            >
+              删除收藏夹
+            </n-button>
+          </template>
         </div>
       </div>
 
       <section
         class="flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-4"
       >
-        <div class="flex flex-wrap items-center gap-3">
-          <n-checkbox
-            :checked="allVisibleSelected"
-            :indeterminate="partiallySelected"
-            :disabled="folderMoviesLoading || allVisibleMovieIds.length === 0 || bulkRemoving"
-            @update:checked="handleToggleAllMovies"
-          >
-            全选当前列表
-          </n-checkbox>
+        <template v-if="canManageActiveFolder">
+          <div class="flex flex-wrap items-center gap-3">
+            <n-checkbox
+              :checked="allVisibleSelected"
+              :indeterminate="partiallySelected"
+              :disabled="folderMoviesLoading || allVisibleMovieIds.length === 0 || bulkRemoving"
+              @update:checked="handleToggleAllMovies"
+            >
+              全选当前列表
+            </n-checkbox>
 
+            <span class="text-sm text-slate-500">
+              这里只会从当前收藏夹移除，不影响其它自定义片单中的同名电影。
+            </span>
+          </div>
+
+          <div class="flex flex-wrap gap-2">
+            <n-button
+              type="error"
+              class="rounded-full"
+              :disabled="selectedMovieCount === 0 || folderMoviesLoading"
+              :loading="bulkRemoving"
+              @click="handleRemoveSelectedMovies"
+            >
+              移除所选电影
+            </n-button>
+          </div>
+        </template>
+
+        <template v-else>
           <span class="text-sm text-slate-500">
-            这里只会从当前收藏夹移除，不影响其它自定义片单中的同名电影。
+            默认收藏夹支持编辑说明和公开状态，但不支持删除或批量移除电影。
           </span>
-        </div>
-
-        <div class="flex flex-wrap gap-2">
-          <n-button
-            type="error"
-            class="rounded-full"
-            :disabled="selectedMovieCount === 0 || folderMoviesLoading"
-            :loading="bulkRemoving"
-            @click="handleRemoveSelectedMovies"
-          >
-            移除所选电影
-          </n-button>
-        </div>
+        </template>
       </section>
 
       <section v-if="isFolderMoviesTruncated" class="rounded-[20px] bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -641,7 +705,7 @@ watch(
             <div class="flex flex-1 gap-4">
               <div class="pt-1">
                 <n-checkbox
-                  v-if="movie.movieId"
+                  v-if="movie.movieId && canManageActiveFolder"
                   :checked="selectedMovieIds.includes(movie.movieId)"
                   :disabled="isMovieRemoving(movie.movieId)"
                   @update:checked="handleToggleMovie(movie.movieId, $event)"
@@ -654,7 +718,7 @@ watch(
                 @click="openMovie(movie.movieId)"
               >
                 <MoviePlaceholder
-                  v-if="!getPoster(movie)"
+                  v-if="!hasPoster(movie)"
                   :title="movie.movieName"
                   class="h-full w-full"
                 />
@@ -664,6 +728,7 @@ watch(
                   :alt="movie.movieName"
                   class="h-full w-full object-cover"
                   loading="lazy"
+                  @error="handlePosterError(movie)"
                 />
               </button>
 
@@ -711,6 +776,7 @@ watch(
 
             <div class="flex items-start justify-end">
               <n-button
+                v-if="canManageActiveFolder"
                 type="error"
                 quaternary
                 class="rounded-full"

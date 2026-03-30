@@ -1,12 +1,14 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { NTabs, NTabPane } from 'naive-ui'
-import type { Comment, MovieItemVO, MyRatingVO } from '@/api/model'
+import type { Comment, FavoriteFolderVO, MovieItemVO, MyRatingVO } from '@/api/model'
 import ProfileCommentList from './ProfileCommentList.vue'
+import ProfileFolderList from './ProfileFolderList.vue'
 import ProfileMovieGrid from './ProfileMovieGrid.vue'
 import ProfileRatingList from './ProfileRatingList.vue'
 
-defineProps<{
-  favoriteMovies: MovieItemVO[]
+const props = withDefaults(defineProps<{
+  favoriteFolders: FavoriteFolderVO[]
   watchedMovies: MovieItemVO[]
   ratings: MyRatingVO[]
   comments: Comment[]
@@ -17,7 +19,15 @@ defineProps<{
     comments: number
   }
   loading?: boolean
+}>(), {
+  loading: false
+})
+
+const emit = defineEmits<{
+  refresh: []
 }>()
+
+const favoriteFolderCount = computed(() => props.favoriteFolders.length)
 </script>
 
 <template>
@@ -25,20 +35,17 @@ defineProps<{
     <div class="profile-activity-header">
       <h2 class="profile-activity-title">我的记录</h2>
       <p class="profile-activity-description">
-        查看你的收藏、看过、评分和评论。
+        查看你的收藏夹、看过、评分和评论。
       </p>
     </div>
 
     <n-tabs type="line" animated placement="top" class="profile-tabs">
-      <n-tab-pane name="favorites" :tab="`收藏 (${totals.favorites})`">
-        <ProfileMovieGrid
-          :items="favoriteMovies"
-          :total="totals.favorites"
+      <n-tab-pane name="favorites" :tab="`收藏夹管理 (${favoriteFolderCount})`">
+        <ProfileFolderList
+          :folders="favoriteFolders"
+          :total="favoriteFolderCount"
           :loading="loading"
-          title="最近收藏"
-          description="快速找回你想反复重温的作品。"
-          empty-description="还没有收藏的电影。"
-          record-label="收藏于"
+          @refresh="emit('refresh')"
         />
       </n-tab-pane>
 

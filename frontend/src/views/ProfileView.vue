@@ -43,6 +43,10 @@ function closeProfileEditor() {
   isEditingProfile.value = false
 }
 
+function refreshActivity() {
+  void dashboard.loadDashboard({ silent: true })
+}
+
 onMounted(() => {
   void dashboard.loadDashboard()
 })
@@ -129,12 +133,13 @@ onMounted(() => {
       </div>
 
       <ProfileActivityTabs
-        :favorite-movies="dashboard.favoriteMovies.value"
+        :favorite-folders="dashboard.favoriteFolders.value"
         :watched-movies="dashboard.watchedMovies.value"
         :ratings="dashboard.ratings.value"
         :comments="dashboard.comments.value"
         :totals="dashboard.totals.value"
         :loading="dashboard.loading.value"
+        @refresh="refreshActivity"
       />
     </main>
   </div>
