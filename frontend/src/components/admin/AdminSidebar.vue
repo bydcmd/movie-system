@@ -55,12 +55,6 @@ function navigateTo(name: string) {
       </div>
     </div>
 
-    <div class="sidebar-copy">
-      <p class="sidebar-description">
-        后台已经从前台页面中独立出来，后续模块可以继续按路由扩展。
-      </p>
-    </div>
-
     <nav class="sidebar-nav" aria-label="管理员导航">
       <button
         v-for="item in navItems"

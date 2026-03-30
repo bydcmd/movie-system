@@ -11,6 +11,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
@@ -144,6 +146,16 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Result<String>> handleAccessDeniedException(org.springframework.security.access.AccessDeniedException e) {
         log.warn("禁止访问: {}", e.getMessage());
         return buildResponse(HttpStatus.FORBIDDEN, e.getMessage() == null ? "无权限访问" : e.getMessage());
+    }
+
+    /**
+     * 处理资源不存在异常（404）
+     */
+    @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
+    public ResponseEntity<Result<String>> handleNotFoundException(Exception e) {
+        String message = e.getMessage() == null ? "请求资源不存在" : e.getMessage();
+        log.warn("资源不存在: {}", message);
+        return buildResponse(HttpStatus.NOT_FOUND, message);
     }
 
     /**

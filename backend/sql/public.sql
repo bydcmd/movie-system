@@ -566,7 +566,7 @@ CREATE TABLE "public"."stats_similar_movies" (
 COMMENT ON COLUMN "public"."stats_similar_movies"."movie_id" IS '基准电影ID';
 COMMENT ON COLUMN "public"."stats_similar_movies"."similar_movie_id" IS '相似电影ID';
 COMMENT ON COLUMN "public"."stats_similar_movies"."similarity_score" IS '相似度分值';
-COMMENT ON COLUMN "public"."stats_similar_movies"."similarity_type" IS '类型: 1-内容相似(标签/演员), 2-协同过滤相似(Item-based)';
+COMMENT ON COLUMN "public"."stats_similar_movies"."similarity_type" IS '类型: 1-内容相似(标签/演员), 2-协同过滤相似(Item-based), 3-ALS隐语义相似';
 COMMENT ON TABLE "public"."stats_similar_movies" IS '电影相似度关联表(用于详情页推荐)';
 
 -- ----------------------------

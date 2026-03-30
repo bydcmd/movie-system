@@ -304,11 +304,45 @@
       "rating_value": 2.0
     }
   },
+  "ads_als_similar_movies": {
+    "source_table": "dws.dws_user_item_preference_1d",
+    "target_table": "ads.ads_itemcf_similar_movies",
+    "sink_path": "hdfs:///warehouse/movie/ads/itemcf_similar_movies",
+    "similarity_type": 3,
+    "top_k_similar": 50,
+    "min_similarity_score": 0.05,
+    "min_user_positive_items": 2,
+    "min_item_positive_users": 5,
+    "positive_score_weights": {
+      "view_cnt": 0.2,
+      "rating_cnt": 1.0,
+      "rating_avg_bonus": 0.5,
+      "comment_cnt": 1.0,
+      "favorite_add_cnt": 2.0,
+      "watched_cnt": 3.0
+    },
+    "score_transform": {
+      "method": "log1p",
+      "scale": 1.0
+    },
+    "als_params": {
+      "rank": 64,
+      "max_iter": 10,
+      "reg_param": 0.05,
+      "alpha": 30.0,
+      "seed": 20260329
+    },
+    "pairing": {
+      "strategy": "exact_block_join",
+      "block_count": 16
+    }
+  },
   "ads_itemcf_similar_movies_postgres_sync": {
     "source_table": "ads.ads_itemcf_similar_movies",
     "target_table": "public.stats_similar_movies",
     "supported_similarity_types": [
-      2
+      2,
+      3
     ],
     "batch_size": 1000
   },

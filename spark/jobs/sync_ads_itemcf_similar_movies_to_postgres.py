@@ -18,7 +18,7 @@ from utils.spark_factory import build_spark_session
 DEFAULT_ADS_ITEMCF_SIMILAR_MOVIES_POSTGRES_SYNC_CONFIG: dict[str, Any] = {
     "source_table": "ads.ads_itemcf_similar_movies",
     "target_table": "public.stats_similar_movies",
-    "supported_similarity_types": [2],
+    "supported_similarity_types": [2, 3],
     "batch_size": 1000,
 }
 
@@ -40,7 +40,7 @@ def ensure_non_empty_partition(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Sync ADS ItemCF similar movies from Hive to PostgreSQL.")
+    parser = argparse.ArgumentParser(description="Sync ADS similar movies from Hive to PostgreSQL.")
     parser.add_argument("--config", required=True, help="Path of ETL json config.")
     parser.add_argument(
         "--calc-date",
@@ -228,7 +228,7 @@ def run() -> None:
                 batch_size=batch_size,
             )
             print(
-                "ADS ItemCF similar movie sync to PostgreSQL finished. "
+                "ADS similar movie sync to PostgreSQL finished. "
                 f"source={source_table}, target={target_table}, dt={args.calc_date}, "
                 f"similarity_types={supported_similarity_types}, rows={row_count}, "
                 f"deleted_existing_rows={deleted_rows}"

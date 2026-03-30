@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import uuid
 from typing import Any
 
 from pyspark.sql import DataFrame
 from pyspark.sql import Window
 from pyspark.sql import functions as F
+from pyspark.sql.utils import AnalysisException
 
 import _bootstrap  # noqa: F401
 
@@ -237,6 +239,60 @@ def build_user_recommendations(user_item_df: DataFrame, similarity_df: DataFrame
     )
 
 
+def align_similarity_schema(df: DataFrame) -> DataFrame:
+    return df.select(
+        F.col("movie_id").cast("bigint").alias("movie_id"),
+        F.col("similar_movie_id").cast("bigint").alias("similar_movie_id"),
+        F.col("rank_no").cast("int").alias("rank_no"),
+        F.col("similarity_score").cast("decimal(18,8)").alias("similarity_score"),
+        F.col("common_user_cnt").cast("bigint").alias("common_user_cnt"),
+        F.col("movie_user_cnt").cast("bigint").alias("movie_user_cnt"),
+        F.col("similar_movie_user_cnt").cast("bigint").alias("similar_movie_user_cnt"),
+        F.col("similarity_type").cast("tinyint").alias("similarity_type"),
+    )
+
+
+def merge_with_existing_partition(
+    spark: Any,
+    target_table: str,
+    calc_date: str,
+    current_similarity_type: int,
+    new_similarity_df: DataFrame,
+) -> DataFrame:
+    try:
+        existing_df = spark.table(target_table).where(
+            (F.col("dt") == F.lit(calc_date))
+            & (F.col("similarity_type").cast("int") != F.lit(int(current_similarity_type)))
+        )
+    except AnalysisException:
+        return new_similarity_df
+
+    return align_similarity_schema(existing_df).unionByName(align_similarity_schema(new_similarity_df))
+
+
+def build_staging_path(sink_path: str, calc_date: str, similarity_type: int) -> str:
+    run_id = uuid.uuid4().hex
+    return (
+        f"{sink_path.rstrip('/')}_staging/"
+        f"ads_itemcf_similar_movies/dt={calc_date}/similarity_type={int(similarity_type)}/run_id={run_id}"
+    )
+
+
+def delete_path_if_exists(spark: Any, path: str) -> None:
+    jvm = spark._jvm
+    hadoop_conf = spark._jsc.hadoopConfiguration()
+    path_obj = jvm.org.apache.hadoop.fs.Path(path)
+    filesystem = path_obj.getFileSystem(hadoop_conf)
+    if filesystem.exists(path_obj):
+        filesystem.delete(path_obj, True)
+
+
+def stage_output_for_overwrite(output_df: DataFrame, staging_path: str, spark: Any) -> DataFrame:
+    delete_path_if_exists(spark, staging_path)
+    output_df.write.mode("overwrite").format("orc").save(staging_path)
+    return spark.read.format("orc").load(staging_path)
+
+
 def run() -> None:
     args = parse_args()
     config = load_config(args.config)
@@ -259,8 +315,14 @@ def run() -> None:
     sink_paths: dict[str, str] = itemcf_config["sink_paths"]
     weights = itemcf_config.get("event_score_weights", {})
     source_type = str(itemcf_config.get("source_type", "event_wide")).strip().lower()
+    similarity_type = 2
 
     spark = build_spark_session("movie-ads-itemcf-recommendations", spark_config)
+    similarity_staging_path = build_staging_path(
+        sink_paths["similar_movies"],
+        calc_date=calc_date,
+        similarity_type=similarity_type,
+    )
     try:
         spark.sql("CREATE DATABASE IF NOT EXISTS ads")
 
@@ -279,8 +341,21 @@ def run() -> None:
         ).cache()
         recommendation_df = build_user_recommendations(user_item_df, similarity_df, top_n=top_n).cache()
 
+        merged_similarity_df = merge_with_existing_partition(
+            spark,
+            target_table=target_tables["similar_movies"],
+            calc_date=calc_date,
+            current_similarity_type=similarity_type,
+            new_similarity_df=similarity_df,
+        )
+        staged_similarity_df = stage_output_for_overwrite(
+            merged_similarity_df,
+            staging_path=similarity_staging_path,
+            spark=spark,
+        )
+
         write_partition(
-            similarity_df,
+            staged_similarity_df,
             target_tables["similar_movies"],
             sink_paths["similar_movies"],
             calc_date,
@@ -306,7 +381,12 @@ def run() -> None:
             f"top_k={top_k}, top_n={top_n}, similar_cnt={similarity_count}, recommend_cnt={recommendation_count}"
         )
     finally:
-        spark.stop()
+        try:
+            delete_path_if_exists(spark, similarity_staging_path)
+        except Exception as exc:  # pragma: no cover - cleanup should not mask job failure
+            print(f"Failed to cleanup ItemCF staging path: path={similarity_staging_path}, error={exc}")
+        finally:
+            spark.stop()
 
 
 if __name__ == "__main__":

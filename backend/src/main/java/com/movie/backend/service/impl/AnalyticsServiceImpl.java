@@ -160,6 +160,8 @@ public class AnalyticsServiceImpl implements AnalyticsService {
                 typeText = "内容相似";
             } else if (similarityType == 2) {
                 typeText = "协同过滤相似";
+            } else if (similarityType == 3) {
+                typeText = "ALS 隐语义相似";
             }
         }
         if (similarityScore == null) {

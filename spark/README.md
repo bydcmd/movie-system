@@ -63,6 +63,7 @@ Common wrapper to job mappings:
 - `run_ads_hot_movies_pg_sync.sh` -> `jobs/sync_ads_hot_movies_to_postgres.py`
 - `run_ads_hybrid_hot.sh` -> `jobs/build_ads_hybrid_hot_movies.py`
 - `run_ads_hybrid_reco.sh` -> `jobs/build_ads_hybrid_user_recommendations.py`
+- `run_ads_als_similar_movies.sh` -> `jobs/build_ads_als_similar_movies.py`
 - `run_ads_itemcf.sh` -> `jobs/build_ads_itemcf_recommendations.py`
 - `run_ads_itemcf_similar_movies_pg_sync.sh` -> `jobs/sync_ads_itemcf_similar_movies_to_postgres.py`
 - `run_ads_genre_preference.sh` -> `jobs/build_ads_genre_preference_1d.py`
@@ -426,6 +427,46 @@ Main parameters are configurable in `ads_itemcf`:
 - `shrinkage`: similarity shrinkage factor
 - `event_score_weights`: behavior-to-preference scoring weights (`favorite_add` / `favorite_remove`; legacy `favorite` is still accepted as a fallback for add weight)
 
+### 9.1 Build ALS similar movies (Spark + Hive)
+
+This job trains implicit ALS from `dws.dws_user_item_preference_1d`, extracts `itemFactors`, then computes cosine TopK neighbors from normalized item latent vectors.
+
+Output:
+
+- ALS similar movies: `ads.ads_itemcf_similar_movies` with `similarity_type=3`
+
+The job preserves existing rows for other `similarity_type` values in the same `dt` partition and only replaces the ALS snapshot for `similarity_type=3`.
+
+```bash
+spark-submit \
+  --master yarn \
+  --deploy-mode client \
+  jobs/build_ads_als_similar_movies.py \
+  --config conf/etl_config.json \
+  --calc-date 2026-02-25
+```
+
+Optional override top K similar movies:
+
+```bash
+--top-k 80
+```
+
+Main parameters are configurable in `ads_als_similar_movies`:
+
+- `positive_score_weights`: positive-only implicit feedback weights used to build ALS confidence
+- `score_transform`: transform applied to the raw positive score, default `log1p`
+- `min_user_positive_items`: minimum number of positive movies per user kept for training
+- `min_item_positive_users`: minimum number of positive users per movie kept for training
+- `als_params`: ALS hyperparameters such as `rank`, `max_iter`, `reg_param`, and `alpha`
+- `pairing.block_count`: number of blocks used for exact factor-pair generation
+
+Wrapper script:
+
+```bash
+bash run_ads_als_similar_movies.sh 2026-02-25 conf/etl_config.json --top-k 80
+```
+
 Sync ADS ItemCF similar movies to PostgreSQL table `public.stats_similar_movies`:
 
 ```bash
@@ -439,7 +480,7 @@ spark-submit \
 ```
 
 The sync job writes rows from `ads.ads_itemcf_similar_movies.dt=calc-date`.
-It deletes existing rows for the configured `similarity_type` values first (default: `2` for ItemCF) and then appends the new snapshot, so reruns stay idempotent under the unique key `(movie_id, similar_movie_id, similarity_type)`.
+It deletes existing rows for the configured `similarity_type` values first (default: `2` for ItemCF and `3` for ALS similar movies) and then appends the new snapshot, so reruns stay idempotent under the unique key `(movie_id, similar_movie_id, similarity_type)`.
 
 Wrapper script:
 

@@ -56,14 +56,14 @@ public class AnalyticsController {
     public Result<List<Movie>> getSimilarMovies(
             @Parameter(name = "movieId", description = "基准电影ID", required = true, example = "1292052")
             @PathVariable @Min(value = 1, message = "电影ID必须大于0") Long movieId,
-            @Parameter(name = "type", description = "相似类型：1-内容相似，2-协同过滤", example = "1")
+            @Parameter(name = "type", description = "相似类型：1-内容相似，2-协同过滤，3-ALS隐语义相似", example = "1")
             @RequestParam(required = false) Integer type,
             @Parameter(name = "limit", description = "返回数量，默认10条，最多100条", example = "10")
             @RequestParam(defaultValue = "10")
             @Min(value = 1, message = "返回数量至少为1")
             @Max(value = 100, message = "返回数量最多为100") int limit) {
-        if (type != null && type != 1 && type != 2) {
-            return Result.fail(400, "无效的相似类型，请选择 1 或 2");
+        if (type != null && type != 1 && type != 2 && type != 3) {
+            return Result.fail(400, "无效的相似类型，请选择 1、2 或 3");
         }
         return Result.success(analyticsService.getSimilarMovies(movieId, type, limit));
     }

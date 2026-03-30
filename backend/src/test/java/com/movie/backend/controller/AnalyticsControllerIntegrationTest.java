@@ -2,6 +2,7 @@ package com.movie.backend.controller;
 
 import com.movie.backend.common.TrendPeriod;
 import com.movie.backend.dto.TrendingMovieDTO;
+import com.movie.backend.entity.Movie;
 import com.movie.backend.service.AnalyticsService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -50,5 +51,24 @@ class AnalyticsControllerIntegrationTest {
                 .andExpect(jsonPath("$.data[0].movieId").value(1))
                 .andExpect(jsonPath("$.data[0].period").value("TOTAL"))
                 .andExpect(jsonPath("$.data[0].rank").value(1));
+    }
+
+    @Test
+    @DisplayName("兼容相似电影接口支持 ALS 相似类型")
+    void getSimilarMovies_SupportsAlsSimilarityType() throws Exception {
+        Movie movie = new Movie();
+        movie.setId(2L);
+        movie.setName("星际穿越");
+        movie.setReason("ALS 隐语义相似，相似度 0.932");
+
+        when(analyticsService.getSimilarMovies(1L, 3, 5)).thenReturn(List.of(movie));
+
+        mockMvc.perform(get("/analytics/movies/1/similar")
+                        .param("type", "3")
+                        .param("limit", "5"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data[0].id").value(2))
+                .andExpect(jsonPath("$.data[0].reason").value("ALS 隐语义相似，相似度 0.932"));
     }
 }
