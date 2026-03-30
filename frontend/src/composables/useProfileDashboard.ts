@@ -3,14 +3,12 @@ import { useMessage } from 'naive-ui'
 import {
   useGetMyComments
 } from '@/api/endpoints/comment-management/comment-management'
-import { useGetMyFavoriteFolders } from '@/api/endpoints/favorite-folder-management/favorite-folder-management'
 import { useGetMyFavorites } from '@/api/endpoints/favorite-management/favorite-management'
 import { useGetMyRatings } from '@/api/endpoints/rating-management/rating-management'
 import { useGetMyProfile, useUpdateMyProfile } from '@/api/endpoints/user-management/user-management'
 import { useGetMyWatchedList } from '@/api/endpoints/watched-management/watched-management'
 import type {
   Comment,
-  FavoriteFolderVO,
   MovieItemVO,
   MyRatingVO,
   UpdateUserProfileDTO,
@@ -66,10 +64,6 @@ function normalizePage<T>(value: unknown): PageResult<T> {
   return { list, total }
 }
 
-function normalizeArray<T>(value: unknown): T[] {
-  return Array.isArray(value) ? (value as T[]) : []
-}
-
 async function refetchOrThrow<T>(query: { refetch: () => Promise<{ data?: T; error?: unknown }> }) {
   const result = await query.refetch()
   if (result.error) {
@@ -83,12 +77,6 @@ export function useProfileDashboard() {
   const message = useMessage()
   const previewParams = computed(() => ({ page: 1, size: PREVIEW_SIZE }))
   const profileQuery = useGetMyProfile({
-    query: {
-      enabled: false,
-      retry: false
-    }
-  })
-  const foldersQuery = useGetMyFavoriteFolders({
     query: {
       enabled: false,
       retry: false
@@ -121,14 +109,12 @@ export function useProfileDashboard() {
   const updateProfileMutation = useUpdateMyProfile()
 
   const profile = ref<UserProfileVO | null>(toFallbackProfile(authStore.user))
-  const favoriteFolders = ref<FavoriteFolderVO[]>([])
   const favoriteMovies = ref<MovieItemVO[]>([])
   const watchedMovies = ref<MovieItemVO[]>([])
   const ratings = ref<MyRatingVO[]>([])
   const comments = ref<Comment[]>([])
 
   const totals = ref({
-    folders: 0,
     favorites: 0,
     watched: 0,
     ratings: 0,
@@ -154,14 +140,12 @@ export function useProfileDashboard() {
 
     const [
       profileResult,
-      folderResult,
       favoriteResult,
       watchedResult,
       ratingResult,
       commentResult
     ] = await Promise.allSettled([
       refetchOrThrow(profileQuery),
-      refetchOrThrow(foldersQuery),
       refetchOrThrow(favoritesQuery),
       refetchOrThrow(watchedQuery),
       refetchOrThrow(ratingsQuery),
@@ -170,11 +154,6 @@ export function useProfileDashboard() {
 
     if (profileResult.status === 'fulfilled') {
       profile.value = normalizeProfile(profileResult.value) ?? profile.value
-    }
-
-    if (folderResult.status === 'fulfilled') {
-      favoriteFolders.value = normalizeArray<FavoriteFolderVO>(folderResult.value)
-      totals.value.folders = favoriteFolders.value.length
     }
 
     if (favoriteResult.status === 'fulfilled') {
@@ -203,7 +182,6 @@ export function useProfileDashboard() {
 
     const failures = [
       profileResult,
-      folderResult,
       favoriteResult,
       watchedResult,
       ratingResult,
@@ -258,7 +236,6 @@ export function useProfileDashboard() {
 
   return {
     profile,
-    favoriteFolders,
     favoriteMovies,
     watchedMovies,
     ratings,

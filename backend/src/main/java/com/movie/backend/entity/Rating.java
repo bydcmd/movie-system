@@ -3,6 +3,8 @@ package com.movie.backend.entity;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
+import java.time.LocalDateTime;
+
 @Data
 @Schema(description = "用户评分实体")
 public class Rating {
@@ -17,5 +19,5 @@ public class Rating {
     private Integer rating;
 
     @Schema(description = "评分时间", example = "2023-11-20 14:30:00")
-    private String ratingTime;
+    private LocalDateTime ratingTime;
 }

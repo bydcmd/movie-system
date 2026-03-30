@@ -135,24 +135,10 @@ public class FavoriteFolderServiceImpl implements FavoriteFolderService {
     
     @Override
     public List<FavoriteFolderVO> getUserFolders(String userId) {
-        List<FavoriteFolderVO> folders = favoriteFolderMapper.selectByUserId(userId);
-        
-        // 创建默认收藏夹VO
-        FavoriteFolderVO defaultFolder = new FavoriteFolderVO();
-        defaultFolder.setId(0L);
-        defaultFolder.setName("默认收藏夹");
-        defaultFolder.setDescription("系统自动创建的默认收藏夹");
-        defaultFolder.setIsPublic(0);
-        // 动态计算默认收藏夹的电影数量
-        int defaultFolderCount = favoriteMapper.countByUserIdAndFolderId(userId, 0L);
-        defaultFolder.setMovieCount(defaultFolderCount);
-        defaultFolder.setCreateTime(null);
-        defaultFolder.setUpdateTime(null);
-        
-        // 将默认收藏夹添加到列表最前面
-        folders.add(0, defaultFolder);
-        
-        return folders;
+        // 确保用户有默认收藏夹
+        getOrCreateDefaultFolder(userId);
+        // 直接查询所有收藏夹（包含默认收藏夹）
+        return favoriteFolderMapper.selectByUserId(userId);
     }
     
     @Override
@@ -163,5 +149,33 @@ public class FavoriteFolderServiceImpl implements FavoriteFolderService {
     @Override
     public boolean checkFolderOwner(Long folderId, String userId) {
         return favoriteFolderMapper.checkOwner(folderId, userId) > 0;
+    }
+
+    @Override
+    public FavoriteFolder getOrCreateDefaultFolder(String userId) {
+        // 先查询是否已有默认收藏夹
+        FavoriteFolder defaultFolder = favoriteFolderMapper.selectDefaultFolder(userId);
+        if (defaultFolder != null) {
+            return defaultFolder;
+        }
+        
+        // 创建默认收藏夹
+        defaultFolder = new FavoriteFolder();
+        defaultFolder.setUserId(userId);
+        defaultFolder.setName("默认收藏夹");
+        defaultFolder.setDescription("系统自动创建的默认收藏夹");
+        defaultFolder.setIsPublic(0);
+        defaultFolder.setIsDefault(1);
+        defaultFolder.setMovieCount(0);
+        defaultFolder.setCreateTime(new Date());
+        defaultFolder.setUpdateTime(new Date());
+        
+        favoriteFolderMapper.insertDefaultFolder(defaultFolder);
+        return defaultFolder;
+    }
+
+    @Override
+    public FavoriteFolder getDefaultFolder(String userId) {
+        return favoriteFolderMapper.selectDefaultFolder(userId);
     }
 }

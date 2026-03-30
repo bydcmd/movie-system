@@ -16,13 +16,22 @@ import {
   useMessage
 } from 'naive-ui'
 import { ArrowBack, CheckmarkCircle, Heart } from '@vicons/ionicons5'
-import type { Comment, Movie, CommentVO, PageInfoCommentVO } from '@/api/model'
+import type {
+  Comment,
+  CommentVO,
+  FavoriteFolderDTO,
+  FavoriteFolderVO,
+  Movie,
+  PageInfoCommentVO
+} from '@/api/model'
 import type { CommentFilter, ReviewSubmitPayload } from '@/utils/comment'
 import CommentComposerModal from '@/components/comment/CommentComposerModal.vue'
 import CommentList from '@/components/comment/CommentList.vue'
 import NavBar from '@/components/layout/NavBar.vue'
+import MovieFavoriteFolderPickerModal from '@/components/movie/MovieFavoriteFolderPickerModal.vue'
 import MovieDetailSimilarMovies from '@/components/movie/MovieDetailSimilarMovies.vue'
 import MoviePlaceholder from '@/components/movie/MoviePlaceholder.vue'
+import ProfileFavoriteFolderFormModal from '@/components/profile/ProfileFavoriteFolderFormModal.vue'
 import {
   useDeleteMyComment,
   useGetMovieComments,
@@ -33,6 +42,10 @@ import {
   useUnlikeComment,
   useUpdateMyMovieCommentContent,
 } from '@/api/endpoints/comment-management/comment-management'
+import {
+  useCreateFavoriteFolder,
+  useGetMyFavoriteFolders
+} from '@/api/endpoints/favorite-folder-management/favorite-folder-management'
 import {
   useAddFavorite,
   useIsFavorited,
@@ -51,6 +64,7 @@ import {
 } from '@/api/endpoints/watched-management/watched-management'
 import { useAuthStore } from '@/stores/auth'
 import { getMovieId } from '@/utils/movie'
+import { isDefaultFavoriteFolder, sortFavoriteFolders } from '@/utils/favorite-folder'
 
 const route = useRoute()
 const router = useRouter()
@@ -68,6 +82,7 @@ const loading = ref(false)
 const favoriteLoading = ref(false)
 const watchedLoading = ref(false)
 const isFavorited = ref(false)
+const favoriteFolders = ref<FavoriteFolderVO[]>([])
 const isWatched = ref(false)
 const comments = ref<CommentVO[]>([])
 const commentsTotal = ref(0)
@@ -90,6 +105,10 @@ const imageError = ref(false)
 const myShortComment = ref<Comment | null>(null)
 const myLongReview = ref<Comment | null>(null)
 const reviewDraftResetToken = ref(0)
+const showFavoriteFolderPicker = ref(false)
+const showCreateFavoriteFolderModal = ref(false)
+const favoriteFolderSubmittingId = ref<number | null>(null)
+const creatingFavoriteFolder = ref(false)
 const optionalAuthRequest = {
   skipUnauthorizedRedirect: true
 } as const
@@ -160,6 +179,12 @@ const favoriteStatusQuery = useIsFavorited(movieId, {
   },
   request: optionalAuthRequest
 })
+const favoriteFoldersQuery = useGetMyFavoriteFolders({
+  query: {
+    enabled: false,
+    retry: false
+  }
+})
 const watchedStatusQuery = useIsWatched(movieId, {
   query: {
     enabled: false,
@@ -181,11 +206,21 @@ const submitMovieCommentMutation = useSubmitMovieComment()
 const updateMyMovieCommentContentMutation = useUpdateMyMovieCommentContent()
 const addFavoriteMutation = useAddFavorite()
 const removeFavoriteMutation = useRemoveFavorite()
+const createFavoriteFolderMutation = useCreateFavoriteFolder()
 const addWatchedMutation = useAddWatched()
 const removeWatchedMutation = useRemoveWatched()
 const updateRatingMutation = useUpdateRating()
 const recordViewHistoryMutation = useRecordViewHistory({
   request: optionalAuthRequest
+})
+const favoriteFoldersLoading = computed(() => {
+  return favoriteFoldersQuery.isLoading.value || favoriteFoldersQuery.isFetching.value
+})
+const favoriteActionLabel = computed(() => {
+  return isFavorited.value ? '取消收藏' : '收藏'
+})
+const favoriteFolderActionLabel = computed(() => {
+  return isFavorited.value ? '已在收藏夹中' : '添加到收藏夹'
 })
 
 async function refetchOrThrow<T>(query: { refetch: () => Promise<{ data?: T; error?: unknown }> }) {
@@ -242,6 +277,14 @@ const normalizeSimilarMovieList = (value: unknown, targetMovieId: number): Movie
   }
 
   return result
+}
+
+const normalizeFavoriteFolderList = (value: unknown): FavoriteFolderVO[] => {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return sortFavoriteFolders(value as FavoriteFolderVO[])
 }
 
 const ensureAuthenticated = () => {
@@ -313,6 +356,26 @@ const extractErrorMessage = (error: unknown): string => {
 
 const isDuplicateShortReviewError = (messageText: string): boolean => {
   return messageText.includes('已经发表过短评')
+}
+
+const isDuplicateFavoriteError = (messageText: string): boolean => {
+  return messageText.includes('已在默认收藏夹中') || messageText.includes('已在当前收藏夹中')
+}
+
+const handleFavoriteActionError = (error: unknown, fallbackMessage: string) => {
+  const messageText = extractErrorMessage(error)
+  if (messageText) {
+    if (isDuplicateFavoriteError(messageText)) {
+      isFavorited.value = true
+      message.info(messageText)
+      return
+    }
+
+    message.error(messageText)
+    return
+  }
+
+  message.error(fallbackMessage)
 }
 
 const markPending = (
@@ -526,6 +589,22 @@ const fetchFavoriteStatus = async () => {
   }
 }
 
+const loadFavoriteFolders = async () => {
+  if (!authStore.isAuthenticated) {
+    favoriteFolders.value = []
+    return
+  }
+
+  try {
+    const data = await refetchOrThrow(favoriteFoldersQuery)
+    favoriteFolders.value = normalizeFavoriteFolderList(data)
+  } catch (error) {
+    console.error('Failed to load favorite folders:', error)
+    favoriteFolders.value = []
+    message.error(extractErrorMessage(error) || '收藏夹加载失败，请稍后再试')
+  }
+}
+
 const fetchSimilarMovies = async () => {
   if (!movieId.value) {
     similarMovies.value = []
@@ -568,22 +647,101 @@ const fetchWatchedStatus = async () => {
 
 const toggleFavorite = async () => {
   if (!ensureAuthenticated() || !movieId.value) return
+
+  const shouldRemoveFavorite = isFavorited.value
   favoriteLoading.value = true
+
   try {
-    if (isFavorited.value) {
+    if (shouldRemoveFavorite) {
       await removeFavoriteMutation.mutateAsync({ movieId: movieId.value })
       isFavorited.value = false
       message.success('已取消收藏')
-    } else {
-      await addFavoriteMutation.mutateAsync({ movieId: movieId.value })
-      isFavorited.value = true
-      message.success('已收藏')
+      return
     }
+
+    await addFavoriteMutation.mutateAsync({ movieId: movieId.value })
+    isFavorited.value = true
+    message.success('已添加到默认收藏夹')
   } catch (error) {
-    console.error('Failed to toggle favorite:', error)
-    message.error('收藏操作失败')
+    if (shouldRemoveFavorite) {
+      console.error('Failed to remove movie from favorites:', error)
+      message.error(extractErrorMessage(error) || '取消收藏失败')
+    } else {
+      console.error('Failed to add movie to default favorite folder:', error)
+      handleFavoriteActionError(error, '添加到默认收藏夹失败')
+    }
   } finally {
     favoriteLoading.value = false
+  }
+}
+
+const openFavoriteFolderPicker = async () => {
+  if (!ensureAuthenticated() || !movieId.value) {
+    return
+  }
+
+  showFavoriteFolderPicker.value = true
+  await loadFavoriteFolders()
+}
+
+const handleAddToFavoriteFolder = async (folder: FavoriteFolderVO) => {
+  const folderId = typeof folder.id === 'number' ? folder.id : null
+  const isDefaultFolder = isDefaultFavoriteFolder(folder)
+  if ((!isDefaultFolder && folderId === null) || !ensureAuthenticated() || !movieId.value) {
+    return
+  }
+
+  favoriteFolderSubmittingId.value = folderId
+
+  try {
+    await addFavoriteMutation.mutateAsync({
+      movieId: movieId.value,
+      params: !isDefaultFolder && folderId !== null ? { folderId } : undefined
+    })
+    isFavorited.value = true
+    showFavoriteFolderPicker.value = false
+    message.success(
+      isDefaultFolder
+        ? '已添加到默认收藏夹'
+        : `已添加到“${folder.name || '未命名收藏夹'}”`
+    )
+  } catch (error) {
+    console.error('Failed to add movie to favorite folder:', error)
+    handleFavoriteActionError(error, '添加到收藏夹失败')
+  } finally {
+    favoriteFolderSubmittingId.value = null
+  }
+}
+
+const openCreateFavoriteFolder = () => {
+  showCreateFavoriteFolderModal.value = true
+}
+
+const handleCreateFavoriteFolder = async (payload: FavoriteFolderDTO) => {
+  const name = payload.name.trim()
+  if (!name) {
+    message.warning('请先填写收藏夹名称')
+    return
+  }
+
+  creatingFavoriteFolder.value = true
+
+  try {
+    await createFavoriteFolderMutation.mutateAsync({
+      data: {
+        name,
+        description: payload.description?.trim() || undefined,
+        isPublic: payload.isPublic ?? 0
+      }
+    })
+    showCreateFavoriteFolderModal.value = false
+    message.success('收藏夹已创建')
+    await loadFavoriteFolders()
+  } catch (error) {
+    console.error('Failed to create favorite folder:', error)
+    message.error(extractErrorMessage(error) || '收藏夹创建失败，请稍后再试')
+  } finally {
+    creatingFavoriteFolder.value = false
   }
 }
 
@@ -815,7 +973,14 @@ onMounted(() => {
 
 watch(
   () => authStore.isAuthenticated,
-  () => {
+  (authenticated) => {
+    if (!authenticated) {
+      showFavoriteFolderPicker.value = false
+      showCreateFavoriteFolderModal.value = false
+      favoriteFolders.value = []
+      favoriteFolderSubmittingId.value = null
+    }
+
     fetchComments()
     fetchMyShortComment()
     fetchMyLongReview()
@@ -831,6 +996,9 @@ watch(
     commentsPage.value = 1
     imageLoaded.value = false
     imageError.value = false
+    showFavoriteFolderPicker.value = false
+    showCreateFavoriteFolderModal.value = false
+    favoriteFolderSubmittingId.value = null
     fetchMovieDetail()
     fetchSimilarMovies()
     fetchComments()
@@ -953,32 +1121,42 @@ watch(
               </div>
 
               <!-- Actions -->
-              <n-space>
-                <n-button
-                  :type="isFavorited ? 'success' : 'primary'"
-                  :secondary="isFavorited"
-                  size="large"
-                  :loading="favoriteLoading"
-                  @click="toggleFavorite"
-                >
-                  <template #icon>
-                    <n-icon><Heart /></n-icon>
-                  </template>
-                  {{ isFavorited ? '已收藏' : '收藏' }}
-                </n-button>
-                <n-button
-                  :type="isWatched ? 'success' : 'info'"
-                  :secondary="isWatched"
-                  size="large"
-                  :loading="watchedLoading"
-                  @click="toggleWatched"
-                >
-                  <template #icon>
-                    <n-icon><CheckmarkCircle /></n-icon>
-                  </template>
-                  {{ isWatched ? '已看过' : '看过' }}
-                </n-button>
-              </n-space>
+              <div class="space-y-3">
+                <n-space wrap>
+                  <n-button
+                    :type="isFavorited ? 'success' : 'primary'"
+                    :secondary="isFavorited"
+                    size="large"
+                    :loading="favoriteLoading"
+                    @click="toggleFavorite"
+                  >
+                    <template #icon>
+                      <n-icon><Heart /></n-icon>
+                    </template>
+                    {{ favoriteActionLabel }}
+                  </n-button>
+                  <n-button
+                    secondary
+                    size="large"
+                    :type="isFavorited ? 'success' : 'default'"
+                    @click="openFavoriteFolderPicker"
+                  >
+                    {{ favoriteFolderActionLabel }}
+                  </n-button>
+                  <n-button
+                    :type="isWatched ? 'success' : 'info'"
+                    :secondary="isWatched"
+                    size="large"
+                    :loading="watchedLoading"
+                    @click="toggleWatched"
+                  >
+                    <template #icon>
+                      <n-icon><CheckmarkCircle /></n-icon>
+                    </template>
+                    {{ isWatched ? '已看过' : '看过' }}
+                  </n-button>
+                </n-space>
+              </div>
             </div>
           </div>
         </div>
@@ -1137,6 +1315,22 @@ watch(
       :draft-reset-token="reviewDraftResetToken"
       :saving="submitReviewLoading"
       @submit="handleReviewSubmit"
+    />
+
+    <MovieFavoriteFolderPickerModal
+      v-model:show="showFavoriteFolderPicker"
+      :folders="favoriteFolders"
+      :loading="favoriteFoldersLoading"
+      :submitting-folder-id="favoriteFolderSubmittingId"
+      @select-folder="handleAddToFavoriteFolder"
+      @create-folder="openCreateFavoriteFolder"
+    />
+
+    <ProfileFavoriteFolderFormModal
+      v-model:show="showCreateFavoriteFolderModal"
+      mode="create"
+      :saving="creatingFavoriteFolder"
+      @submit="handleCreateFavoriteFolder"
     />
   </div>
 </template>

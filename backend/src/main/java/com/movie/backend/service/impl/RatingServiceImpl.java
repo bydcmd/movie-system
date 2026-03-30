@@ -45,7 +45,8 @@ public class RatingServiceImpl implements RatingService {
             throw new RuntimeException("评分必须在 1 到 5 之间");
         }
 
-        String ratingTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        LocalDateTime ratingTime = LocalDateTime.now();
+        String ratingTimeStr = ratingTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
         Rating existingRating = ratingMapper.selectByUserAndMovie(userId, movieId);
         boolean ratingChanged = existingRating == null || !Objects.equals(existingRating.getRating(), rating);
 
@@ -64,7 +65,7 @@ public class RatingServiceImpl implements RatingService {
         }
 
         String eventAction = existingRating == null ? "CREATE" : "UPDATE";
-        RatingEvent event = new RatingEvent(userId, movieId, rating, eventAction, ratingTime);
+        RatingEvent event = new RatingEvent(userId, movieId, rating, eventAction, ratingTimeStr);
         kafkaEventPublisher.publishRatingEvent(event);
     }
 

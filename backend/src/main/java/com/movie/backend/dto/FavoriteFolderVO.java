@@ -18,7 +18,10 @@ public class FavoriteFolderVO {
     
     @Schema(description = "是否公开：0-私密, 1-公开", example = "0")
     private Integer isPublic;
-    
+
+    @Schema(description = "是否为默认收藏夹：0-否, 1-是", example = "0")
+    private Integer isDefault;
+
     @Schema(description = "电影数量", example = "15")
     private Integer movieCount;
     

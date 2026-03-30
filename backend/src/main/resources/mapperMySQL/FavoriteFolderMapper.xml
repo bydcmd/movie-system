@@ -8,6 +8,7 @@
         <result column="name" property="name" />
         <result column="description" property="description" />
         <result column="is_public" property="isPublic" />
+        <result column="is_default" property="isDefault" />
         <result column="movie_count" property="movieCount" />
         <result column="create_time" property="createTime" />
         <result column="update_time" property="updateTime" />
@@ -18,14 +19,15 @@
         <result column="name" property="name" />
         <result column="description" property="description" />
         <result column="is_public" property="isPublic" />
+        <result column="is_default" property="isDefault" />
         <result column="movie_count" property="movieCount" />
         <result column="create_time" property="createTime" />
         <result column="update_time" property="updateTime" />
     </resultMap>
 
     <insert id="insert" parameterType="com.movie.backend.entity.FavoriteFolder" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO favorite_folders (user_id, name, description, is_public, movie_count, create_time, update_time)
-        VALUES (#{userId}, #{name}, #{description}, #{isPublic}, #{movieCount}, #{createTime}, #{updateTime})
+        INSERT INTO favorite_folders (user_id, name, description, is_public, is_default, movie_count, create_time, update_time)
+        VALUES (#{userId}, #{name}, #{description}, #{isPublic}, #{isDefault}, #{movieCount}, #{createTime}, #{updateTime})
     </insert>
 
     <update id="update" parameterType="com.movie.backend.entity.FavoriteFolder">
@@ -49,23 +51,24 @@
     </delete>
 
     <select id="selectById" resultMap="BaseResultMap">
-        SELECT id, user_id, name, description, is_public, movie_count, create_time, update_time
+        SELECT id, user_id, name, description, is_public, is_default, movie_count, create_time, update_time
         FROM favorite_folders
         WHERE id = #{id}
     </select>
 
     <select id="selectByUserId" resultMap="VOResultMap">
-        SELECT 
-            id, 
-            name, 
-            description, 
-            is_public, 
+        SELECT
+            id,
+            name,
+            description,
+            is_public,
+            is_default,
             movie_count,
             DATE_FORMAT(create_time, '%Y-%m-%d %H:%i:%s') as create_time,
             DATE_FORMAT(update_time, '%Y-%m-%d %H:%i:%s') as update_time
         FROM favorite_folders
         WHERE user_id = #{userId}
-        ORDER BY create_time DESC
+        ORDER BY is_default DESC, create_time DESC
     </select>
 
     <select id="countByUserId" resultType="int">
@@ -91,5 +94,17 @@
     <select id="checkOwner" resultType="int">
         SELECT COUNT(*) FROM favorite_folders WHERE id = #{id} AND user_id = #{userId}
     </select>
+
+    <select id="selectDefaultFolder" resultMap="BaseResultMap">
+        SELECT id, user_id, name, description, is_public, is_default, movie_count, create_time, update_time
+        FROM favorite_folders
+        WHERE user_id = #{userId} AND is_default = 1
+        LIMIT 1
+    </select>
+
+    <insert id="insertDefaultFolder" parameterType="com.movie.backend.entity.FavoriteFolder" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO favorite_folders (user_id, name, description, is_public, is_default, movie_count, create_time, update_time)
+        VALUES (#{userId}, #{name}, #{description}, #{isPublic}, 1, #{movieCount}, #{createTime}, #{updateTime})
+    </insert>
 
 </mapper>

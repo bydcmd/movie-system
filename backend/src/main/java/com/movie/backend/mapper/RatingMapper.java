@@ -5,6 +5,7 @@ import com.movie.backend.dto.MyRatingVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 
@@ -18,7 +19,7 @@ public interface RatingMapper {
     /**
      * 更新用户的评分
      */
-    int updateByUserAndMovie(@Param("userId") String userId, @Param("movieId") Long movieId, @Param("rating") Integer rating, @Param("ratingTime") String ratingTime);
+    int updateByUserAndMovie(@Param("userId") String userId, @Param("movieId") Long movieId, @Param("rating") Integer rating, @Param("ratingTime") LocalDateTime ratingTime);
 
     /**
      * 写入或更新用户评分（相同评分不重复更新）
@@ -26,7 +27,7 @@ public interface RatingMapper {
     int upsertByUserAndMovie(@Param("userId") String userId,
                              @Param("movieId") Long movieId,
                              @Param("rating") Integer rating,
-                             @Param("ratingTime") String ratingTime);
+                             @Param("ratingTime") LocalDateTime ratingTime);
 
     /**
      * Get user's rating for a movie
