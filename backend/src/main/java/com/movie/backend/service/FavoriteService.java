@@ -46,4 +46,17 @@ public interface FavoriteService {
      * 统计用户的收藏总数
      */
     int countUserFavorites(String userId);
+
+    /**
+     * 移动电影到另一个收藏夹（支持单个或批量）
+     */
+    void moveFavorites(String userId, Long fromFolderId, Long toFolderId, java.util.List<Long> movieIds);
+
+    /**
+     * 查询电影所在的收藏夹ID列表
+     * @param userId 用户ID
+     * @param movieId 电影ID
+     * @return 收藏夹ID列表
+     */
+    java.util.List<Long> getMovieFolderIds(String userId, Long movieId);
 }

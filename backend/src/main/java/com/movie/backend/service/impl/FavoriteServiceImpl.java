@@ -202,4 +202,48 @@ public class FavoriteServiceImpl implements FavoriteService {
     public int countUserFavorites(String userId) {
         return favoriteMapper.countByUserId(userId);
     }
+
+    @Override
+    @Transactional
+    public void moveFavorites(String userId, Long fromFolderId, Long toFolderId, List<Long> movieIds) {
+        if (movieIds == null || movieIds.isEmpty()) {
+            throw new IllegalArgumentException("电影ID列表不能为空");
+        }
+
+        // 验证收藏夹所有权
+        validateFolderOwnership(userId, fromFolderId, "源收藏夹");
+        validateFolderOwnership(userId, toFolderId, "目标收藏夹");
+
+        // 更新收藏记录的 folderId
+        int updatedCount = favoriteMapper.updateFolderBatch(userId, fromFolderId, toFolderId, movieIds);
+
+        if (updatedCount > 0) {
+            // 更新收藏夹的电影计数
+            favoriteFolderMapper.decrementMovieCountBy(fromFolderId, updatedCount);
+            favoriteFolderMapper.incrementMovieCountBy(toFolderId, updatedCount);
+        }
+    }
+
+    /**
+     * 验证收藏夹所有权
+     */
+    private void validateFolderOwnership(String userId, Long folderId, String folderDesc) {
+        FavoriteFolder folder = favoriteFolderMapper.selectById(folderId);
+        if (folder == null) {
+            throw new IllegalArgumentException(folderDesc + "不存在");
+        }
+        if (!userId.equals(folder.getUserId())) {
+            throw new IllegalArgumentException("无权操作" + folderDesc);
+        }
+    }
+
+    @Override
+    public List<Long> getMovieFolderIds(String userId, Long movieId) {
+        List<Favorite> favorites = favoriteMapper.selectAllByUserAndMovie(userId, movieId);
+        return favorites.stream()
+                .map(Favorite::getFolderId)
+                .filter(folderId -> folderId != null)
+                .distinct()
+                .toList();
+    }
 }

@@ -5,6 +5,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import com.movie.backend.common.Result;
 import com.movie.backend.dto.BatchIdsDTO;
+import com.movie.backend.dto.MoveFavoritesDTO;
 import com.movie.backend.dto.MovieItemVO;
 import com.movie.backend.entity.User;
 import com.movie.backend.service.FavoriteService;
@@ -105,5 +106,22 @@ public class FavoriteController {
     @GetMapping("/count")
     public Result<Integer> getFavoritesCount(@AuthenticationPrincipal User user) {
         return Result.success(favoriteService.countUserFavorites(user.getId()));
+    }
+
+    @Operation(operationId = "moveFavorites", summary = "移动收藏", description = "将电影从一个收藏夹移动到另一个收藏夹，支持单个或批量")
+    @PostMapping("/move")
+    public Result<String> moveFavorites(
+            @Parameter(description = "移动请求参数", required = true) @Valid @RequestBody MoveFavoritesDTO dto,
+            @AuthenticationPrincipal User user) {
+        favoriteService.moveFavorites(user.getId(), dto.getFromFolderId(), dto.getToFolderId(), dto.getMovieIds());
+        return Result.success("移动成功");
+    }
+
+    @Operation(operationId = "getMovieFolderIds", summary = "查询电影所在收藏夹列表", description = "查询当前用户的指定电影在哪些收藏夹中，返回收藏夹ID列表")
+    @GetMapping("/movies/{movieId}/folders")
+    public Result<java.util.List<Long>> getMovieFolderIds(
+            @Parameter(description = "电影ID", required = true) @PathVariable @Min(1) Long movieId,
+            @AuthenticationPrincipal User user) {
+        return Result.success(favoriteService.getMovieFolderIds(user.getId(), movieId));
     }
 }
