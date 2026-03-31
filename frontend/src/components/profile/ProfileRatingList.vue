@@ -1,16 +1,88 @@
 <script setup lang="ts">
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { NButton, NEmpty, NRate } from 'naive-ui'
+import { NButton, NCheckbox, NEmpty, NRate, useDialog, useMessage } from 'naive-ui'
+import {
+  useClearMyRatings,
+  useDeleteRatingsBatch
+} from '@/api/endpoints/rating-management/rating-management'
 import type { MyRatingVO } from '@/api/model'
 import { formatDateLabel, resolveAssetUrl, truncateText } from '@/utils/profile'
 
-defineProps<{
+const props = withDefaults(defineProps<{
   items: MyRatingVO[]
   total: number
   loading?: boolean
+}>(), {
+  loading: false
+})
+
+const emit = defineEmits<{
+  refresh: []
 }>()
 
 const router = useRouter()
+const dialog = useDialog()
+const message = useMessage()
+const selectedRatingIds = ref<number[]>([])
+const deletingSelected = ref(false)
+const clearingAll = ref(false)
+
+const deleteRatingsBatchMutation = useDeleteRatingsBatch()
+const clearMyRatingsMutation = useClearMyRatings()
+
+const selectableRatingIds = computed(() => {
+  return props.items
+    .map((item) => getRatingId(item))
+    .filter((ratingId): ratingId is number => typeof ratingId === 'number')
+})
+const selectedCount = computed(() => selectedRatingIds.value.length)
+const allVisibleSelected = computed(() => {
+  return selectableRatingIds.value.length > 0 && selectedCount.value === selectableRatingIds.value.length
+})
+const partiallySelected = computed(() => {
+  return selectedCount.value > 0 && !allVisibleSelected.value
+})
+const isMutating = computed(() => deletingSelected.value || clearingAll.value)
+const isPreviewTruncated = computed(() => {
+  return props.total > props.items.length && props.items.length > 0
+})
+
+watch(
+  selectableRatingIds,
+  (nextIds) => {
+    const nextIdSet = new Set(nextIds)
+    selectedRatingIds.value = selectedRatingIds.value.filter((ratingId) => nextIdSet.has(ratingId))
+  },
+  { immediate: true }
+)
+
+function getRatingId(item?: MyRatingVO | null) {
+  const candidate = item?.id ?? item?.movieId
+  return typeof candidate === 'number' && candidate > 0 ? candidate : null
+}
+
+function extractErrorMessage(error: unknown): string {
+  if (!error || typeof error !== 'object') {
+    return ''
+  }
+
+  const record = error as {
+    message?: unknown
+    response?: {
+      data?: {
+        message?: unknown
+      }
+    }
+  }
+
+  const responseMessage = record.response?.data?.message
+  if (typeof responseMessage === 'string') {
+    return responseMessage
+  }
+
+  return typeof record.message === 'string' ? record.message : ''
+}
 
 function openMovie(movieId?: number) {
   if (!movieId) {
@@ -18,6 +90,95 @@ function openMovie(movieId?: number) {
   }
 
   void router.push(`/movie/${movieId}`)
+}
+
+function handleToggleAllRatings(checked: boolean) {
+  selectedRatingIds.value = checked ? [...selectableRatingIds.value] : []
+}
+
+function handleToggleRating(ratingId: number, checked: boolean) {
+  if (checked) {
+    if (!selectedRatingIds.value.includes(ratingId)) {
+      selectedRatingIds.value = [...selectedRatingIds.value, ratingId]
+    }
+    return
+  }
+
+  selectedRatingIds.value = selectedRatingIds.value.filter((id) => id !== ratingId)
+}
+
+async function deleteRatings(ratingIds: number[]) {
+  const uniqueIds = Array.from(new Set(ratingIds))
+  if (!uniqueIds.length) {
+    return
+  }
+
+  deletingSelected.value = true
+
+  try {
+    await deleteRatingsBatchMutation.mutateAsync({
+      data: {
+        ids: uniqueIds
+      }
+    })
+    selectedRatingIds.value = selectedRatingIds.value.filter((ratingId) => !uniqueIds.includes(ratingId))
+    message.success(uniqueIds.length > 1 ? `已删除 ${uniqueIds.length} 条评分记录` : '评分记录已删除')
+    emit('refresh')
+  } catch (error) {
+    console.error('Failed to delete ratings in batch:', error)
+    message.error(extractErrorMessage(error) || '删除评分记录失败，请稍后再试')
+  } finally {
+    deletingSelected.value = false
+  }
+}
+
+function confirmDeleteSelectedRatings() {
+  if (!selectedCount.value) {
+    return
+  }
+
+  const count = selectedCount.value
+  const content = isPreviewTruncated.value
+    ? `确认删除已选 ${count} 条评分记录？当前页面只展示最近 ${props.items.length} / ${props.total} 条记录。`
+    : `确认删除已选 ${count} 条评分记录？此操作不可撤销。`
+
+  dialog.warning({
+    title: '删除所选评分',
+    content,
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      await deleteRatings(selectedRatingIds.value)
+    }
+  })
+}
+
+function confirmClearRatings() {
+  if (!props.total) {
+    return
+  }
+
+  dialog.warning({
+    title: '清空全部评分',
+    content: `确认清空全部 ${props.total} 条评分记录？此操作不可撤销。`,
+    positiveText: '清空全部',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      clearingAll.value = true
+
+      try {
+        await clearMyRatingsMutation.mutateAsync()
+        selectedRatingIds.value = []
+        message.success('已清空全部评分记录')
+        emit('refresh')
+      } catch (error) {
+        console.error('Failed to clear ratings:', error)
+        message.error(extractErrorMessage(error) || '清空评分记录失败，请稍后再试')
+      } finally {
+        clearingAll.value = false
+      }
+    }
+  })
 }
 </script>
 
@@ -32,6 +193,58 @@ function openMovie(movieId?: number) {
         共 {{ total }} 条
       </div>
     </div>
+
+    <section
+      v-if="!loading && total > 0"
+      class="profile-rating-toolbar"
+    >
+      <div class="profile-rating-toolbar-main">
+        <n-checkbox
+          :checked="allVisibleSelected"
+          :indeterminate="partiallySelected"
+          :disabled="selectableRatingIds.length === 0 || isMutating"
+          @update:checked="handleToggleAllRatings"
+        >
+          全选当前列表
+        </n-checkbox>
+
+        <span class="profile-rating-selection-count">
+          已选 {{ selectedCount }} 条
+        </span>
+
+        <span class="profile-rating-toolbar-hint">
+          <template v-if="isPreviewTruncated">
+            当前展示最近 {{ items.length }} / {{ total }} 条，删除所选仅作用于当前可见记录。
+          </template>
+          <template v-else>
+            删除所选仅影响勾选记录，清空会删除全部评分。
+          </template>
+        </span>
+      </div>
+
+      <div class="profile-rating-toolbar-actions">
+        <n-button
+          type="error"
+          secondary
+          class="profile-rating-action"
+          :disabled="selectedCount === 0 || isMutating"
+          :loading="deletingSelected"
+          @click="confirmDeleteSelectedRatings"
+        >
+          删除所选
+        </n-button>
+        <n-button
+          type="error"
+          quaternary
+          class="profile-rating-action"
+          :disabled="total === 0 || isMutating"
+          :loading="clearingAll"
+          @click="confirmClearRatings"
+        >
+          清空全部
+        </n-button>
+      </div>
+    </section>
 
     <div v-if="loading" class="profile-rating-loading">
       <div
@@ -53,6 +266,15 @@ function openMovie(movieId?: number) {
         :key="item.id || item.movieId"
         class="profile-rating-row"
       >
+        <div class="profile-rating-select">
+          <n-checkbox
+            v-if="getRatingId(item)"
+            :checked="selectedRatingIds.includes(getRatingId(item) as number)"
+            :disabled="isMutating"
+            @update:checked="handleToggleRating(getRatingId(item) as number, $event)"
+          />
+        </div>
+
         <button
           type="button"
           class="profile-rating-poster"
@@ -139,6 +361,51 @@ function openMovie(movieId?: number) {
   color: #475569;
 }
 
+.profile-rating-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.9rem;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 1rem;
+  background: rgba(248, 250, 252, 0.86);
+  padding: 0.95rem 1rem;
+}
+
+.profile-rating-toolbar-main {
+  display: flex;
+  flex: 1 1 24rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+}
+
+.profile-rating-toolbar-hint {
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: #64748b;
+}
+
+.profile-rating-selection-count {
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.14);
+  padding: 0.28rem 0.72rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #b45309;
+}
+
+.profile-rating-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.profile-rating-action {
+  border-radius: 999px;
+}
+
 .profile-rating-loading {
   display: grid;
   gap: 0.75rem;
@@ -162,9 +429,15 @@ function openMovie(movieId?: number) {
 
 .profile-rating-row {
   display: flex;
+  align-items: flex-start;
   gap: 1rem;
   border-bottom: 1px solid rgba(148, 163, 184, 0.2);
   padding: 1rem 0;
+}
+
+.profile-rating-select {
+  display: flex;
+  padding-top: 0.4rem;
 }
 
 .profile-rating-poster {
