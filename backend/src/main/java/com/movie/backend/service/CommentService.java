@@ -5,6 +5,8 @@ import com.movie.backend.dto.CommentVO;
 import com.movie.backend.dto.LongReviewDTO;
 import com.movie.backend.entity.Comment;
 
+import java.util.List;
+
 public interface CommentService {
     /**
      * Get comments by movie ID (Paged)
@@ -69,9 +71,12 @@ public interface CommentService {
     PageInfo<Comment> getUserComments(String userId, int page, int size);
 
     /**
-     * 删除评论
+     * 删除评论（支持单个或批量）
+     * @param userId 用户ID
+     * @param commentIds 评论ID列表
+     * @return 成功删除的数量
      */
-    void deleteComment(String userId, Long commentId);
+    int deleteComments(String userId, List<Long> commentIds);
 
     /**
      * 获取指定类型的评论列表 (1:短评, 2:长评)

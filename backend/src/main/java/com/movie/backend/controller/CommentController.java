@@ -4,6 +4,7 @@ import com.github.pagehelper.PageInfo;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import com.movie.backend.common.Result;
+import com.movie.backend.dto.BatchIdsDTO;
 import com.movie.backend.dto.CommentVO;
 import com.movie.backend.dto.LongReviewDTO;
 import com.movie.backend.dto.UpdateCommentContentDTO;
@@ -182,15 +183,15 @@ public class CommentController {
         return Result.success(commentService.getUserComments(user.getId(), page, size));
     }
 
-    @Operation(operationId = "deleteMyComment", summary = "删除评论", description = "用户删除自己发布的评论。")
+    @Operation(operationId = "deleteMyComments", summary = "删除评论", description = "删除自己发布的评论，支持单个或批量删除。传入单个ID即删除单条，传入多个ID即批量删除。")
     @SecurityRequirement(name = "BearerAuth")
     @PreAuthorize("isAuthenticated()")
-    @DeleteMapping("/comments/{commentId}")
-    public Result<String> deleteComment(
-            @Parameter(description = "评论ID", required = true) @PathVariable @Min(1) Long commentId,
+    @DeleteMapping("/comments")
+    public Result<String> deleteComments(
+            @Valid @RequestBody BatchIdsDTO dto,
             @AuthenticationPrincipal User user) {
-        commentService.deleteComment(user.getId(), commentId);
-        return Result.success("评论已删除");
+        int deletedCount = commentService.deleteComments(user.getId(), dto.getIds());
+        return Result.success("成功删除 " + deletedCount + " 条评论");
     }
 
     @Operation(operationId = "validateJsonContent", summary = "验证 Tiptap JSON 内容", description = "验证长评内容是否为有效的 Tiptap JSON 格式，不保存到数据库。用于前端发布前的校验。")

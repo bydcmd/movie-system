@@ -326,15 +326,19 @@ public class CommentServiceImpl implements CommentService {
     }
 
     @Override
-    @Transactional
-    public void deleteComment(String userId, Long commentId) {
-        int rows = commentMapper.deleteByIdAndUserId(commentId, userId);
-        if (rows == 0) {
-            throw new BusinessException(404, "删除失败，评论不存在或您无权删除");
+    @Transactional(rollbackFor = Exception.class)
+    public int deleteComments(String userId, List<Long> commentIds) {
+        int deletedCount = 0;
+        for (Long commentId : commentIds) {
+            int rows = commentMapper.deleteByIdAndUserId(commentId, userId);
+            if (rows > 0) {
+                commentLikeMapper.deleteByCommentId(commentId);
+                CommentEvent event = new CommentEvent(userId, null, commentId, null, "DELETE", null);
+                kafkaEventPublisher.publishCommentEvent(event);
+                deletedCount++;
+            }
         }
-        commentLikeMapper.deleteByCommentId(commentId);
-        CommentEvent event = new CommentEvent(userId, null, commentId, null, "DELETE", null);
-        kafkaEventPublisher.publishCommentEvent(event);
+        return deletedCount;
     }
 
     @Override
