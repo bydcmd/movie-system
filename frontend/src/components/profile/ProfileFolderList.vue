@@ -16,7 +16,11 @@ import {
   useDeleteFavoriteFolders,
   useUpdateFavoriteFolder
 } from '@/api/endpoints/favorite-folder-management/favorite-folder-management'
-import { useGetFolderMovies, useRemoveFavorite } from '@/api/endpoints/favorite-management/favorite-management'
+import {
+  useGetFolderMovies,
+  useMoveFavorites,
+  useRemoveFavorite
+} from '@/api/endpoints/favorite-management/favorite-management'
 import type { FavoriteFolderDTO, FavoriteFolderVO, MovieItemVO, PageInfoMovieItemVO } from '@/api/model'
 import MoviePlaceholder from '@/components/movie/MoviePlaceholder.vue'
 import { isDefaultFavoriteFolder, sortFavoriteFolders } from '@/utils/favorite-folder'
@@ -29,7 +33,7 @@ import {
   truncateText
 } from '@/utils/profile'
 
-type FolderFormMode = 'create' | 'edit'
+type FolderFormMode = 'create' | 'edit' | 'move'
 type IdentifiedFavoriteFolder = FavoriteFolderVO & { id: number }
 
 type PageResult<T> = {
@@ -61,11 +65,15 @@ const activeFolderId = ref<number | null>(null)
 const showFormModal = ref(false)
 const showDetailModal = ref(false)
 const savingFolder = ref(false)
+const movingFavorites = ref(false)
 const deletingFolderIds = ref<number[]>([])
 const selectedFolderIds = ref<number[]>([])
 const selectedMovieIds = ref<number[]>([])
+const movingMovieIds = ref<number[]>([])
 const removingMovieIds = ref<number[]>([])
 const bulkRemoving = ref(false)
+const pendingMoveMovieIds = ref<number[]>([])
+const pendingMoveMovieLabel = ref('')
 const posterLoadErrors = reactive<Record<string, boolean>>({})
 
 const folderMoviesQuery = useGetFolderMovies<PageInfoMovieItemVO>(
@@ -81,6 +89,7 @@ const folderMoviesQuery = useGetFolderMovies<PageInfoMovieItemVO>(
 const createFavoriteFolderMutation = useCreateFavoriteFolder()
 const updateFavoriteFolderMutation = useUpdateFavoriteFolder()
 const deleteFavoriteFoldersMutation = useDeleteFavoriteFolders()
+const moveFavoritesMutation = useMoveFavorites()
 const removeFavoriteMutation = useRemoveFavorite()
 
 const activeFolder = computed(() => {
@@ -140,6 +149,18 @@ const isFolderMoviesTruncated = computed(() => {
 const canManageActiveFolder = computed(() => canManageFolder(activeFolder.value))
 const canDeleteActiveFolder = computed(() => canDeleteFolder(activeFolder.value))
 const canEditActiveFolder = computed(() => canEditFolder(activeFolder.value))
+const movableTargetFolders = computed(() => {
+  return sortedFolders.value.filter((folder): folder is IdentifiedFavoriteFolder => {
+    return typeof folder.id === 'number' && folder.id > 0 && folder.id !== activeFolderId.value
+  })
+})
+const formModalFolder = computed(() => {
+  return formMode.value === 'move' ? activeFolder.value : editingFolder.value
+})
+const formModalSaving = computed(() => {
+  return formMode.value === 'move' ? movingFavorites.value : savingFolder.value
+})
+const pendingMoveMovieCount = computed(() => pendingMoveMovieIds.value.length)
 
 function canManageFolder(folder?: FavoriteFolderVO | null): folder is IdentifiedFavoriteFolder {
   return Boolean(folder && typeof folder.id === 'number' && folder.id > 0)
@@ -155,6 +176,12 @@ function canEditFolder(folder?: FavoriteFolderVO | null): folder is IdentifiedFa
 
 function canViewFolderDetail(folder?: FavoriteFolderVO | null): folder is IdentifiedFavoriteFolder {
   return Boolean(folder && typeof folder.id === 'number' && folder.id > 0)
+}
+
+function normalizeMovieIds(movieIds: number[]) {
+  return Array.from(
+    new Set(movieIds.filter((movieId): movieId is number => Number.isInteger(movieId) && movieId > 0))
+  )
 }
 
 function normalizePage(value: unknown): PageResult<MovieItemVO> {
@@ -321,7 +348,10 @@ function closeDetailModal() {
   showDetailModal.value = false
   activeFolderId.value = null
   selectedMovieIds.value = []
+  movingMovieIds.value = []
   removingMovieIds.value = []
+  pendingMoveMovieIds.value = []
+  pendingMoveMovieLabel.value = ''
 }
 
 function isDeletingFolder(folderId?: number | null) {
@@ -443,8 +473,101 @@ function handleToggleMovie(movieId: number, checked: boolean) {
   selectedMovieIds.value = selectedMovieIds.value.filter((id) => id !== movieId)
 }
 
+function isMovieMoving(movieId?: number | null) {
+  return Boolean(movieId && movingMovieIds.value.includes(movieId))
+}
+
+function isMovieBusy(movieId?: number | null) {
+  return isMovieRemoving(movieId) || isMovieMoving(movieId)
+}
+
 function isMovieRemoving(movieId?: number | null) {
   return Boolean(movieId && removingMovieIds.value.includes(movieId))
+}
+
+function openMoveFavoritesModal(movieIds: number[], movieLabel?: string) {
+  if (!canManageFolder(activeFolder.value)) {
+    message.info('当前收藏夹暂不支持移动内容')
+    return
+  }
+
+  const uniqueMovieIds = normalizeMovieIds(movieIds)
+  if (!uniqueMovieIds.length) {
+    message.info('请先选择要移动的电影')
+    return
+  }
+
+  if (!movableTargetFolders.value.length) {
+    message.info('至少还需要一个收藏夹作为目标，先新建收藏夹再继续。')
+    return
+  }
+
+  formMode.value = 'move'
+  editingFolder.value = activeFolder.value
+  pendingMoveMovieIds.value = uniqueMovieIds
+  pendingMoveMovieLabel.value = uniqueMovieIds.length === 1 ? movieLabel?.trim() || '' : ''
+  showFormModal.value = true
+}
+
+function resolveFolderName(folderId: number) {
+  return props.folders.find((folder) => folder.id === folderId)?.name || '目标收藏夹'
+}
+
+async function handleMoveFavorites(payload: { toFolderId: number }) {
+  const fromFolderId = activeFolder.value?.id
+  const targetFolderId = payload.toFolderId
+  const uniqueMovieIds = normalizeMovieIds(pendingMoveMovieIds.value)
+
+  if (!fromFolderId || fromFolderId <= 0) {
+    message.error('当前收藏夹不可移动内容')
+    return
+  }
+
+  if (!uniqueMovieIds.length) {
+    message.warning('请先选择要移动的电影')
+    return
+  }
+
+  if (!targetFolderId || targetFolderId <= 0) {
+    message.warning('请先选择目标收藏夹')
+    return
+  }
+
+  if (targetFolderId === fromFolderId) {
+    message.warning('目标收藏夹不能与当前收藏夹相同')
+    return
+  }
+
+  movingFavorites.value = true
+  movingMovieIds.value = Array.from(new Set([...movingMovieIds.value, ...uniqueMovieIds]))
+
+  try {
+    await moveFavoritesMutation.mutateAsync({
+      data: {
+        fromFolderId,
+        toFolderId: targetFolderId,
+        movieIds: uniqueMovieIds
+      }
+    })
+
+    const targetFolderName = resolveFolderName(targetFolderId)
+    message.success(
+      uniqueMovieIds.length > 1
+        ? `已将 ${uniqueMovieIds.length} 部电影移动到“${targetFolderName}”`
+        : `已将${pendingMoveMovieLabel.value || '该电影'}移动到“${targetFolderName}”`
+    )
+
+    selectedMovieIds.value = selectedMovieIds.value.filter((movieId) => !uniqueMovieIds.includes(movieId))
+    showFormModal.value = false
+    await loadActiveFolderMovies()
+    emit('refresh')
+  } catch (error) {
+    console.error('Failed to move favorites between folders:', error)
+    message.error(extractErrorMessage(error) || '移动收藏失败，请稍后再试')
+  } finally {
+    movingFavorites.value = false
+    movingMovieIds.value = movingMovieIds.value.filter((movieId) => !uniqueMovieIds.includes(movieId))
+  }
 }
 
 async function removeMoviesFromFolder(movieIds: number[]) {
@@ -453,7 +576,7 @@ async function removeMoviesFromFolder(movieIds: number[]) {
   }
 
   const folderId = activeFolderId.value
-  const uniqueMovieIds = Array.from(new Set(movieIds))
+  const uniqueMovieIds = normalizeMovieIds(movieIds)
 
   removingMovieIds.value = Array.from(new Set([...removingMovieIds.value, ...uniqueMovieIds]))
   bulkRemoving.value = uniqueMovieIds.length > 1
@@ -507,12 +630,24 @@ function handleRemoveSelectedMovies() {
   void removeMoviesFromFolder(selectedMovieIds.value)
 }
 
+function handleMoveSelectedMovies() {
+  openMoveFavoritesModal(selectedMovieIds.value)
+}
+
 function handleRemoveMovie(movieId?: number) {
   if (!movieId) {
     return
   }
 
   void removeMoviesFromFolder([movieId])
+}
+
+function handleMoveMovie(movieId?: number, movieName?: string) {
+  if (!movieId) {
+    return
+  }
+
+  openMoveFavoritesModal([movieId], movieName ? `《${movieName}》` : '该电影')
 }
 
 function openEditingFolderMovieManager() {
@@ -556,6 +691,18 @@ watch(
     selectedFolderIds.value = selectedFolderIds.value.filter((folderId) => validFolderIds.has(folderId))
   },
   { immediate: true }
+)
+
+watch(
+  () => showFormModal.value,
+  (visible) => {
+    if (visible || formMode.value !== 'move') {
+      return
+    }
+
+    pendingMoveMovieIds.value = []
+    pendingMoveMovieLabel.value = ''
+  }
 )
 
 watch(
@@ -743,12 +890,16 @@ watch(
   <ProfileFavoriteFolderFormModal
     v-model:show="showFormModal"
     :mode="formMode"
-    :initial-folder="editingFolder"
-    :saving="savingFolder"
+    :initial-folder="formModalFolder"
+    :move-target-folders="movableTargetFolders"
+    :selected-movie-count="pendingMoveMovieCount"
+    :selected-movie-label="pendingMoveMovieLabel"
+    :saving="formModalSaving"
     :deleting="isDeletingFolder(editingFolder?.id)"
     :allow-delete="canDeleteFolder(editingFolder)"
     :allow-bulk-remove-movies="canManageFolder(editingFolder)"
     @submit="handleFolderSubmit"
+    @move-favorites="handleMoveFavorites"
     @delete-folder="handleDeleteEditingFolder"
     @bulk-remove-movies="openEditingFolderMovieManager"
   />
@@ -823,22 +974,27 @@ watch(
             <n-checkbox
               :checked="allVisibleSelected"
               :indeterminate="partiallySelected"
-              :disabled="folderMoviesLoading || allVisibleMovieIds.length === 0 || bulkRemoving"
+              :disabled="folderMoviesLoading || allVisibleMovieIds.length === 0 || bulkRemoving || movingFavorites"
               @update:checked="handleToggleAllMovies"
             >
               全选当前列表
             </n-checkbox>
-
-            <span class="text-sm text-slate-500">
-              这里只会从当前收藏夹移除，不影响其它片单中的同名电影。
-            </span>
           </div>
 
           <div class="flex flex-wrap gap-2">
             <n-button
+              secondary
+              class="rounded-full"
+              :disabled="selectedMovieCount === 0 || folderMoviesLoading || movingFavorites"
+              :loading="movingFavorites"
+              @click="handleMoveSelectedMovies"
+            >
+              移动所选电影
+            </n-button>
+            <n-button
               type="error"
               class="rounded-full"
-              :disabled="selectedMovieCount === 0 || folderMoviesLoading"
+              :disabled="selectedMovieCount === 0 || folderMoviesLoading || movingFavorites"
               :loading="bulkRemoving"
               @click="handleRemoveSelectedMovies"
             >
@@ -872,7 +1028,7 @@ watch(
                 <n-checkbox
                   v-if="movie.movieId && canManageActiveFolder"
                   :checked="selectedMovieIds.includes(movie.movieId)"
-                  :disabled="isMovieRemoving(movie.movieId)"
+                  :disabled="isMovieBusy(movie.movieId)"
                   @update:checked="handleToggleMovie(movie.movieId, $event)"
                 />
               </div>
@@ -939,14 +1095,24 @@ watch(
               </div>
             </div>
 
-            <div class="flex items-start justify-end">
+            <div class="flex flex-wrap items-start justify-end gap-2">
+              <n-button
+                v-if="canManageActiveFolder"
+                secondary
+                class="rounded-full"
+                :loading="isMovieMoving(movie.movieId)"
+                :disabled="!movie.movieId || isMovieRemoving(movie.movieId)"
+                @click="handleMoveMovie(movie.movieId, movie.movieName)"
+              >
+                移动收藏
+              </n-button>
               <n-button
                 v-if="canManageActiveFolder"
                 type="error"
                 quaternary
                 class="rounded-full"
                 :loading="isMovieRemoving(movie.movieId)"
-                :disabled="!movie.movieId"
+                :disabled="!movie.movieId || isMovieMoving(movie.movieId)"
                 @click="handleRemoveMovie(movie.movieId)"
               >
                 移出片单

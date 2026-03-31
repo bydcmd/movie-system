@@ -58,13 +58,23 @@ const handleImageError = () => {
 const goToDetail = () => {
   const id = getMovieId(props.movie)
   if (id && id > 0) {
-    router.push(`/movie/${id}`)
+    void router.push({
+      name: 'movie-detail',
+      params: { id: String(id) }
+    })
   }
 }
 </script>
 
 <template>
-  <div class="movie-card group relative cursor-pointer transition-transform duration-300 hover:-translate-y-2" @click="goToDetail">
+  <div
+    class="movie-card group relative cursor-pointer transition-transform duration-300 hover:-translate-y-2"
+    role="link"
+    tabindex="0"
+    @click="goToDetail"
+    @keydown.enter="goToDetail"
+    @keydown.space.prevent="goToDetail"
+  >
     <div class="aspect-[2/3] overflow-hidden rounded-lg shadow-md group-hover:shadow-xl transition-shadow bg-slate-200 relative">
       <!-- 占位图组件 -->
       <MoviePlaceholder 
@@ -86,8 +96,8 @@ const goToDetail = () => {
       />
       
       <!-- 悬停遮罩 -->
-      <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4" @click.stop>
-        <n-button type="primary" size="small" class="w-full" @click="goToDetail">查看详情</n-button>
+      <div class="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4">
+        <n-button type="primary" size="small" class="pointer-events-auto w-full" @click.stop="goToDetail">查看详情</n-button>
       </div>
     </div>
     

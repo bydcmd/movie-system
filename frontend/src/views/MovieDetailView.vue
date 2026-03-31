@@ -33,7 +33,7 @@ import MovieDetailSimilarMovies from '@/components/movie/MovieDetailSimilarMovie
 import MoviePlaceholder from '@/components/movie/MoviePlaceholder.vue'
 import ProfileFavoriteFolderFormModal from '@/components/profile/ProfileFavoriteFolderFormModal.vue'
 import {
-  useDeleteMyComment,
+  useDeleteMyComments,
   useGetMovieComments,
   useGetMyMovieComment,
   useGetMyMovieLongReview,
@@ -220,7 +220,7 @@ const userRatingQuery = useGetUserRating(movieId, {
   },
   request: optionalAuthRequest
 })
-const deleteCommentMutation = useDeleteMyComment()
+const deleteCommentMutation = useDeleteMyComments()
 const likeCommentMutation = useLikeComment()
 const unlikeCommentMutation = useUnlikeComment()
 const submitMovieCommentMutation = useSubmitMovieComment()
@@ -1170,7 +1170,11 @@ const confirmDeleteComment = async (commentId?: number) => {
   markPending(pendingDeleteIds, commentId, true)
 
   try {
-    await deleteCommentMutation.mutateAsync({ commentId })
+    await deleteCommentMutation.mutateAsync({
+      data: {
+        ids: [commentId]
+      }
+    })
     const shouldFallbackToPreviousPage = comments.value.length === 1 && commentsPage.value > 1
     if (shouldFallbackToPreviousPage) {
       commentsPage.value -= 1
