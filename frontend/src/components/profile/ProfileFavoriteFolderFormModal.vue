@@ -19,15 +19,23 @@ const props = withDefaults(
     mode: FolderFormMode
     initialFolder?: FavoriteFolderVO | null
     saving?: boolean
+    deleting?: boolean
+    allowDelete?: boolean
+    allowBulkRemoveMovies?: boolean
   }>(),
   {
     initialFolder: null,
-    saving: false
+    saving: false,
+    deleting: false,
+    allowDelete: false,
+    allowBulkRemoveMovies: false
   }
 )
 
 const emit = defineEmits<{
   submit: [payload: FavoriteFolderDTO]
+  deleteFolder: []
+  bulkRemoveMovies: []
 }>()
 
 const message = useMessage()
@@ -40,6 +48,10 @@ const form = reactive<FolderFormState>({
 const isEditingDefaultFolder = computed(() => {
   return props.mode === 'edit' && isDefaultFavoriteFolder(props.initialFolder)
 })
+const canDeleteFolder = computed(() => props.mode === 'edit' && props.allowDelete)
+const canBulkRemoveMovies = computed(() => props.mode === 'edit' && props.allowBulkRemoveMovies)
+const showFolderActions = computed(() => canDeleteFolder.value || canBulkRemoveMovies.value)
+const busy = computed(() => props.saving || props.deleting)
 const dialogTitle = computed(() => {
   if (props.mode !== 'edit') {
     return '新建收藏夹'
@@ -57,6 +69,14 @@ const introText = computed(() => {
   }
 
   if (isEditingDefaultFolder.value) {
+    if (canDeleteFolder.value && canBulkRemoveMovies.value) {
+      return '默认收藏夹名称由系统维护，这里可以更新说明和公开状态；如需整理内容，也支持删除收藏夹或批量移除其中的电影。'
+    }
+
+    if (canBulkRemoveMovies.value) {
+      return '默认收藏夹名称由系统维护，这里可以更新说明和公开状态；如需整理内容，也可以继续批量移除其中的电影。'
+    }
+
     return '默认收藏夹名称由系统维护，这里可以更新说明和公开状态。'
   }
 
@@ -68,6 +88,17 @@ const nameInputPlaceholder = computed(() => {
 const descriptionPlaceholder = computed(() => {
   return isEditingDefaultFolder.value ? '补充这个默认收藏夹的用途说明' : '添加说明'
 })
+const actionHintText = computed(() => {
+  if (isEditingDefaultFolder.value) {
+    if (canDeleteFolder.value) {
+      return '默认收藏夹现在也支持删除；点击“批量移除电影”后，会进入内容管理面板继续勾选处理。'
+    }
+
+    return '默认收藏夹名称仍由系统维护；点击“批量移除电影”后，会进入内容管理面板继续勾选处理。'
+  }
+
+  return '需要继续整理片单时，可以直接删除当前收藏夹，或进入内容管理面板批量移除电影。'
+})
 
 function applyFormState(folder?: FavoriteFolderVO | null) {
   form.name = folder?.name ?? ''
@@ -76,7 +107,7 @@ function applyFormState(folder?: FavoriteFolderVO | null) {
 }
 
 function closeModal() {
-  if (props.saving) {
+  if (busy.value) {
     return
   }
 
@@ -170,16 +201,54 @@ watch(
             </div>
           </div>
         </section>
+
+        <section
+          v-if="showFolderActions"
+          class="rounded-[24px] border border-slate-200 bg-white px-4 py-4"
+        >
+          <div class="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-900">内容整理</h3>
+              <p class="mt-1 text-sm leading-6 text-slate-500">
+                {{ actionHintText }}
+              </p>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-3">
+              <n-button
+                v-if="canBulkRemoveMovies"
+                tertiary
+                class="rounded-full px-6"
+                :disabled="busy"
+                @click="emit('bulkRemoveMovies')"
+              >
+                批量移除电影
+              </n-button>
+              <n-button
+                v-if="canDeleteFolder"
+                type="error"
+                secondary
+                class="rounded-full px-6"
+                :loading="deleting"
+                :disabled="saving"
+                @click="emit('deleteFolder')"
+              >
+                删除收藏夹
+              </n-button>
+            </div>
+          </div>
+        </section>
       </n-form>
 
       <div class="flex flex-wrap justify-end gap-3">
-        <n-button tertiary class="rounded-full px-6" :disabled="saving" @click="closeModal">
+        <n-button tertiary class="rounded-full px-6" :disabled="busy" @click="closeModal">
           取消
         </n-button>
         <n-button
           type="primary"
           class="rounded-full px-6"
           :loading="saving"
+          :disabled="deleting"
           @click="handleSubmit"
         >
           {{ submitLabel }}

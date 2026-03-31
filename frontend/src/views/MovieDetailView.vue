@@ -77,6 +77,7 @@ const SIMILAR_MOVIES_DISPLAY_LIMIT = 6
 const SIMILAR_MOVIES_FETCH_LIMIT = SIMILAR_MOVIES_DISPLAY_LIMIT * 3
 const movieId = computed(() => Number(route.params.id))
 const currentUserId = computed(() => authStore.user?.id ?? null)
+const isGuestMode = computed(() => !authStore.isAuthenticated)
 
 const movie = ref<Movie | null>(null)
 const loading = ref(false)
@@ -523,6 +524,24 @@ const visibleCommentsTotal = computed(() => {
 
 const showGuestCommentLimitNotice = computed(() => {
   return !authStore.isAuthenticated && commentsTotal.value > GUEST_COMMENT_LIMIT
+})
+const commentTabLabel = computed(() => {
+  if (authStore.isAuthenticated) {
+    return `评论 (${commentsTotal.value})`
+  }
+
+  if (commentsTotal.value > GUEST_COMMENT_LIMIT) {
+    return `评论 (${visibleCommentsTotal.value}/${commentsTotal.value})`
+  }
+
+  return `评论 (${visibleCommentsTotal.value})`
+})
+const guestCommentActionHint = computed(() => {
+  if (!isGuestMode.value) {
+    return ''
+  }
+
+  return '游客可浏览短评和长评，并进入长评详情页继续阅读；点赞、写短评、写长评和查看全部评论需登录。'
 })
 
 const displayDoubanScore = computed(() => {
@@ -1356,6 +1375,9 @@ watch(
                     :readonly="ratingLoading"
                     @update:value="submitUserRating"
                   />
+                  <div v-if="isGuestMode" class="mt-2 text-xs text-amber-200">
+                    登录后可评分
+                  </div>
                 </div>
               </div>
 
@@ -1494,10 +1516,15 @@ watch(
           </n-tab-pane>
 
           <!-- Comments Tab -->
-          <n-tab-pane name="comments" :tab="`评论 (${commentsTotal})`">
+          <n-tab-pane name="comments" :tab="commentTabLabel">
             <div class="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
               <div class="flex flex-col gap-4 mb-6 sm:flex-row sm:items-center sm:justify-between">
-                <h2 class="text-xl font-bold text-slate-900">观众评论</h2>
+                <div class="space-y-2">
+                  <h2 class="text-xl font-bold text-slate-900">观众评论</h2>
+                  <p v-if="guestCommentActionHint" class="text-sm leading-6 text-slate-500">
+                    {{ guestCommentActionHint }}
+                  </p>
+                </div>
                 <n-space>
                   <n-button
                     type="primary"
@@ -1530,6 +1557,7 @@ watch(
                 :page-size="commentsPageSize"
                 :loading="commentsLoading"
                 :current-user-id="currentUserId"
+                :is-authenticated="authStore.isAuthenticated"
                 :pending-like-ids="pendingLikeIds"
                 :pending-delete-ids="pendingDeleteIds"
                 @update:page="handleCommentsPageChange"

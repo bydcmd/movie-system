@@ -13,7 +13,7 @@ import {
 } from 'naive-ui'
 import {
   useCreateFavoriteFolder,
-  useDeleteFavoriteFolder,
+  useDeleteFavoriteFolders,
   useUpdateFavoriteFolder
 } from '@/api/endpoints/favorite-folder-management/favorite-folder-management'
 import { useGetFolderMovies, useRemoveFavorite } from '@/api/endpoints/favorite-management/favorite-management'
@@ -61,7 +61,8 @@ const activeFolderId = ref<number | null>(null)
 const showFormModal = ref(false)
 const showDetailModal = ref(false)
 const savingFolder = ref(false)
-const deletingFolderId = ref<number | null>(null)
+const deletingFolderIds = ref<number[]>([])
+const selectedFolderIds = ref<number[]>([])
 const selectedMovieIds = ref<number[]>([])
 const removingMovieIds = ref<number[]>([])
 const bulkRemoving = ref(false)
@@ -79,13 +80,38 @@ const folderMoviesQuery = useGetFolderMovies<PageInfoMovieItemVO>(
 )
 const createFavoriteFolderMutation = useCreateFavoriteFolder()
 const updateFavoriteFolderMutation = useUpdateFavoriteFolder()
-const deleteFavoriteFolderMutation = useDeleteFavoriteFolder()
+const deleteFavoriteFoldersMutation = useDeleteFavoriteFolders()
 const removeFavoriteMutation = useRemoveFavorite()
 
 const activeFolder = computed(() => {
   return props.folders.find((folder) => folder.id === activeFolderId.value) ?? null
 })
 const sortedFolders = computed(() => sortFavoriteFolders(props.folders))
+const manageableFolderIds = computed(() => {
+  return props.folders
+    .filter((folder): folder is IdentifiedFavoriteFolder => canDeleteFolder(folder))
+    .map((folder) => folder.id)
+})
+const selectedFolderCount = computed(() => selectedFolderIds.value.length)
+const allManageableSelected = computed(() => {
+  return manageableFolderIds.value.length > 0 && selectedFolderCount.value === manageableFolderIds.value.length
+})
+const partiallySelectedFolders = computed(() => {
+  return selectedFolderCount.value > 0 && !allManageableSelected.value
+})
+const deletingSelectedFolderCount = computed(() => {
+  return selectedFolderIds.value.filter((folderId) => deletingFolderIds.value.includes(folderId)).length
+})
+const bulkDeletingFolders = computed(() => {
+  return selectedFolderCount.value > 0 && deletingSelectedFolderCount.value === selectedFolderCount.value
+})
+const selectedFoldersForDeletion = computed(() => {
+  const selectedFolderIdSet = new Set(selectedFolderIds.value)
+
+  return sortedFolders.value.filter(
+    (folder): folder is IdentifiedFavoriteFolder => canDeleteFolder(folder) && selectedFolderIdSet.has(folder.id)
+  )
+})
 
 const folderMoviesPage = computed<PageResult<MovieItemVO>>(() => {
   return normalizePage(folderMoviesQuery.data.value)
@@ -112,9 +138,14 @@ const isFolderMoviesTruncated = computed(() => {
   return folderMoviesTotal.value > folderMovies.value.length && folderMovies.value.length > 0
 })
 const canManageActiveFolder = computed(() => canManageFolder(activeFolder.value))
+const canDeleteActiveFolder = computed(() => canDeleteFolder(activeFolder.value))
 const canEditActiveFolder = computed(() => canEditFolder(activeFolder.value))
 
 function canManageFolder(folder?: FavoriteFolderVO | null): folder is IdentifiedFavoriteFolder {
+  return Boolean(folder && typeof folder.id === 'number' && folder.id > 0)
+}
+
+function canDeleteFolder(folder?: FavoriteFolderVO | null): folder is IdentifiedFavoriteFolder {
   return Boolean(folder && !isDefaultFavoriteFolder(folder) && typeof folder.id === 'number' && folder.id > 0)
 }
 
@@ -294,48 +325,105 @@ function closeDetailModal() {
 }
 
 function isDeletingFolder(folderId?: number | null) {
-  return Boolean(folderId && deletingFolderId.value === folderId)
+  return Boolean(folderId && deletingFolderIds.value.includes(folderId))
 }
 
-async function handleDeleteFolder(folder: FavoriteFolderVO) {
-  if (!canManageFolder(folder)) {
-    message.warning('默认收藏夹不可删除')
+function isFolderSelected(folderId?: number | null) {
+  return Boolean(folderId && selectedFolderIds.value.includes(folderId))
+}
+
+function handleToggleAllFolders(checked: boolean) {
+  selectedFolderIds.value = checked ? [...manageableFolderIds.value] : []
+}
+
+function handleToggleFolder(folderId: number, checked: boolean) {
+  if (checked) {
+    if (!selectedFolderIds.value.includes(folderId)) {
+      selectedFolderIds.value = [...selectedFolderIds.value, folderId]
+    }
     return
   }
-  const folderId = folder.id
 
-  deletingFolderId.value = folderId
+  selectedFolderIds.value = selectedFolderIds.value.filter((id) => id !== folderId)
+}
+
+async function handleDeleteFolders(folderIds: number[]) {
+  const uniqueFolderIds = Array.from(
+    new Set(folderIds.filter((folderId) => Number.isInteger(folderId) && folderId > 0))
+  )
+  if (!uniqueFolderIds.length) {
+    return
+  }
+
+  deletingFolderIds.value = Array.from(new Set([...deletingFolderIds.value, ...uniqueFolderIds]))
 
   try {
-    await deleteFavoriteFolderMutation.mutateAsync({ folderId })
-    message.success('收藏夹已删除')
+    await deleteFavoriteFoldersMutation.mutateAsync({
+      data: {
+        ids: uniqueFolderIds
+      }
+    })
+    message.success(uniqueFolderIds.length > 1 ? `已删除 ${uniqueFolderIds.length} 个收藏夹` : '收藏夹已删除')
 
-    if (activeFolderId.value === folderId) {
+    if (activeFolderId.value && uniqueFolderIds.includes(activeFolderId.value)) {
       closeDetailModal()
     }
 
+    if (editingFolder.value?.id && uniqueFolderIds.includes(editingFolder.value.id)) {
+      showFormModal.value = false
+      editingFolder.value = null
+    }
+
+    selectedFolderIds.value = selectedFolderIds.value.filter((folderId) => !uniqueFolderIds.includes(folderId))
     emit('refresh')
   } catch (error) {
     console.error('Failed to delete favorite folder:', error)
     message.error(extractErrorMessage(error) || '删除收藏夹失败，请稍后再试')
   } finally {
-    deletingFolderId.value = null
+    deletingFolderIds.value = deletingFolderIds.value.filter((folderId) => !uniqueFolderIds.includes(folderId))
   }
 }
 
 function confirmDeleteFolder(folder: FavoriteFolderVO) {
-  if (!canManageFolder(folder)) {
-    message.info('默认收藏夹不可删除')
+  if (!canDeleteFolder(folder)) {
+    message.info(isDefaultFavoriteFolder(folder) ? '默认收藏夹不可删除' : '当前收藏夹暂不支持删除')
     return
   }
+  const folderName = folder.name || '未命名收藏夹'
 
   dialog.warning({
     title: '删除收藏夹',
-    content: `删除“${folder.name || '未命名收藏夹'}”后，夹内收藏记录也会一起移除。此操作不可撤销。`,
+    content: `删除“${folderName}”后，夹内收藏记录也会一起移除。此操作不可撤销。`,
     positiveText: '删除',
     negativeText: '取消',
     onPositiveClick: async () => {
-      await handleDeleteFolder(folder)
+      await handleDeleteFolders([folder.id])
+    }
+  })
+}
+
+function confirmDeleteSelectedFolders() {
+  if (!selectedFolderIds.value.length) {
+    message.info('请先选择要删除的收藏夹')
+    return
+  }
+
+  const previewNames = selectedFoldersForDeletion.value
+    .slice(0, 3)
+    .map((folder) => `“${folder.name || '未命名收藏夹'}”`)
+    .join('、')
+  const contentPrefix =
+    selectedFolderCount.value > 3
+      ? `${previewNames} 等 ${selectedFolderCount.value} 个收藏夹`
+      : previewNames || `${selectedFolderCount.value} 个收藏夹`
+
+  dialog.warning({
+    title: '批量删除收藏夹',
+    content: `删除${contentPrefix}后，夹内收藏记录也会一起移除。此操作不可撤销。`,
+    positiveText: '删除所选',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      await handleDeleteFolders(selectedFolderIds.value)
     }
   })
 }
@@ -427,6 +515,25 @@ function handleRemoveMovie(movieId?: number) {
   void removeMoviesFromFolder([movieId])
 }
 
+function openEditingFolderMovieManager() {
+  if (!canManageFolder(editingFolder.value)) {
+    message.info('当前收藏夹暂不支持管理内容')
+    return
+  }
+
+  showFormModal.value = false
+  openFolderDetail(editingFolder.value)
+}
+
+function handleDeleteEditingFolder() {
+  if (!canDeleteFolder(editingFolder.value)) {
+    message.info(isDefaultFavoriteFolder(editingFolder.value) ? '默认收藏夹不可删除' : '当前收藏夹暂不支持删除')
+    return
+  }
+
+  confirmDeleteFolder(editingFolder.value)
+}
+
 watch(
   () => props.folders,
   (nextFolders) => {
@@ -440,6 +547,15 @@ watch(
     }
   },
   { deep: true }
+)
+
+watch(
+  manageableFolderIds,
+  (nextFolderIds) => {
+    const validFolderIds = new Set(nextFolderIds)
+    selectedFolderIds.value = selectedFolderIds.value.filter((folderId) => validFolderIds.has(folderId))
+  },
+  { immediate: true }
 )
 
 watch(
@@ -503,76 +619,125 @@ watch(
       class="rounded-[28px] border border-dashed border-slate-200 bg-white/70 py-14"
     />
 
-    <div v-else class="grid gap-4 md:grid-cols-2">
-      <article
-        v-for="folder in sortedFolders"
-        :key="folder.id || folder.name"
-        class="rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_18px_45px_rgba(148,163,184,0.15)]"
+    <template v-else>
+      <section
+        v-if="manageableFolderIds.length > 0"
+        class="flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-4"
       >
-        <div class="mb-4 flex items-start justify-between gap-4">
-          <div class="space-y-2">
-            <div class="flex flex-wrap items-center gap-2">
-              <h4 class="text-lg font-semibold text-slate-950">{{ folder.name || '未命名收藏夹' }}</h4>
-              <n-tag v-if="isDefaultFavoriteFolder(folder)" size="small" round type="info">
-                系统默认
-              </n-tag>
-            </div>
-            <p class="text-sm leading-6 text-slate-600">
-              {{ folder.description || '还没有填写这个收藏夹的说明。' }}
-            </p>
-          </div>
-          <n-tag :type="folder.isPublic === 1 ? 'warning' : 'default'" round>
-            {{ folder.isPublic === 1 ? '公开' : '私密' }}
-          </n-tag>
-        </div>
-
-        <div class="flex flex-wrap gap-3 text-sm text-slate-500">
-          <span class="rounded-full bg-slate-100 px-3 py-1">
-            {{ folder.movieCount || 0 }} 部电影
-          </span>
-          <span class="rounded-full bg-slate-100 px-3 py-1">
-            创建于 {{ formatDateLabel(folder.createTime) }}
-          </span>
-          <span class="rounded-full bg-slate-100 px-3 py-1">
-            更新于 {{ formatDateTimeLabel(folder.updateTime) }}
-          </span>
-        </div>
-
-        <div class="mt-5 flex flex-wrap gap-2">
-          <n-button size="small" secondary class="rounded-full" @click="openFolderDetail(folder)">
-            {{ canManageFolder(folder) ? '管理内容' : '查看片单' }}
-          </n-button>
-          <n-button
-            v-if="canEditFolder(folder)"
-            size="small"
-            tertiary
-            class="rounded-full"
-            @click="openEditFolder(folder)"
+        <div class="flex flex-wrap items-center gap-3">
+          <n-checkbox
+            :checked="allManageableSelected"
+            :indeterminate="partiallySelectedFolders"
+            :disabled="deletingFolderIds.length > 0"
+            @update:checked="handleToggleAllFolders"
           >
-            编辑信息
+            全选可删除收藏夹
+          </n-checkbox>
+
+          <span class="text-sm text-slate-500">
+            已选 {{ selectedFolderCount }} 个，系统默认收藏夹不会参与批量删除。
+          </span>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <n-button
+            type="error"
+            class="rounded-full"
+            :disabled="selectedFolderCount === 0 || deletingFolderIds.length > 0"
+            :loading="bulkDeletingFolders"
+            @click="confirmDeleteSelectedFolders"
+          >
+            删除所选
           </n-button>
-          <template v-if="canManageFolder(folder)">
+        </div>
+      </section>
+
+      <div class="grid gap-4 md:grid-cols-2">
+        <article
+          v-for="folder in sortedFolders"
+          :key="folder.id || folder.name"
+          class="rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_18px_45px_rgba(148,163,184,0.15)]"
+        >
+          <div class="mb-4 flex items-start justify-between gap-4">
+            <div class="flex min-w-0 flex-1 items-start gap-3">
+              <div v-if="canDeleteFolder(folder)" class="pt-1">
+                <n-checkbox
+                  :checked="isFolderSelected(folder.id)"
+                  :disabled="isDeletingFolder(folder.id)"
+                  @update:checked="handleToggleFolder(folder.id, $event)"
+                />
+              </div>
+
+              <div class="min-w-0 space-y-2">
+                <div class="flex flex-wrap items-center gap-2">
+                  <h4 class="text-lg font-semibold text-slate-950">{{ folder.name || '未命名收藏夹' }}</h4>
+                  <n-tag v-if="isDefaultFavoriteFolder(folder)" size="small" round type="info">
+                    系统默认
+                  </n-tag>
+                </div>
+                <p class="text-sm leading-6 text-slate-600">
+                  {{ folder.description || '还没有填写这个收藏夹的说明。' }}
+                </p>
+              </div>
+            </div>
+
+            <n-tag :type="folder.isPublic === 1 ? 'warning' : 'default'" round>
+              {{ folder.isPublic === 1 ? '公开' : '私密' }}
+            </n-tag>
+          </div>
+
+          <div class="flex flex-wrap gap-3 text-sm text-slate-500">
+            <span class="rounded-full bg-slate-100 px-3 py-1">
+              {{ folder.movieCount || 0 }} 部电影
+            </span>
+            <span class="rounded-full bg-slate-100 px-3 py-1">
+              创建于 {{ formatDateLabel(folder.createTime) }}
+            </span>
+            <span class="rounded-full bg-slate-100 px-3 py-1">
+              更新于 {{ formatDateTimeLabel(folder.updateTime) }}
+            </span>
+          </div>
+
+          <div class="mt-5 flex flex-wrap gap-2">
             <n-button
               size="small"
-              type="error"
-              quaternary
+              secondary
               class="rounded-full"
-              :loading="isDeletingFolder(folder.id)"
-              @click="confirmDeleteFolder(folder)"
+              @click="openFolderDetail(folder)"
             >
-              删除
+              {{ canManageFolder(folder) ? '管理内容' : '查看片单' }}
             </n-button>
-          </template>
-
-          <span
-            v-else
-            class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-500"
-          >
-            默认收藏夹名称由系统维护，可编辑说明与公开状态
-          </span>
-        </div>
-      </article>
-    </div>
+            <n-button
+              v-if="canEditFolder(folder)"
+              size="small"
+              tertiary
+              class="rounded-full"
+              @click="openEditFolder(folder)"
+            >
+              编辑信息
+            </n-button>
+            <template v-if="canDeleteFolder(folder)">
+              <n-button
+                size="small"
+                type="error"
+                quaternary
+                class="rounded-full"
+                :loading="isDeletingFolder(folder.id)"
+                @click="confirmDeleteFolder(folder)"
+              >
+                删除
+              </n-button>
+            </template>
+            <span
+              v-if="isDefaultFavoriteFolder(folder)"
+              class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-500"
+            >
+              名称由系统维护，不支持删除
+            </span>
+          </div>
+        </article>
+      </div>
+    </template>
   </div>
 
   <ProfileFavoriteFolderFormModal
@@ -580,7 +745,12 @@ watch(
     :mode="formMode"
     :initial-folder="editingFolder"
     :saving="savingFolder"
+    :deleting="isDeletingFolder(editingFolder?.id)"
+    :allow-delete="canDeleteFolder(editingFolder)"
+    :allow-bulk-remove-movies="canManageFolder(editingFolder)"
     @submit="handleFolderSubmit"
+    @delete-folder="handleDeleteEditingFolder"
+    @bulk-remove-movies="openEditingFolderMovieManager"
   />
 
   <n-modal
@@ -631,7 +801,7 @@ watch(
           >
             编辑信息
           </n-button>
-          <template v-if="canManageActiveFolder">
+          <template v-if="canDeleteActiveFolder">
             <n-button
               type="error"
               quaternary
@@ -660,7 +830,7 @@ watch(
             </n-checkbox>
 
             <span class="text-sm text-slate-500">
-              这里只会从当前收藏夹移除，不影响其它自定义片单中的同名电影。
+              这里只会从当前收藏夹移除，不影响其它片单中的同名电影。
             </span>
           </div>
 
@@ -677,11 +847,6 @@ watch(
           </div>
         </template>
 
-        <template v-else>
-          <span class="text-sm text-slate-500">
-            默认收藏夹支持编辑说明和公开状态，但不支持删除或批量移除电影。
-          </span>
-        </template>
       </section>
 
       <section v-if="isFolderMoviesTruncated" class="rounded-[20px] bg-amber-50 px-4 py-3 text-sm text-amber-800">

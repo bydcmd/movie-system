@@ -211,6 +211,7 @@ watch(currentUserId, (nextUserId, previousUserId) => {
         :review="review"
         :movie="movie"
         :like-loading="likeLoading"
+        :is-authenticated="authStore.isAuthenticated"
         @toggle-like="handleToggleLike"
       />
     </main>

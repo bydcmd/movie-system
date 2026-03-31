@@ -145,12 +145,16 @@ const router = createRouter({
 
 router.beforeEach(async (to) => {
   const authStore = useAuthStore()
+  const requiresAuth = Boolean(to.meta.requiresAuth || to.meta.allowedRoles?.length)
+  const needsResolvedAuthState = requiresAuth || Boolean(to.meta.guestOnly)
 
   if (!authStore.initialized) {
-    await authStore.initializeAuth()
+    if (needsResolvedAuthState) {
+      await authStore.initializeAuth()
+    } else {
+      void authStore.initializeAuth()
+    }
   }
-
-  const requiresAuth = Boolean(to.meta.requiresAuth || to.meta.allowedRoles?.length)
 
   if (requiresAuth && !authStore.isAuthenticated) {
     return {

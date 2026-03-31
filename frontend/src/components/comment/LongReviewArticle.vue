@@ -18,10 +18,12 @@ const props = withDefaults(
     review: CommentVO
     movie?: Movie | null
     likeLoading?: boolean
+    isAuthenticated?: boolean
   }>(),
   {
     movie: null,
-    likeLoading: false
+    likeLoading: false,
+    isAuthenticated: false
   }
 )
 
@@ -64,6 +66,15 @@ const movieMetaItems = computed(() => {
 
   return items
 })
+const likeActionLabel = computed(() => {
+  const votes = props.review.votes || 0
+
+  if (!props.isAuthenticated) {
+    return `登录后点赞 · ${votes}`
+  }
+
+  return `${props.review.isLiked ? '已赞' : '点赞'} · ${votes}`
+})
 const readonlyContent = computed({
   get: () => props.review.content || createEmptyTiptapDocument(),
   set: () => undefined
@@ -104,14 +115,18 @@ const readonlyContent = computed({
           <n-rate v-if="props.review.rating" :value="props.review.rating" readonly size="small" />
           <n-button
             quaternary
-            :type="props.review.isLiked ? 'primary' : 'default'"
+            :type="props.isAuthenticated && props.review.isLiked ? 'primary' : 'default'"
             :loading="props.likeLoading"
             @click="emit('toggleLike')"
           >
-            {{ props.review.isLiked ? '已赞' : '点赞' }} · {{ props.review.votes || 0 }}
+            {{ likeActionLabel }}
           </n-button>
         </div>
       </div>
+
+      <p v-if="!props.isAuthenticated" class="long-review-login-hint">
+        游客可阅读全文，点赞需登录。
+      </p>
     </header>
 
     <div class="long-review-layout">
@@ -247,6 +262,13 @@ const readonlyContent = computed({
   flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem;
+}
+
+.long-review-login-hint {
+  margin: 1rem 0 0;
+  color: rgb(120 113 108);
+  font-size: 0.92rem;
+  line-height: 1.6;
 }
 
 .long-review-layout {

@@ -71,7 +71,12 @@ const favoriteFolderCount = computed(() => props.favoriteFolders.length)
       </n-tab-pane>
 
       <n-tab-pane name="comments" :tab="`评论 (${totals.comments})`">
-        <ProfileCommentList :items="comments" :total="totals.comments" :loading="loading" />
+        <ProfileCommentList
+          :items="comments"
+          :total="totals.comments"
+          :loading="loading"
+          @refresh="emit('refresh')"
+        />
       </n-tab-pane>
     </n-tabs>
   </section>

@@ -15,12 +15,14 @@ const props = withDefaults(
     pageSize: number
     loading?: boolean
     currentUserId?: string | null
+    isAuthenticated?: boolean
     pendingLikeIds?: number[]
     pendingDeleteIds?: number[]
   }>(),
   {
     loading: false,
     currentUserId: null,
+    isAuthenticated: false,
     pendingLikeIds: () => [],
     pendingDeleteIds: () => []
   }
@@ -101,6 +103,7 @@ function isDeletePending(commentId?: number): boolean {
         :like-loading="isLikePending(comment.id)"
         :delete-loading="isDeletePending(comment.id)"
         :reading-mode="filter === 'long'"
+        :is-authenticated="props.isAuthenticated"
         @toggle-like="emit('toggleLike', $event)"
         @delete="emit('delete', $event)"
       />

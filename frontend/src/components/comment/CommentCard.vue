@@ -19,12 +19,14 @@ const props = withDefaults(
     likeLoading?: boolean
     deleteLoading?: boolean
     readingMode?: boolean
+    isAuthenticated?: boolean
   }>(),
   {
     isOwner: false,
     likeLoading: false,
     deleteLoading: false,
-    readingMode: false
+    readingMode: false,
+    isAuthenticated: false
   }
 )
 
@@ -72,6 +74,15 @@ const longReviewRoute = computed(() => {
       commentId: props.comment.id
     }
   }
+})
+const likeActionLabel = computed(() => {
+  const votes = props.comment.votes || 0
+
+  if (!props.isAuthenticated) {
+    return `登录后点赞 · ${votes}`
+  }
+
+  return `${props.comment.isLiked ? '已赞' : '点赞'} · ${votes}`
 })
 
 function handleToggleLike() {
@@ -155,11 +166,11 @@ function handleDelete() {
       <div class="comment-actions-left">
         <n-button
           quaternary
-          :type="props.comment.isLiked ? 'primary' : 'default'"
+          :type="props.isAuthenticated && props.comment.isLiked ? 'primary' : 'default'"
           :loading="props.likeLoading"
           @click="handleToggleLike"
         >
-          {{ props.comment.isLiked ? '已赞' : '点赞' }} · {{ props.comment.votes || 0 }}
+          {{ likeActionLabel }}
         </n-button>
 
         <RouterLink
