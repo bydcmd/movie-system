@@ -24,6 +24,11 @@ public interface FavoriteFolderService {
     void deleteFolder(String userId, Long folderId);
 
     /**
+     * 批量删除收藏夹（会同时删除每个收藏夹下的所有收藏）
+     */
+    void deleteFolders(String userId, List<Long> folderIds);
+
+    /**
      * 获取收藏夹详情（若无权限访问则抛出 AccessDeniedException）
      */
     FavoriteFolder getFolderById(Long folderId, String viewerUserId);

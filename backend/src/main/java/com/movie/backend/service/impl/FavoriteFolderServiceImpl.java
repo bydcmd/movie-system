@@ -114,6 +114,18 @@ public class FavoriteFolderServiceImpl implements FavoriteFolderService {
         );
         kafkaEventPublisher.publishFavoriteFolderActionEvent(event);
     }
+
+    @Override
+    @Transactional
+    public void deleteFolders(String userId, List<Long> folderIds) {
+        if (folderIds == null || folderIds.isEmpty()) {
+            return;
+        }
+        
+        for (Long folderId : folderIds) {
+            deleteFolder(userId, folderId);
+        }
+    }
     
     @Override
     public FavoriteFolder getFolderById(Long folderId, String viewerUserId) {

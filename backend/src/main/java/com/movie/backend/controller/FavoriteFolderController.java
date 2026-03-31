@@ -3,6 +3,7 @@ package com.movie.backend.controller;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.access.prepost.PreAuthorize;
 import com.movie.backend.common.Result;
+import com.movie.backend.dto.BatchIdsDTO;
 import com.movie.backend.dto.FavoriteFolderDTO;
 import com.movie.backend.dto.FavoriteFolderVO;
 import com.movie.backend.entity.FavoriteFolder;
@@ -53,14 +54,14 @@ public class FavoriteFolderController {
         return Result.success("收藏夹更新成功");
     }
     
-    @Operation(operationId = "deleteFavoriteFolder", summary = "删除收藏夹", description = "删除收藏夹及其下的所有收藏记录")
+    @Operation(operationId = "deleteFavoriteFolders", summary = "删除收藏夹", description = "删除一个或多个收藏夹及其下的所有收藏记录，单删时传入包含单个ID的数组即可")
     @SecurityRequirement(name = "BearerAuth")
     @PreAuthorize("isAuthenticated()")
-    @DeleteMapping("/{folderId}")
-    public Result<String> deleteFolder(
-            @Parameter(description = "收藏夹ID", required = true) @PathVariable @Min(1) Long folderId,
+    @DeleteMapping
+    public Result<String> deleteFolders(
+            @Valid @RequestBody BatchIdsDTO dto,
             @AuthenticationPrincipal User user) {
-        favoriteFolderService.deleteFolder(user.getId(), folderId);
+        favoriteFolderService.deleteFolders(user.getId(), dto.getIds());
         return Result.success("收藏夹已删除");
     }
     
