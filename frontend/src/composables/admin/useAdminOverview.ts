@@ -1,13 +1,14 @@
 import { computed, shallowRef } from 'vue'
-import { useDialog, useMessage } from 'naive-ui'
+import { useMessage } from 'naive-ui'
 import {
   useGetDashboardStats
 } from '@/api/endpoints/admin-dashboard-management/admin-dashboard-management'
 import {
-  useRefreshPersonalizedRecommendationsAllAdmin
-} from '@/api/endpoints/admin-recommendation-cache-management/admin-recommendation-cache-management'
+  useGetSearchFunnel
+} from '@/api/endpoints/analytics/analytics'
 import type {
-  AdminDashboardVO
+  AdminDashboardVO,
+  SearchFunnelDTO
 } from '@/api/model'
 import { formatDateTimeLabel } from '@/utils/profile'
 import {
@@ -44,7 +45,6 @@ type OverviewCard = {
 }
 
 export function useAdminOverview() {
-  const dialog = useDialog()
   const message = useMessage()
   const isRefreshingOverview = shallowRef(false)
 
@@ -53,7 +53,12 @@ export function useAdminOverview() {
       retry: false
     }
   })
-  const refreshAllRecommendationsMutation = useRefreshPersonalizedRecommendationsAllAdmin()
+
+  const searchFunnelQuery = useGetSearchFunnel<SearchFunnelDTO>({
+    query: {
+      retry: false
+    }
+  })
 
   const overview = computed(() => {
     const dashboard = dashboardQuery.data.value
@@ -159,9 +164,18 @@ export function useAdminOverview() {
     })
   })
 
-  const loading = computed(() => dashboardQuery.isLoading.value || dashboardQuery.isFetching.value)
-  const hasLoadError = computed(() => dashboardQuery.isError.value)
-  const isRefreshingAllRecommendations = computed(() => refreshAllRecommendationsMutation.isPending.value)
+  const searchFunnel = computed<SearchFunnelDTO>(() => {
+    const data = searchFunnelQuery.data.value
+    return isRecord(data) ? data : {}
+  })
+
+  const loading = computed(() =>
+    dashboardQuery.isLoading.value ||
+    dashboardQuery.isFetching.value ||
+    searchFunnelQuery.isLoading.value ||
+    searchFunnelQuery.isFetching.value
+  )
+  const hasLoadError = computed(() => dashboardQuery.isError.value || searchFunnelQuery.isError.value)
   const lastUpdatedText = computed(() => {
     if (!dashboardQuery.dataUpdatedAt.value) {
       return '尚未同步'
@@ -174,7 +188,10 @@ export function useAdminOverview() {
     isRefreshingOverview.value = true
 
     try {
-      await refetchOrThrow(dashboardQuery)
+      await Promise.all([
+        refetchOrThrow(dashboardQuery),
+        refetchOrThrow(searchFunnelQuery)
+      ])
       message.success('仪表盘已刷新')
     } catch (error) {
       console.error('Failed to refresh dashboard overview:', error)
@@ -186,41 +203,16 @@ export function useAdminOverview() {
     }
   }
 
-  async function refreshAllRecommendations() {
-    try {
-      await refreshAllRecommendationsMutation.mutateAsync({
-        params: { confirmAll: true }
-      })
-      message.success('已清除全部用户的猜你喜欢缓存')
-    } catch (error) {
-      console.error('Failed to refresh all personalized recommendations:', error)
-      if (!extractAdminErrorMessage(error)) {
-        message.error('清空全量推荐缓存失败，请稍后再试')
-      }
-    }
-  }
-
-  function requestRefreshAllRecommendations() {
-    dialog.warning({
-      title: '清空全量猜你喜欢缓存',
-      content: '该操作会清除全部用户的猜你喜欢缓存，下一次请求会回源重建推荐结果。',
-      positiveText: '确认清除',
-      negativeText: '取消',
-      onPositiveClick: refreshAllRecommendations
-    })
-  }
-
   return {
     overview,
     overviewCards,
     trendPanels,
+    searchFunnel,
     loading,
     hasLoadError,
     lastUpdatedText,
     formatCount: formatAdminCount,
     isRefreshingOverview,
-    isRefreshingAllRecommendations,
-    refreshOverview,
-    requestRefreshAllRecommendations
+    refreshOverview
   }
 }

@@ -1,21 +1,40 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
 import { NAlert, NButton, NEmpty, NSpin } from 'naive-ui'
+import { use } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import { BarChart, FunnelChart } from 'echarts/charts'
+import {
+  GridComponent,
+  TooltipComponent,
+  DataZoomComponent,
+  LegendComponent
+} from 'echarts/components'
+import VChart from 'vue-echarts'
 import { useAdminOverview } from '@/composables/admin/useAdminOverview'
+
+use([
+  CanvasRenderer,
+  BarChart,
+  FunnelChart,
+  GridComponent,
+  TooltipComponent,
+  DataZoomComponent,
+  LegendComponent
+])
 
 const router = useRouter()
 const {
   overview,
   overviewCards,
   trendPanels,
+  searchFunnel,
   loading,
   hasLoadError,
   lastUpdatedText,
   formatCount,
   isRefreshingOverview,
-  isRefreshingAllRecommendations,
-  refreshOverview,
-  requestRefreshAllRecommendations
+  refreshOverview
 } = useAdminOverview()
 
 function goToUsers() {
@@ -29,6 +48,142 @@ function goToComments() {
 function goToMovies() {
   void router.push({ name: 'admin-movies' })
 }
+
+const toneColors: Record<string, string> = {
+  amber: '#f59e0b',
+  emerald: '#10b981',
+  sky: '#0ea5e9',
+  rose: '#f43f5e',
+  slate: '#64748b',
+  indigo: '#6366f1'
+}
+
+function getChartOption(panel: typeof trendPanels.value[0]) {
+  const color = toneColors[panel.tone] || toneColors.slate
+  return {
+    grid: {
+      left: '3%',
+      right: '3%',
+      bottom: '3%',
+      top: '10%',
+      containLabel: true
+    },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: {
+        type: 'shadow'
+      },
+      formatter: (params: Array<{ name: string; value: number }>) => {
+        const p = params[0]
+        return p ? `${p.name}: ${p.value}` : ''
+      }
+    },
+    xAxis: {
+      type: 'category',
+      data: panel.points.map(p => p.shortDate),
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: {
+        color: '#64748b',
+        fontSize: 11,
+        interval: 0
+      }
+    },
+    yAxis: {
+      type: 'value',
+      splitLine: {
+        lineStyle: {
+          color: 'rgba(148, 163, 184, 0.12)'
+        }
+      },
+      axisLabel: {
+        color: '#64748b',
+        fontSize: 11
+      }
+    },
+    series: [
+      {
+        type: 'bar',
+        data: panel.points.map(p => p.value),
+        itemStyle: {
+          color: color,
+          borderRadius: [4, 4, 0, 0]
+        },
+        barWidth: '60%',
+        emphasis: {
+          itemStyle: {
+            opacity: 0.8
+          }
+        }
+      }
+    ]
+  }
+}
+
+const searchFunnelChartOption = computed(() => {
+  const data = [
+    { value: searchFunnel.value.searchUserCnt || 0, name: '搜索用户' },
+    { value: searchFunnel.value.afterSearchViewUserCnt || 0, name: '浏览用户' },
+    { value: searchFunnel.value.afterSearchRatingUserCnt || 0, name: '评分用户' },
+    { value: searchFunnel.value.afterSearchFavoriteUserCnt || 0, name: '收藏用户' },
+    { value: searchFunnel.value.afterSearchWatchedUserCnt || 0, name: '看过用户' }
+  ].filter(item => item.value > 0)
+
+  return {
+    tooltip: {
+      trigger: 'item',
+      formatter: (params: { name: string; value: number; percent: number }) => {
+        return `${params.name}: ${params.value} (${params.percent}%)`
+      }
+    },
+    legend: {
+      show: false
+    },
+    series: [
+      {
+        name: '搜索漏斗',
+        type: 'funnel',
+        left: '10%',
+        top: '5%',
+        bottom: '5%',
+        width: '80%',
+        min: 0,
+        max: Math.max(1, searchFunnel.value.searchUserCnt || 0),
+        minSize: '0%',
+        maxSize: '100%',
+        sort: 'descending',
+        gap: 2,
+        label: {
+          show: true,
+          position: 'inside',
+          formatter: (params: { name: string; value: number; percent: number }) => {
+            return `${params.name}\n${params.value}`
+          },
+          fontSize: 12,
+          color: '#fff'
+        },
+        labelLine: {
+          length: 10,
+          lineStyle: {
+            width: 1,
+            type: 'solid'
+          }
+        },
+        itemStyle: {
+          borderColor: '#fff',
+          borderWidth: 1
+        },
+        emphasis: {
+          label: {
+            fontSize: 14
+          }
+        },
+        data: data,
+        color: ['#f59e0b', '#0ea5e9', '#10b981', '#6366f1', '#f43f5e']
+      }
+    ]
+  }
+})
 </script>
 
 <template>
@@ -123,20 +278,11 @@ function goToMovies() {
           </div>
 
           <div v-if="panel.points.length > 0" class="trend-chart">
-            <div
-              v-for="point in panel.points"
-              :key="`${panel.key}-${point.date}`"
-              class="trend-slot"
-            >
-              <span class="trend-slot-label">{{ point.shortDate }}</span>
-              <div class="trend-track">
-                <div
-                  class="trend-fill"
-                  :style="{ height: `${Math.max(point.ratio * 100, point.value > 0 ? 18 : 8)}%` }"
-                />
-              </div>
-              <span class="trend-slot-value">{{ point.value }}</span>
-            </div>
+            <v-chart
+              :option="getChartOption(panel)"
+              :autoresize="true"
+              class="trend-echart"
+            />
           </div>
 
           <n-empty
@@ -146,6 +292,96 @@ function goToMovies() {
             class="py-6"
           />
         </article>
+      </div>
+
+      <!-- Search Funnel Analytics -->
+      <div class="funnel-section">
+        <h3 class="funnel-section-title">搜索漏斗分析</h3>
+        <div class="funnel-layout">
+          <!-- Funnel Chart -->
+          <article class="funnel-chart-card">
+            <v-chart
+              :option="searchFunnelChartOption"
+              :autoresize="true"
+              class="funnel-echart"
+            />
+          </article>
+
+          <!-- Funnel Metrics Grid -->
+          <div class="funnel-metrics-grid">
+            <article class="funnel-card">
+              <div class="funnel-metric">
+                <span class="funnel-label">搜索次数</span>
+                <strong class="funnel-value">{{ formatCount(searchFunnel.searchCnt) }}</strong>
+              </div>
+              <div class="funnel-metric">
+                <span class="funnel-label">搜索用户数</span>
+                <strong class="funnel-value">{{ formatCount(searchFunnel.searchUserCnt) }}</strong>
+              </div>
+            </article>
+
+            <article class="funnel-card">
+              <div class="funnel-metric">
+                <span class="funnel-label">有结果搜索</span>
+                <strong class="funnel-value">{{ formatCount(searchFunnel.searchWithResultCnt) }}</strong>
+              </div>
+              <div class="funnel-metric">
+                <span class="funnel-label">零结果搜索</span>
+                <strong class="funnel-value">{{ formatCount(searchFunnel.searchZeroResultCnt) }}</strong>
+              </div>
+            </article>
+
+            <article class="funnel-card funnel-card--highlight">
+              <div class="funnel-metric">
+                <span class="funnel-label">搜索后浏览用户</span>
+                <strong class="funnel-value">{{ formatCount(searchFunnel.afterSearchViewUserCnt) }}</strong>
+              </div>
+              <div class="funnel-metric">
+                <span class="funnel-label">搜索→浏览转化率</span>
+                <strong class="funnel-value funnel-value--rate">
+                  {{ ((searchFunnel.searchToViewRate || 0) * 100).toFixed(1) }}%
+                </strong>
+              </div>
+            </article>
+
+            <article class="funnel-card">
+              <div class="funnel-metric">
+                <span class="funnel-label">搜索后评分用户</span>
+                <strong class="funnel-value">{{ formatCount(searchFunnel.afterSearchRatingUserCnt) }}</strong>
+              </div>
+              <div class="funnel-metric">
+                <span class="funnel-label">搜索→评分转化率</span>
+                <strong class="funnel-value funnel-value--rate">
+                  {{ ((searchFunnel.searchToRatingRate || 0) * 100).toFixed(1) }}%
+                </strong>
+              </div>
+            </article>
+
+            <article class="funnel-card">
+              <div class="funnel-metric">
+                <span class="funnel-label">搜索后收藏用户</span>
+                <strong class="funnel-value">{{ formatCount(searchFunnel.afterSearchFavoriteUserCnt) }}</strong>
+              </div>
+              <div class="funnel-metric">
+                <span class="funnel-label">搜索后看过用户</span>
+                <strong class="funnel-value">{{ formatCount(searchFunnel.afterSearchWatchedUserCnt) }}</strong>
+              </div>
+            </article>
+
+            <article class="funnel-card">
+              <div class="funnel-metric">
+                <span class="funnel-label">浏览→看过转化率</span>
+                <strong class="funnel-value funnel-value--rate">
+                  {{ ((searchFunnel.viewToWatchedRate || 0) * 100).toFixed(1) }}%
+                </strong>
+              </div>
+              <div class="funnel-metric">
+                <span class="funnel-label">计算日期</span>
+                <strong class="funnel-value funnel-value--date">{{ searchFunnel.calcDate || '-' }}</strong>
+              </div>
+            </article>
+          </div>
+        </div>
       </div>
     </n-spin>
   </section>
@@ -388,71 +624,20 @@ function goToMovies() {
 }
 
 .trend-chart {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 0.7rem;
-  align-items: end;
-}
-
-.trend-slot {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-  align-items: center;
-}
-
-.trend-slot-label,
-.trend-slot-value {
-  color: #64748b;
-  font-size: 0.76rem;
-}
-
-.trend-track {
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
   width: 100%;
-  height: 7rem;
-  padding: 0.35rem;
-  border-radius: 999px;
-  background: rgba(148, 163, 184, 0.12);
+  height: 12rem;
 }
 
-.trend-fill {
+.trend-echart {
   width: 100%;
-  min-height: 0.5rem;
-  border-radius: 999px;
-  background: linear-gradient(180deg, #0f172a 0%, #334155 100%);
-}
-
-.trend-card--amber .trend-fill {
-  background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%);
-}
-
-.trend-card--emerald .trend-fill {
-  background: linear-gradient(180deg, #10b981 0%, #059669 100%);
-}
-
-.trend-card--sky .trend-fill {
-  background: linear-gradient(180deg, #0ea5e9 0%, #0284c7 100%);
-}
-
-.trend-card--rose .trend-fill {
-  background: linear-gradient(180deg, #f43f5e 0%, #e11d48 100%);
-}
-
-.trend-card--slate .trend-fill {
-  background: linear-gradient(180deg, #64748b 0%, #334155 100%);
-}
-
-.trend-card--indigo .trend-fill {
-  background: linear-gradient(180deg, #6366f1 0%, #4f46e5 100%);
+  height: 100%;
 }
 
 @media (max-width: 1100px) {
   .dashboard-hero-grid,
   .stat-grid,
-  .trend-grid {
+  .trend-grid,
+  .funnel-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -461,9 +646,108 @@ function goToMovies() {
   .dashboard-actions {
     flex-direction: column;
   }
+}
 
-  .trend-chart {
-    gap: 0.45rem;
+/* Search Funnel Styles */
+.funnel-section {
+  margin-top: 1.5rem;
+}
+
+.funnel-section-title {
+  margin: 0 0 1rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.funnel-layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 1fr) minmax(0, 2fr);
+  gap: 1rem;
+}
+
+.funnel-chart-card {
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 1.5rem;
+  background: rgba(255, 255, 255, 0.94);
+  min-height: 320px;
+}
+
+.funnel-echart {
+  width: 100%;
+  height: 280px;
+}
+
+.funnel-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.funnel-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.15rem;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 1.5rem;
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.funnel-card--highlight {
+  background: linear-gradient(180deg, rgba(254, 243, 199, 0.5), rgba(255, 255, 255, 0.98));
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.funnel-metric {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.funnel-label {
+  color: #64748b;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.funnel-value {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.funnel-value--rate {
+  color: #059669;
+}
+
+.funnel-value--date {
+  font-size: 0.95rem;
+  color: #475569;
+}
+
+@media (max-width: 1200px) {
+  .funnel-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .funnel-chart-card {
+    min-height: 280px;
+  }
+
+  .funnel-echart {
+    height: 240px;
+  }
+}
+
+@media (max-width: 768px) {
+  .funnel-metrics-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>
