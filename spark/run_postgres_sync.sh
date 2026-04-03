@@ -127,6 +127,7 @@ CMD=(
   jobs/postgres_to_hive_ods.py
   --config "${CONFIG_PATH}"
   --batch-date "${BATCH_DATE}"
+  --sync-types "all"
 )
 
 if [[ -n "${TABLES}" ]]; then

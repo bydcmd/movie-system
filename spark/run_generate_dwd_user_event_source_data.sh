@@ -21,6 +21,7 @@ Arguments:
   config-path                 Config file path, default: conf/etl_config.json
   user-count                  Existing PostgreSQL user sample count, default: 4
   movie-count                 Existing PostgreSQL movie sample count, default: 6
+  registered-user-count       Number of new registered users to generate, default: 4
   events-per-type             Kafka event count per event type, default: 2
   write-mode                  direct, fixtures, both; default: both
   fixture-dir                 Fixture output directory
@@ -29,7 +30,6 @@ Arguments:
   validation-mode             Validation strictness (none, warn, error), default: warn
   spark-parallelism           Spark parallelism setting
   display-registered-user-cap Max registered users to display, default: 24
-  extra-login-user-cap        Extra existing users for login events, default: 2
 EOF
 }
 
@@ -40,6 +40,7 @@ BATCH_DATE="$(date +%F)"
 CONFIG_PATH="conf/etl_config.json"
 USER_COUNT="4"
 MOVIE_COUNT="6"
+REGISTERED_USER_COUNT="4"
 EVENTS_PER_TYPE="2"
 WRITE_MODE="both"
 FIXTURE_DIR="fixtures/dwd_user_event_source_data"
@@ -75,6 +76,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --movie-count)
       MOVIE_COUNT="${2:-}"
+      shift 2
+      ;;
+    --registered-user-count)
+      REGISTERED_USER_COUNT="${2:-}"
       shift 2
       ;;
     --events-per-type)
@@ -186,6 +191,7 @@ CMD=(
   --batch-date "${BATCH_DATE}"
   --user-count "${USER_COUNT}"
   --movie-count "${MOVIE_COUNT}"
+  --registered-user-count "${REGISTERED_USER_COUNT}"
   --events-per-type "${EVENTS_PER_TYPE}"
   --write-mode "${WRITE_MODE}"
   --fixture-dir "${FIXTURE_DIR}"
@@ -218,6 +224,7 @@ if [[ "${WRITE_MODE}" != "fixtures" ]]; then
     --batch-date "${BATCH_DATE}"
     --user-count "${USER_COUNT}"
     --movie-count "${MOVIE_COUNT}"
+    --registered-user-count "${REGISTERED_USER_COUNT}"
     --events-per-type "${EVENTS_PER_TYPE}"
     --write-mode "${WRITE_MODE}"
     --fixture-dir "${FIXTURE_DIR}"

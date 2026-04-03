@@ -24,6 +24,7 @@ DEFAULT_WRITE_MODE = "both"
 DEFAULT_USER_COUNT = 4
 DEFAULT_MOVIE_COUNT = 6
 DEFAULT_EVENTS_PER_TYPE = 2
+DEFAULT_REGISTERED_USER_COUNT = 4
 DISPLAY_REGISTERED_USER_CAP = 24
 EXTRA_LOGIN_USER_CAP = 2
 SQL_CHUNK_SIZE = 200
@@ -243,6 +244,12 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=DEFAULT_EVENTS_PER_TYPE,
         help=f"Number of Kafka events to generate for each event type, default: {DEFAULT_EVENTS_PER_TYPE}.",
+    )
+    parser.add_argument(
+        "--registered-user-count",
+        type=int,
+        default=DEFAULT_REGISTERED_USER_COUNT,
+        help=f"Number of new registered users to generate, default: {DEFAULT_REGISTERED_USER_COUNT}.",
     )
     parser.add_argument(
         "--write-mode",
@@ -467,6 +474,42 @@ def build_insert_statements(table_name: str, rows: list[dict[str, Any]], args: a
 
 def pick_cycle(items: list[dict[str, Any]], index: int) -> dict[str, Any]:
     return items[index % len(items)]
+
+
+def _pick_weighted_movie(movies: list[dict[str, Any]], batch_tag: str, item_index: int) -> dict[str, Any]:
+    """
+    Deterministically pick a movie using weighted (zipf-like) distribution.
+    Earlier movies in the list have higher probability of being selected,
+    creating a long-tail distribution of search keywords.
+    """
+    if not movies:
+        raise ValueError("movies list is empty")
+    if len(movies) == 1:
+        return movies[0]
+
+    # Use deterministic hash for this selection
+    seed = f"{batch_tag}:search_movie:{item_index}"
+    hash_val = stable_bigint(seed)
+
+    # Zipf-like distribution: probability ~ 1/rank
+    # Use inverse transform sampling: select rank such that
+    # cumulative probability up to rank >= random value
+    # P(rank <= k) = H_k / H_n where H_k is harmonic number
+    n = len(movies)
+    # Approximate using pre-computed cumulative weights
+    # Weight for position i is proportional to 1/(i+1)
+    total_weight = sum(1.0 / (i + 1) for i in range(n))
+    # Normalize hash to [0, 1)
+    r = (hash_val % 1000000) / 1000000.0 * total_weight
+
+    cumulative = 0.0
+    for i in range(n):
+        cumulative += 1.0 / (i + 1)
+        if cumulative >= r:
+            return movies[i]
+
+    # Fallback to last movie
+    return movies[-1]
 
 
 def load_existing_users(
@@ -819,11 +862,15 @@ def determine_funnel_path(user_id: str, batch_tag: str) -> dict[str, bool]:
     """
     Deterministically determine which funnel steps a user completes.
     Returns a dict with keys: has_view, has_rating, has_comment, has_favorite, has_watched.
-    Target conversion rates:
-    - view -> rating: 60%
-    - rating -> comment: 50%
-    - comment -> favorite: 40%
-    - favorite -> watched: 30%
+    
+    Target conversion rates (adjusted for more realistic wide funnel):
+    - view: 90% of active users
+    - rating: 75% of viewers proceed to rating
+    - comment: 60% of raters proceed to comment
+    - favorite: 55% of commenters proceed to favorite
+    - watched: 50% of favoriters proceed to watched
+    
+    Final distribution: 90% → 67.5% → 40.5% → 22.3% → 11.1%
     """
     # Generate deterministic hash values for each step
     base_seed = f"{batch_tag}:{user_id}"
@@ -834,20 +881,20 @@ def determine_funnel_path(user_id: str, batch_tag: str) -> dict[str, bool]:
     favorite_hash = stable_bigint(f"{base_seed}:favorite") % 100
     watched_hash = stable_bigint(f"{base_seed}:watched") % 100
 
-    # 95% of users have view (view_history event)
-    has_view = view_hash < 95
+    # 90% of users have view (view_history event)
+    has_view = view_hash < 90
 
-    # 60% of viewers proceed to rating
-    has_rating = has_view and (rating_hash < 60)
+    # 75% of viewers proceed to rating
+    has_rating = has_view and (rating_hash < 75)
 
-    # 50% of raters proceed to comment
-    has_comment = has_rating and (comment_hash < 50)
+    # 60% of raters proceed to comment
+    has_comment = has_rating and (comment_hash < 60)
 
-    # 40% of commenters proceed to favorite (ADD operation)
-    has_favorite = has_comment and (favorite_hash < 40)
+    # 55% of commenters proceed to favorite (ADD operation)
+    has_favorite = has_comment and (favorite_hash < 55)
 
-    # 30% of favoriters proceed to watched
-    has_watched = has_favorite and (watched_hash < 30)
+    # 50% of favoriters proceed to watched
+    has_watched = has_favorite and (watched_hash < 50)
 
     return {
         "has_view": has_view,
@@ -873,6 +920,7 @@ def build_kafka_records(
     registered_users: list[dict[str, Any]],
     movies: list[dict[str, Any]],
     registered_folders: list[dict[str, Any]],
+    existing_folders: list[dict[str, Any]],
     comments: list[dict[str, Any]],
     ratings: list[dict[str, Any]],
     favorites: list[dict[str, Any]],
@@ -883,11 +931,18 @@ def build_kafka_records(
 ) -> list[KafkaRecord]:
     kafka_records: list[KafkaRecord] = []
     active_registered_users = registered_users[: min(len(registered_users), max(1, min(events_per_type, args.display_registered_user_cap)))]
-    # Determine funnel path for each active user
+    
+    # Combine existing users with registered users for funnel events
+    # Existing users participate in funnel but don't have user_register event
+    all_active_users = existing_users + active_registered_users
+    
+    # Determine funnel path for each active user (both existing and registered)
     user_funnel_paths = {}
-    for user in active_registered_users:
+    for user in all_active_users:
         user_funnel_paths[user["user_id"]] = determine_funnel_path(user["user_id"], batch_tag)
-    search_users = active_registered_users
+    
+    # Funnel cohorts include both existing and registered users
+    search_users = all_active_users
     view_users = shrink_user_cohort(search_users, 0.8)
     rating_users = shrink_user_cohort(view_users, 0.75)
     comment_users = shrink_user_cohort(rating_users, 0.85)
@@ -898,7 +953,8 @@ def build_kafka_records(
         max(len(comment_users), len(favorite_users) + 1),
     )
     folder_action_users = search_users[:folder_action_user_count] or search_users
-    login_users = existing_users[: min(len(existing_users), args.extra_login_user_cap)] + search_users
+    # Login users: existing users + registered users (registered users also appear in user_register)
+    login_users = existing_users + active_registered_users
 
     view_user_ids = {user["user_id"] for user in view_users}
     rating_user_ids = {uid for uid in {user["user_id"] for user in rating_users} if user_funnel_paths.get(uid, {}).get("has_rating", False)}
@@ -914,7 +970,9 @@ def build_kafka_records(
     stage_comment_like_rows = filter_rows_by_user_ids(comment_likes, search_user_ids)
     stage_favorite_rows = filter_rows_by_user_ids(favorites, favorite_user_ids)
     stage_watched_rows = filter_rows_by_user_ids(watched_rows, watched_user_ids)
-    stage_folder_rows = filter_rows_by_user_ids(registered_folders, folder_action_user_ids)
+    # Combine registered and existing folders for folder action events
+    all_folders = registered_folders + existing_folders
+    stage_folder_rows = filter_rows_by_user_ids(all_folders, folder_action_user_ids)
 
     for event_type in EVENT_ORDER:
         for item_index in range(events_per_type):
@@ -1039,7 +1097,9 @@ def build_kafka_records(
                 user = pick_cycle(search_users, item_index)
                 user_id = user["user_id"]
                 occurred_at = user_event_datetime(batch_date, user_id, event_type, item_index, batch_tag)
-                movie = pick_cycle(movies, item_index)
+                # Use deterministic weighted selection for long-tail keyword distribution
+                # Top movies get more searches, creating realistic distribution
+                movie = _pick_weighted_movie(movies, batch_tag, item_index)
                 keyword = movie["name"]
                 key = keyword
                 payload = {
@@ -1150,29 +1210,61 @@ def generate_dataset(
     existing_users: list[dict[str, Any]],
     movies: list[dict[str, Any]],
     events_per_type: int,
+    registered_user_count: int,
     args: argparse.Namespace,
 ) -> GeneratedDataset:
-    registered_user_count = min(max(1, events_per_type), args.display_registered_user_cap)
+    registered_user_count = min(max(1, registered_user_count), args.display_registered_user_cap)
     registered_users = build_registered_user_rows(batch_tag, batch_date, registered_user_count)
-    folders = build_folder_rows(batch_tag, batch_date, registered_users)
-    folder_by_user_id = {folder["user_id"]: folder for folder in folders}
+    
+    # Build data for registered users
+    registered_folders = build_folder_rows(batch_tag, batch_date, registered_users)
+    registered_folder_by_user_id = {folder["user_id"]: folder for folder in registered_folders}
     registered_pairs = build_user_movie_pairs(registered_users, movies)
 
     entity_count = min(max(1, events_per_type), len(registered_pairs))
-    comments = build_comment_rows(batch_tag, batch_date, registered_users, movies, max(1, events_per_type))
-    ratings = build_rating_rows(batch_tag, batch_date, registered_pairs, entity_count, args)
-    favorites = build_favorite_rows(batch_date, registered_pairs, folder_by_user_id, entity_count)
-    view_history_rows = build_view_history_rows(batch_tag, batch_date, registered_pairs, max(1, events_per_type))
-    watched_rows = build_watched_rows(batch_date, registered_pairs, entity_count)
-    comment_likes = build_comment_like_rows(
+    registered_comments = build_comment_rows(batch_tag, batch_date, registered_users, movies, max(1, events_per_type))
+    registered_ratings = build_rating_rows(batch_tag, batch_date, registered_pairs, entity_count, args)
+    registered_favorites = build_favorite_rows(batch_date, registered_pairs, registered_folder_by_user_id, entity_count)
+    registered_view_history = build_view_history_rows(batch_tag, batch_date, registered_pairs, max(1, events_per_type))
+    registered_watched = build_watched_rows(batch_date, registered_pairs, entity_count)
+    registered_comment_likes = build_comment_like_rows(
         batch_tag,
         batch_date,
-        comments,
+        registered_comments,
         registered_users,
         max(1, events_per_type),
     )
-    update_folder_movie_counts(folders, favorites)
-    registered_folders = [folder_by_user_id[user["user_id"]] for user in registered_users]
+    update_folder_movie_counts(registered_folders, registered_favorites)
+    registered_folder_list = [registered_folder_by_user_id[user["user_id"]] for user in registered_users]
+
+    # Build data for existing users (they participate in funnel events too)
+    existing_folders = build_folder_rows(batch_tag, batch_date, existing_users)
+    existing_folder_by_user_id = {folder["user_id"]: folder for folder in existing_folders}
+    existing_pairs = build_user_movie_pairs(existing_users, movies)
+    
+    existing_entity_count = min(max(1, events_per_type), len(existing_pairs))
+    existing_comments = build_comment_rows(batch_tag, batch_date, existing_users, movies, max(1, events_per_type))
+    existing_ratings = build_rating_rows(batch_tag, batch_date, existing_pairs, existing_entity_count, args)
+    existing_favorites = build_favorite_rows(batch_date, existing_pairs, existing_folder_by_user_id, existing_entity_count)
+    existing_view_history = build_view_history_rows(batch_tag, batch_date, existing_pairs, max(1, events_per_type))
+    existing_watched = build_watched_rows(batch_date, existing_pairs, existing_entity_count)
+    existing_comment_likes = build_comment_like_rows(
+        batch_tag,
+        batch_date,
+        existing_comments,
+        existing_users,
+        max(1, events_per_type),
+    )
+    update_folder_movie_counts(existing_folders, existing_favorites)
+    existing_folder_list = [existing_folder_by_user_id[user["user_id"]] for user in existing_users]
+
+    # Combine all data for Kafka events (both existing and registered users)
+    all_comments = registered_comments + existing_comments
+    all_ratings = registered_ratings + existing_ratings
+    all_favorites = registered_favorites + existing_favorites
+    all_view_history = registered_view_history + existing_view_history
+    all_watched = registered_watched + existing_watched
+    all_comment_likes = registered_comment_likes + existing_comment_likes
 
     kafka_records = build_kafka_records(
         batch_tag=batch_tag,
@@ -1181,27 +1273,30 @@ def generate_dataset(
         existing_users=existing_users,
         registered_users=registered_users,
         movies=movies,
-        registered_folders=registered_folders,
-        comments=comments,
-        ratings=ratings,
-        favorites=favorites,
-        view_history_rows=view_history_rows,
-        watched_rows=watched_rows,
-        comment_likes=comment_likes,
+        registered_folders=registered_folder_list,
+        existing_folders=existing_folder_list,
+        comments=all_comments,
+        ratings=all_ratings,
+        favorites=all_favorites,
+        view_history_rows=all_view_history,
+        watched_rows=all_watched,
+        comment_likes=all_comment_likes,
         args=args,
     )
+    
+    # Only insert registered user data into PostgreSQL (existing users already in DB)
     return GeneratedDataset(
         batch_date=batch_date.isoformat(),
         batch_tag=batch_tag,
         pg_tables=build_table_datasets(
             users=registered_users,
-            folders=folders,
-            comments=comments,
-            ratings=ratings,
-            favorites=favorites,
-            view_history_rows=view_history_rows,
-            watched_rows=watched_rows,
-            comment_likes=comment_likes,
+            folders=registered_folders,
+            comments=registered_comments,
+            ratings=registered_ratings,
+            favorites=registered_favorites,
+            view_history_rows=registered_view_history,
+            watched_rows=registered_watched,
+            comment_likes=registered_comment_likes,
             args=args,
         ),
         kafka_records=kafka_records,
@@ -1448,6 +1543,7 @@ def run() -> None:
     validate_positive_int("user_count", args.user_count)
     validate_positive_int("movie_count", args.movie_count)
     validate_positive_int("events_per_type", args.events_per_type)
+    validate_positive_int("registered_user_count", args.registered_user_count)
     validate_rating_bias(args.rating_bias)
     if args.spark_parallelism is not None:
         validate_positive_int("spark_parallelism", args.spark_parallelism)
@@ -1471,6 +1567,7 @@ def run() -> None:
             existing_users=existing_users,
             movies=movies,
             events_per_type=args.events_per_type,
+            registered_user_count=args.registered_user_count,
             args=args,
         )
 
