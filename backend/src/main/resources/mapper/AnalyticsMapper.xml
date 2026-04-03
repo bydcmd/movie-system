@@ -35,4 +35,72 @@
         LIMIT #{limit}
     </select>
 
+    <select id="selectSearchFunnel" resultType="com.movie.backend.dto.SearchFunnelDTO">
+        SELECT search_user_cnt AS searchUserCnt,
+               search_cnt AS searchCnt,
+               search_with_result_cnt AS searchWithResultCnt,
+               search_zero_result_cnt AS searchZeroResultCnt,
+               after_search_view_user_cnt AS afterSearchViewUserCnt,
+               after_search_rating_user_cnt AS afterSearchRatingUserCnt,
+               after_search_favorite_user_cnt AS afterSearchFavoriteUserCnt,
+               after_search_watched_user_cnt AS afterSearchWatchedUserCnt,
+               search_to_view_rate AS searchToViewRate,
+               view_to_watched_rate AS viewToWatchedRate,
+               search_to_rating_rate AS searchToRatingRate,
+               TO_CHAR(calc_date, 'YYYY-MM-DD') AS calcDate
+        FROM stats_search_funnel_1d
+        WHERE calc_date = (SELECT MAX(calc_date) FROM stats_search_funnel_1d)
+        LIMIT 1
+    </select>
+
+    <select id="selectSearchKeywordInsights" resultType="com.movie.backend.dto.SearchKeywordInsightDTO">
+        SELECT search_keyword AS searchKeyword,
+               rank_no AS rankNo,
+               search_cnt AS searchCnt,
+               search_user_cnt AS searchUserCnt,
+               zero_result_cnt AS zeroResultCnt,
+               zero_result_rate AS zeroResultRate,
+               avg_result_count AS avgResultCount,
+               after_search_view_user_cnt AS afterSearchViewUserCnt,
+               after_search_watch_user_cnt AS afterSearchWatchUserCnt,
+               after_search_rating_user_cnt AS afterSearchRatingUserCnt,
+               search_to_view_rate AS searchToViewRate,
+               view_to_watch_rate AS viewToWatchRate,
+               problem_score AS problemScore
+        FROM stats_search_keyword_insights_1d
+        WHERE calc_date = (SELECT MAX(calc_date) FROM stats_search_keyword_insights_1d)
+        ORDER BY rank_no ASC
+        LIMIT #{limit}
+    </select>
+
+    <select id="selectUserFunnel" resultType="com.movie.backend.dto.UserFunnelDTO">
+        SELECT total_active_users AS totalActiveUsers,
+               view_users AS viewUsers,
+               rating_users AS ratingUsers,
+               comment_users AS commentUsers,
+               favorite_users AS favoriteUsers,
+               favorite_folder_action_users AS favoriteFolderActionUsers,
+               watched_users AS watchedUsers,
+               view_to_rating_rate AS viewToRatingRate,
+               rating_to_comment_rate AS ratingToCommentRate,
+               comment_to_favorite_rate AS commentToFavoriteRate,
+               favorite_to_watched_rate AS favoriteToWatchedRate,
+               TO_CHAR(calc_date, 'YYYY-MM-DD') AS calcDate
+        FROM stats_user_funnel_1d
+        WHERE calc_date = (SELECT MAX(calc_date) FROM stats_user_funnel_1d)
+        LIMIT 1
+    </select>
+
+    <select id="selectUserRetention" resultType="com.movie.backend.dto.UserRetentionDTO">
+        SELECT cohort_dt AS cohortDt,
+               retention_day AS retentionDay,
+               cohort_users AS cohortUsers,
+               retained_users AS retainedUsers,
+               retention_rate AS retentionRate
+        FROM stats_user_retention
+        WHERE calc_date = (SELECT MAX(calc_date) FROM stats_user_retention)
+        ORDER BY cohort_dt DESC, retention_day ASC
+        LIMIT #{limit}
+    </select>
+
 </mapper>

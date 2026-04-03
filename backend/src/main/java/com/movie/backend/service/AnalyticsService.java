@@ -1,7 +1,11 @@
 package com.movie.backend.service;
 
 import com.movie.backend.common.TrendPeriod;
+import com.movie.backend.dto.SearchFunnelDTO;
+import com.movie.backend.dto.SearchKeywordInsightDTO;
 import com.movie.backend.dto.TrendingMovieDTO;
+import com.movie.backend.dto.UserFunnelDTO;
+import com.movie.backend.dto.UserRetentionDTO;
 import com.movie.backend.entity.Movie;
 
 import java.util.List;
@@ -45,4 +49,34 @@ public interface AnalyticsService {
      * @param limit 返回数量
      */
     List<Movie> getSimilarMovies(Long movieId, Integer similarityType, int limit);
+
+    /**
+     * 获取搜索漏斗分析数据
+     *
+     * @return 搜索漏斗数据，无数据时返回null
+     */
+    SearchFunnelDTO getSearchFunnel();
+
+    /**
+     * 获取搜索关键词洞察数据
+     *
+     * @param limit 返回数量
+     * @return 关键词洞察列表
+     */
+    List<SearchKeywordInsightDTO> getSearchKeywordInsights(int limit);
+
+    /**
+     * 获取用户漏斗分析数据
+     *
+     * @return 用户漏斗数据，无数据时返回null
+     */
+    UserFunnelDTO getUserFunnel();
+
+    /**
+     * 获取用户留存分析数据
+     *
+     * @param limit 返回数量
+     * @return 用户留存数据列表
+     */
+    List<UserRetentionDTO> getUserRetention(int limit);
 }

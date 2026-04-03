@@ -1,9 +1,13 @@
 package com.movie.backend.service.impl;
 
 import com.movie.backend.common.TrendPeriod;
+import com.movie.backend.dto.SearchFunnelDTO;
+import com.movie.backend.dto.SearchKeywordInsightDTO;
 import com.movie.backend.dto.SimilarMovieDTO;
 import com.movie.backend.dto.TrendingMovieDTO;
+import com.movie.backend.dto.UserFunnelDTO;
 import com.movie.backend.dto.UserRecDTO;
+import com.movie.backend.dto.UserRetentionDTO;
 import com.movie.backend.entity.Movie;
 import com.movie.backend.mapper.AnalyticsMapper;
 import com.movie.backend.mapper.MovieMapper;
@@ -104,6 +108,28 @@ public class AnalyticsServiceImpl implements AnalyticsService {
             result.add(movie);
         }
         return result;
+    }
+
+    @Override
+    public SearchFunnelDTO getSearchFunnel() {
+        return analyticsMapper.selectSearchFunnel();
+    }
+
+    @Override
+    public List<SearchKeywordInsightDTO> getSearchKeywordInsights(int limit) {
+        List<SearchKeywordInsightDTO> results = analyticsMapper.selectSearchKeywordInsights(limit);
+        return results == null ? new ArrayList<>() : results;
+    }
+
+    @Override
+    public UserFunnelDTO getUserFunnel() {
+        return analyticsMapper.selectUserFunnel();
+    }
+
+    @Override
+    public List<UserRetentionDTO> getUserRetention(int limit) {
+        List<UserRetentionDTO> results = analyticsMapper.selectUserRetention(limit);
+        return results == null ? new ArrayList<>() : results;
     }
 
     // ---- private helpers ----
