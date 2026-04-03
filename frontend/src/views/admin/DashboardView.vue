@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { NAlert, NButton, NEmpty, NSpin } from 'naive-ui'
 import { use } from 'echarts/core'
@@ -29,6 +30,8 @@ const {
   overviewCards,
   trendPanels,
   searchFunnel,
+  searchKeywordInsights,
+  userFunnel,
   loading,
   hasLoadError,
   lastUpdatedText,
@@ -184,6 +187,84 @@ const searchFunnelChartOption = computed(() => {
     ]
   }
 })
+
+const userFunnelChartOption = computed(() => {
+  const data = [
+    { value: userFunnel.value.totalActiveUsers || 0, name: '活跃用户' },
+    { value: userFunnel.value.viewUsers || 0, name: '浏览用户' },
+    { value: userFunnel.value.ratingUsers || 0, name: '评分用户' },
+    { value: userFunnel.value.commentUsers || 0, name: '评论用户' },
+    { value: userFunnel.value.favoriteUsers || 0, name: '收藏用户' },
+    { value: userFunnel.value.watchedUsers || 0, name: '看过用户' }
+  ].filter(item => item.value > 0)
+
+  return {
+    tooltip: {
+      trigger: 'item',
+      formatter: (params: { name: string; value: number; percent: number }) => {
+        return `${params.name}: ${params.value} (${params.percent}%)`
+      }
+    },
+    legend: {
+      show: false
+    },
+    series: [
+      {
+        name: '用户漏斗',
+        type: 'funnel',
+        left: '10%',
+        top: '5%',
+        bottom: '5%',
+        width: '80%',
+        min: 0,
+        max: Math.max(1, userFunnel.value.totalActiveUsers || 0),
+        minSize: '0%',
+        maxSize: '100%',
+        sort: 'descending',
+        gap: 2,
+        label: {
+          show: true,
+          position: 'inside',
+          formatter: (params: { name: string; value: number; percent: number }) => {
+            return `${params.name}\n${params.value}`
+          },
+          fontSize: 12,
+          color: '#fff'
+        },
+        labelLine: {
+          length: 10,
+          lineStyle: {
+            width: 1,
+            type: 'solid'
+          }
+        },
+        itemStyle: {
+          borderColor: '#fff',
+          borderWidth: 1
+        },
+        emphasis: {
+          label: {
+            fontSize: 14
+          }
+        },
+        data: data,
+        color: ['#6366f1', '#0ea5e9', '#f59e0b', '#10b981', '#f43f5e', '#8b5cf6']
+      }
+    ]
+  }
+})
+
+function formatPercent(value: number | undefined): string {
+  if (value === undefined || value === null) return '-'
+  return `${(value * 100).toFixed(1)}%`
+}
+
+function getProblemScoreLevel(score: number | undefined): { label: string; color: string } {
+  if (score === undefined || score === null) return { label: '-', color: '#64748b' }
+  if (score >= 70) return { label: '高', color: '#ef4444' }
+  if (score >= 40) return { label: '中', color: '#f59e0b' }
+  return { label: '低', color: '#10b981' }
+}
 </script>
 
 <template>
@@ -382,6 +463,155 @@ const searchFunnelChartOption = computed(() => {
             </article>
           </div>
         </div>
+      </div>
+
+      <!-- User Funnel Analytics -->
+      <div class="funnel-section">
+        <h3 class="funnel-section-title">用户漏斗分析</h3>
+        <div class="funnel-layout">
+          <!-- Funnel Chart -->
+          <article class="funnel-chart-card">
+            <v-chart
+              :option="userFunnelChartOption"
+              :autoresize="true"
+              class="funnel-echart"
+            />
+          </article>
+
+          <!-- Funnel Metrics Grid -->
+          <div class="funnel-metrics-grid">
+            <article class="funnel-card">
+              <div class="funnel-metric">
+                <span class="funnel-label">活跃用户总数</span>
+                <strong class="funnel-value">{{ formatCount(userFunnel.totalActiveUsers) }}</strong>
+              </div>
+              <div class="funnel-metric">
+                <span class="funnel-label">浏览用户数</span>
+                <strong class="funnel-value">{{ formatCount(userFunnel.viewUsers) }}</strong>
+              </div>
+            </article>
+
+            <article class="funnel-card">
+              <div class="funnel-metric">
+                <span class="funnel-label">评分用户数</span>
+                <strong class="funnel-value">{{ formatCount(userFunnel.ratingUsers) }}</strong>
+              </div>
+              <div class="funnel-metric">
+                <span class="funnel-label">评论用户数</span>
+                <strong class="funnel-value">{{ formatCount(userFunnel.commentUsers) }}</strong>
+              </div>
+            </article>
+
+            <article class="funnel-card funnel-card--highlight">
+              <div class="funnel-metric">
+                <span class="funnel-label">收藏用户数</span>
+                <strong class="funnel-value">{{ formatCount(userFunnel.favoriteUsers) }}</strong>
+              </div>
+              <div class="funnel-metric">
+                <span class="funnel-label">看过用户数</span>
+                <strong class="funnel-value">{{ formatCount(userFunnel.watchedUsers) }}</strong>
+              </div>
+            </article>
+
+            <article class="funnel-card">
+              <div class="funnel-metric">
+                <span class="funnel-label">浏览→评分转化率</span>
+                <strong class="funnel-value funnel-value--rate">
+                  {{ ((userFunnel.viewToRatingRate || 0) * 100).toFixed(1) }}%
+                </strong>
+              </div>
+              <div class="funnel-metric">
+                <span class="funnel-label">评分→评论转化率</span>
+                <strong class="funnel-value funnel-value--rate">
+                  {{ ((userFunnel.ratingToCommentRate || 0) * 100).toFixed(1) }}%
+                </strong>
+              </div>
+            </article>
+
+            <article class="funnel-card">
+              <div class="funnel-metric">
+                <span class="funnel-label">评论→收藏转化率</span>
+                <strong class="funnel-value funnel-value--rate">
+                  {{ ((userFunnel.commentToFavoriteRate || 0) * 100).toFixed(1) }}%
+                </strong>
+              </div>
+              <div class="funnel-metric">
+                <span class="funnel-label">收藏→看过转化率</span>
+                <strong class="funnel-value funnel-value--rate">
+                  {{ ((userFunnel.favoriteToWatchedRate || 0) * 100).toFixed(1) }}%
+                </strong>
+              </div>
+            </article>
+
+            <article class="funnel-card">
+              <div class="funnel-metric">
+                <span class="funnel-label">收藏夹操作用户</span>
+                <strong class="funnel-value">{{ formatCount(userFunnel.favoriteFolderActionUsers) }}</strong>
+              </div>
+              <div class="funnel-metric">
+                <span class="funnel-label">计算日期</span>
+                <strong class="funnel-value funnel-value--date">{{ userFunnel.calcDate || '-' }}</strong>
+              </div>
+            </article>
+          </div>
+        </div>
+      </div>
+
+      <!-- Search Keyword Insights -->
+      <div class="keyword-section">
+        <h3 class="keyword-section-title">搜索关键词洞察</h3>
+        <p class="keyword-section-desc">按问题分数降序排列，帮助识别需要优化的搜索词</p>
+
+        <div v-if="searchKeywordInsights.length > 0" class="keyword-table-wrapper">
+          <table class="keyword-table">
+            <thead>
+              <tr>
+                <th>排名</th>
+                <th>关键词</th>
+                <th>搜索次数</th>
+                <th>用户数</th>
+                <th>零结果率</th>
+                <th>平均结果</th>
+                <th>浏览转化</th>
+                <th>问题分数</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(item, index) in searchKeywordInsights" :key="item.searchKeyword ?? `keyword-${index}`">
+                <td class="keyword-rank">{{ item.rankNo }}</td>
+                <td class="keyword-text">{{ item.searchKeyword }}</td>
+                <td>{{ formatCount(item.searchCnt) }}</td>
+                <td>{{ formatCount(item.searchUserCnt) }}</td>
+                <td>
+                  <span :class="['keyword-rate', { 'keyword-rate--high': (item.zeroResultRate || 0) >= 0.3 }]">
+                    {{ formatPercent(item.zeroResultRate) }}
+                  </span>
+                </td>
+                <td>{{ item.avgResultCount?.toFixed(1) ?? '-' }}</td>
+                <td>
+                  <span :class="['keyword-rate', { 'keyword-rate--low': (item.searchToViewRate || 0) < 0.2 }]">
+                    {{ formatPercent(item.searchToViewRate) }}
+                  </span>
+                </td>
+                <td>
+                  <span
+                    class="keyword-problem"
+                    :style="{ backgroundColor: getProblemScoreLevel(item.problemScore).color }"
+                  >
+                    {{ item.problemScore?.toFixed(0) ?? '-' }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <n-empty
+          v-else
+          description="暂无搜索关键词洞察数据"
+          size="small"
+          class="py-6"
+        />
       </div>
     </n-spin>
   </section>
@@ -748,6 +978,111 @@ const searchFunnelChartOption = computed(() => {
 @media (max-width: 768px) {
   .funnel-metrics-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Search Keyword Insights Styles */
+.keyword-section {
+  margin-top: 1.5rem;
+}
+
+.keyword-section-title {
+  margin: 0 0 0.25rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.keyword-section-desc {
+  margin: 0 0 1rem;
+  color: #64748b;
+  font-size: 0.875rem;
+}
+
+.keyword-table-wrapper {
+  overflow-x: auto;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.keyword-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.keyword-table th {
+  padding: 0.875rem 1rem;
+  text-align: left;
+  font-weight: 600;
+  color: #64748b;
+  background: rgba(248, 250, 252, 0.8);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+  white-space: nowrap;
+}
+
+.keyword-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  color: #0f172a;
+}
+
+.keyword-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.keyword-table tbody tr:hover {
+  background: rgba(248, 250, 252, 0.6);
+}
+
+.keyword-rank {
+  font-weight: 700;
+  color: #64748b;
+  width: 3.5rem;
+}
+
+.keyword-text {
+  font-weight: 600;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.keyword-rate {
+  font-weight: 500;
+}
+
+.keyword-rate--high {
+  color: #ef4444;
+}
+
+.keyword-rate--low {
+  color: #f59e0b;
+}
+
+.keyword-problem {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.5rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: #fff;
+}
+
+@media (max-width: 768px) {
+  .keyword-table th,
+  .keyword-table td {
+    padding: 0.65rem 0.75rem;
+    font-size: 0.8rem;
+  }
+
+  .keyword-text {
+    max-width: 120px;
   }
 }
 </style>

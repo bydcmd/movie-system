@@ -4,11 +4,15 @@ import {
   useGetDashboardStats
 } from '@/api/endpoints/admin-dashboard-management/admin-dashboard-management'
 import {
-  useGetSearchFunnel
+  useGetSearchFunnel,
+  useGetSearchKeywordInsights,
+  useGetUserFunnel
 } from '@/api/endpoints/analytics/analytics'
 import type {
   AdminDashboardVO,
-  SearchFunnelDTO
+  SearchFunnelDTO,
+  SearchKeywordInsightDTO,
+  UserFunnelDTO
 } from '@/api/model'
 import { formatDateTimeLabel } from '@/utils/profile'
 import {
@@ -55,6 +59,21 @@ export function useAdminOverview() {
   })
 
   const searchFunnelQuery = useGetSearchFunnel<SearchFunnelDTO>({
+    query: {
+      retry: false
+    }
+  })
+
+  const searchKeywordInsightsQuery = useGetSearchKeywordInsights<SearchKeywordInsightDTO[]>(
+    { limit: 10 },
+    {
+      query: {
+        retry: false
+      }
+    }
+  )
+
+  const userFunnelQuery = useGetUserFunnel<UserFunnelDTO>({
     query: {
       retry: false
     }
@@ -169,13 +188,35 @@ export function useAdminOverview() {
     return isRecord(data) ? data : {}
   })
 
+  const searchKeywordInsights = computed<SearchKeywordInsightDTO[]>(() => {
+    const data = searchKeywordInsightsQuery.data.value
+    if (Array.isArray(data)) {
+      return data
+    }
+    return []
+  })
+
+  const userFunnel = computed<UserFunnelDTO>(() => {
+    const data = userFunnelQuery.data.value
+    return isRecord(data) ? data : {}
+  })
+
   const loading = computed(() =>
     dashboardQuery.isLoading.value ||
     dashboardQuery.isFetching.value ||
     searchFunnelQuery.isLoading.value ||
-    searchFunnelQuery.isFetching.value
+    searchFunnelQuery.isFetching.value ||
+    searchKeywordInsightsQuery.isLoading.value ||
+    searchKeywordInsightsQuery.isFetching.value ||
+    userFunnelQuery.isLoading.value ||
+    userFunnelQuery.isFetching.value
   )
-  const hasLoadError = computed(() => dashboardQuery.isError.value || searchFunnelQuery.isError.value)
+  const hasLoadError = computed(() =>
+    dashboardQuery.isError.value ||
+    searchFunnelQuery.isError.value ||
+    searchKeywordInsightsQuery.isError.value ||
+    userFunnelQuery.isError.value
+  )
   const lastUpdatedText = computed(() => {
     if (!dashboardQuery.dataUpdatedAt.value) {
       return '尚未同步'
@@ -190,7 +231,9 @@ export function useAdminOverview() {
     try {
       await Promise.all([
         refetchOrThrow(dashboardQuery),
-        refetchOrThrow(searchFunnelQuery)
+        refetchOrThrow(searchFunnelQuery),
+        refetchOrThrow(searchKeywordInsightsQuery),
+        refetchOrThrow(userFunnelQuery)
       ])
       message.success('仪表盘已刷新')
     } catch (error) {
@@ -208,6 +251,8 @@ export function useAdminOverview() {
     overviewCards,
     trendPanels,
     searchFunnel,
+    searchKeywordInsights,
+    userFunnel,
     loading,
     hasLoadError,
     lastUpdatedText,
