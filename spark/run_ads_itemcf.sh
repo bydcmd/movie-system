@@ -78,10 +78,24 @@ if [[ ! -f "${CONFIG_PATH}" ]]; then
   exit 1
 fi
 
+# Batch job memory configuration for 4c8g pseudo-distributed cluster
 CMD=(
   spark-submit
   --master yarn
   --deploy-mode client
+  --driver-memory 1g
+  --executor-memory 2g
+  --executor-cores 2
+  --num-executors 1
+  --conf spark.executor.memoryOverhead=512m
+  --conf spark.sql.shuffle.partitions=8
+  --conf spark.sql.adaptive.enabled=true
+  --conf spark.sql.adaptive.coalescePartitions.enabled=true
+  --conf spark.memory.fraction=0.5
+  --conf spark.memory.storageFraction=0.3
+  --conf spark.serializer=org.apache.spark.serializer.KryoSerializer
+  --conf spark.driver.maxResultSize=256m
+  --conf spark.network.timeout=600s
   jobs/build_ads_itemcf_recommendations.py
   --config "${CONFIG_PATH}"
   --calc-date "${CALC_DATE}"
