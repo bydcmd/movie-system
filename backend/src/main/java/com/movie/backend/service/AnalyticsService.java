@@ -1,6 +1,7 @@
 package com.movie.backend.service;
 
 import com.movie.backend.common.TrendPeriod;
+import com.movie.backend.dto.GenrePreferenceDTO;
 import com.movie.backend.dto.SearchFunnelDTO;
 import com.movie.backend.dto.SearchKeywordInsightDTO;
 import com.movie.backend.dto.TrendingMovieDTO;
@@ -63,4 +64,12 @@ public interface AnalyticsService {
      * @return 用户留存数据列表
      */
     List<UserRetentionDTO> getUserRetention(int limit);
+
+    /**
+     * 获取类型偏好分析数据
+     *
+     * @param limit 返回数量
+     * @return 类型偏好数据列表
+     */
+    List<GenrePreferenceDTO> getGenrePreference(int limit);
 }

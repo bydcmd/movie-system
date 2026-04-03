@@ -93,4 +93,20 @@
         LIMIT #{limit}
     </select>
 
+    <select id="selectGenrePreference" resultType="com.movie.backend.dto.GenrePreferenceDTO">
+        SELECT genre AS genre,
+               rank_no AS rankNo,
+               movie_cnt AS movieCnt,
+               view_pv AS viewPv,
+               view_uv AS viewUv,
+               rating_cnt AS ratingCnt,
+               watched_cnt AS watchedCnt,
+               hot_score_sum AS hotScoreSum,
+               TO_CHAR(calc_date, 'YYYY-MM-DD') AS calcDate
+        FROM stats_genre_preference_1d
+        WHERE calc_date = (SELECT MAX(calc_date) FROM stats_genre_preference_1d)
+        ORDER BY rank_no ASC
+        LIMIT #{limit}
+    </select>
+
 </mapper>

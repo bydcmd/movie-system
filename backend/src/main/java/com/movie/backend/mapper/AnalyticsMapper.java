@@ -1,5 +1,6 @@
 package com.movie.backend.mapper;
 
+import com.movie.backend.dto.GenrePreferenceDTO;
 import com.movie.backend.dto.SearchFunnelDTO;
 import com.movie.backend.dto.SearchKeywordInsightDTO;
 import com.movie.backend.dto.SimilarMovieDTO;
@@ -45,4 +46,9 @@ public interface AnalyticsMapper {
      * 查询用户留存分析数据（取最新 calc_date）
      */
     List<UserRetentionDTO> selectUserRetention(@Param("limit") int limit);
+
+    /**
+     * 查询类型偏好分析数据（取最新 calc_date）
+     */
+    List<GenrePreferenceDTO> selectGenrePreference(@Param("limit") int limit);
 }

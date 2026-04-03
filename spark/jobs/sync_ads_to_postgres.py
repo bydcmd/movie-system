@@ -53,6 +53,12 @@ DEFAULT_ADS_USER_RETENTION_SYNC_CONFIG: dict[str, Any] = {
     "batch_size": 1000,
 }
 
+DEFAULT_ADS_GENRE_PREFERENCE_SYNC_CONFIG: dict[str, Any] = {
+    "source_table": "ads.ads_genre_preference_1d",
+    "target_table": "public.stats_genre_preference_1d",
+    "batch_size": 1000,
+}
+
 _TABLE_NAME_RE = re.compile(r"^[a-zA-Z_]\w*(\.[a-zA-Z_]\w*)*$")
 
 
@@ -134,6 +140,7 @@ def parse_sync_types_arg(sync_types_arg: str) -> set[str]:
             "search_keyword_insights",
             "user_funnel",
             "user_retention",
+            "genre_preference",
         }
     valid = {
         "hot_movies",
@@ -142,11 +149,12 @@ def parse_sync_types_arg(sync_types_arg: str) -> set[str]:
         "search_keyword_insights",
         "user_funnel",
         "user_retention",
+        "genre_preference",
     }
     invalid = sync_types - valid
     if invalid:
         raise ValueError(
-            f"Invalid sync types: {invalid}. Valid options: hot_movies, similar_movies, search_funnel, search_keyword_insights, user_funnel, user_retention, all"
+            f"Invalid sync types: {invalid}. Valid options: hot_movies, similar_movies, search_funnel, search_keyword_insights, user_funnel, user_retention, genre_preference, all"
         )
     return sync_types
 
@@ -339,6 +347,28 @@ def build_user_retention_source_frame(
         F.col("cohort_users").cast("bigint").alias("cohort_users"),
         F.col("retained_users").cast("bigint").alias("retained_users"),
         F.col("retention_rate").cast("decimal(10,4)").alias("retention_rate"),
+    ).withColumn("calc_date", F.lit(calc_date).cast("date"))
+
+    return filtered_df
+
+
+def build_genre_preference_source_frame(
+    spark: SparkSession,
+    source_table: str,
+    calc_date: str,
+) -> DataFrame:
+    source_df = spark.table(source_table).where(F.col("dt") == calc_date)
+    ensure_non_empty_partition(source_df, source_table, {"dt": calc_date}, spark=spark)
+
+    filtered_df = source_df.select(
+        F.col("genre").alias("genre"),
+        F.col("rank_no").cast("int").alias("rank_no"),
+        F.col("movie_cnt").cast("bigint").alias("movie_cnt"),
+        F.col("view_pv").cast("bigint").alias("view_pv"),
+        F.col("view_uv").cast("bigint").alias("view_uv"),
+        F.col("rating_cnt").cast("bigint").alias("rating_cnt"),
+        F.col("watched_cnt").cast("bigint").alias("watched_cnt"),
+        F.col("hot_score_sum").cast("decimal(18,4)").alias("hot_score_sum"),
     ).withColumn("calc_date", F.lit(calc_date).cast("date"))
 
     return filtered_df
@@ -709,6 +739,43 @@ def sync_user_retention(
         result_df.unpersist()
 
 
+def sync_genre_preference(
+    spark: SparkSession,
+    pg_config: dict[str, Any],
+    sync_config: dict[str, Any],
+    calc_date: str,
+) -> str:
+    """Sync genre preference from ADS to PostgreSQL. Returns result message."""
+    source_table = str(sync_config["source_table"]).strip()
+    target_table = str(sync_config["target_table"]).strip()
+    batch_size = int(sync_config.get("batch_size", 1000))
+    if batch_size <= 0:
+        raise ValueError(f"Invalid batch_size: {batch_size}")
+
+    result_df = build_genre_preference_source_frame(
+        spark=spark,
+        source_table=source_table,
+        calc_date=calc_date,
+    ).cache()
+    try:
+        row_count = result_df.count()
+        deleted_rows = delete_by_calc_date(
+            spark=spark,
+            pg_config=pg_config,
+            target_table=target_table,
+            calc_date=calc_date,
+        )
+        write_to_postgres(
+            df=result_df,
+            pg_config=pg_config,
+            target_table=target_table,
+            batch_size=batch_size,
+        )
+        return f"genre_preference: source={source_table}, target={target_table}, rows={row_count}, deleted={deleted_rows}"
+    finally:
+        result_df.unpersist()
+
+
 def run() -> None:
     args = parse_args()
     config = load_config(args.config)
@@ -738,6 +805,10 @@ def run() -> None:
     user_retention_sync_config = merge_nested_dict(
         DEFAULT_ADS_USER_RETENTION_SYNC_CONFIG,
         config.get("ads_user_retention_postgres_sync", {}),
+    )
+    genre_preference_sync_config = merge_nested_dict(
+        DEFAULT_ADS_GENRE_PREFERENCE_SYNC_CONFIG,
+        config.get("ads_genre_preference_postgres_sync", {}),
     )
 
     sync_types = parse_sync_types_arg(args.sync_types)
@@ -796,6 +867,15 @@ def run() -> None:
                 spark=spark,
                 pg_config=pg_config,
                 sync_config=user_retention_sync_config,
+                calc_date=args.calc_date,
+            )
+            results.append(result)
+
+        if "genre_preference" in sync_types:
+            result = sync_genre_preference(
+                spark=spark,
+                pg_config=pg_config,
+                sync_config=genre_preference_sync_config,
                 calc_date=args.calc_date,
             )
             results.append(result)

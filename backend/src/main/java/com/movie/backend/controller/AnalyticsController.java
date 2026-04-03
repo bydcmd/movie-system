@@ -2,6 +2,7 @@ package com.movie.backend.controller;
 
 import com.movie.backend.common.Result;
 import com.movie.backend.common.TrendPeriod;
+import com.movie.backend.dto.GenrePreferenceDTO;
 import com.movie.backend.dto.SearchFunnelDTO;
 import com.movie.backend.dto.SearchKeywordInsightDTO;
 import com.movie.backend.dto.TrendingMovieDTO;
@@ -96,6 +97,16 @@ public class AnalyticsController {
             @Min(value = 1, message = "返回数量至少为1")
             @Max(value = 500, message = "返回数量最多为500") int limit) {
         return Result.success(analyticsService.getUserRetention(limit));
+    }
+
+    @Operation(operationId = "getGenrePreference", summary = "获取类型偏好分析", description = "返回各类型的偏好排名数据，按热度分数降序排列。底层基于 Hive/Spark 离线计算。")
+    @GetMapping("/genre-preference")
+    public Result<List<GenrePreferenceDTO>> getGenrePreference(
+            @Parameter(name = "limit", description = "返回数量，默认50条，最多200条", example = "50")
+            @RequestParam(defaultValue = "50")
+            @Min(value = 1, message = "返回数量至少为1")
+            @Max(value = 200, message = "返回数量最多为200") int limit) {
+        return Result.success(analyticsService.getGenrePreference(limit));
     }
 }
 

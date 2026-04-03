@@ -1,6 +1,7 @@
 package com.movie.backend.service.impl;
 
 import com.movie.backend.common.TrendPeriod;
+import com.movie.backend.dto.GenrePreferenceDTO;
 import com.movie.backend.dto.SearchFunnelDTO;
 import com.movie.backend.dto.SearchKeywordInsightDTO;
 import com.movie.backend.dto.SimilarMovieDTO;
@@ -87,6 +88,12 @@ public class AnalyticsServiceImpl implements AnalyticsService {
     @Override
     public List<UserRetentionDTO> getUserRetention(int limit) {
         List<UserRetentionDTO> results = analyticsMapper.selectUserRetention(limit);
+        return results == null ? new ArrayList<>() : results;
+    }
+
+    @Override
+    public List<GenrePreferenceDTO> getGenrePreference(int limit) {
+        List<GenrePreferenceDTO> results = analyticsMapper.selectGenrePreference(limit);
         return results == null ? new ArrayList<>() : results;
     }
 
