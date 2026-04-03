@@ -60,6 +60,22 @@ def deduplicate_events(events_df: DataFrame) -> DataFrame:
     return ranked.where(F.col("rn") == 1).drop("dedup_key", "rn")
 
 
+def resolve_event_column(
+    events_df: DataFrame,
+    event_alias: str,
+    column_name: str,
+    json_path: str,
+    cast_type: str | None = None,
+) -> F.Column:
+    if column_name in events_df.columns:
+        column = F.col(f"{event_alias}.{column_name}")
+    else:
+        column = F.get_json_object(F.col(f"{event_alias}.raw_json"), json_path)
+    if cast_type:
+        column = column.cast(cast_type)
+    return column
+
+
 def build_wide_table(
     events_df: DataFrame,
     users_df: DataFrame,
@@ -89,6 +105,18 @@ def build_wide_table(
 
     event_ts = F.coalesce(F.col("e.occurred_at"), F.col("e.kafka_timestamp"), F.col("e.ingest_time"))
     event_type = F.col("e.event_type")
+    event_operation = resolve_event_column(events_df, "e", "operation", "$.data.operation")
+    event_rating = resolve_event_column(events_df, "e", "rating", "$.data.rating", "int")
+    event_search_keyword = resolve_event_column(events_df, "e", "search_keyword", "$.data.searchKeyword")
+    event_result_count = resolve_event_column(events_df, "e", "result_count", "$.data.resultCount", "bigint")
+    event_filter_conditions = resolve_event_column(
+        events_df, "e", "filter_conditions", "$.data.filterConditions"
+    )
+    event_search_time = resolve_event_column(events_df, "e", "search_time", "$.data.searchTime", "bigint")
+    event_folder_name = resolve_event_column(events_df, "e", "folder_name", "$.data.folderName")
+    event_folder_is_public = resolve_event_column(
+        events_df, "e", "folder_is_public", "$.data.isPublic", "tinyint"
+    )
 
     return joined.select(
         F.col("e.topic").alias("topic"),
@@ -117,17 +145,17 @@ def build_wide_table(
         F.col("c.title").alias("comment_title"),
         F.length(F.col("c.content")).cast("int").alias("comment_content_length"),
         F.col("e.folder_id").alias("folder_id"),
-        F.coalesce(F.col("e.folder_name"), F.col("f.name")).alias("folder_name"),
-        F.coalesce(F.col("e.folder_is_public"), F.col("f.is_public")).cast("tinyint").alias("folder_is_public"),
-        F.col("e.operation").alias("operation"),
-        F.upper(F.trim(F.col("e.operation"))).alias("operation_norm"),
-        F.col("e.rating").cast("int").alias("rating"),
+        F.coalesce(event_folder_name, F.col("f.name")).alias("folder_name"),
+        F.coalesce(event_folder_is_public, F.col("f.is_public")).cast("tinyint").alias("folder_is_public"),
+        event_operation.alias("operation"),
+        F.upper(F.trim(event_operation)).alias("operation_norm"),
+        event_rating.alias("rating"),
         F.col("r.rating").cast("int").alias("rating_snapshot"),
         F.col("r.rating_time").alias("rating_time"),
-        F.col("e.search_keyword").alias("search_keyword"),
-        F.col("e.result_count").cast("bigint").alias("result_count"),
-        F.col("e.filter_conditions").alias("filter_conditions"),
-        F.col("e.search_time").cast("bigint").alias("search_time"),
+        event_search_keyword.alias("search_keyword"),
+        event_result_count.alias("result_count"),
+        event_filter_conditions.alias("filter_conditions"),
+        event_search_time.alias("search_time"),
         F.when(event_type == F.lit("view_history"), F.lit(1)).otherwise(F.lit(0)).cast("tinyint").alias("is_view"),
         F.when(event_type == F.lit("rating"), F.lit(1)).otherwise(F.lit(0)).cast("tinyint").alias("is_rating"),
         F.when(event_type == F.lit("comment"), F.lit(1)).otherwise(F.lit(0)).cast("tinyint").alias("is_comment"),

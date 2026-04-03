@@ -12,7 +12,7 @@
  Target Server Version : 170007 (170007)
  File Encoding         : 65001
 
- Date: 26/02/2026 14:05:05
+ Date: 02/04/2026 15:33:31
 */
 
 
@@ -234,7 +234,7 @@ COMMENT ON COLUMN "public"."comments"."comment_time" IS '评论时间';
 COMMENT ON COLUMN "public"."comments"."title" IS '评论标题(长评专用)';
 COMMENT ON COLUMN "public"."comments"."type" IS '评论类型: 1-短评, 2-长评';
 COMMENT ON COLUMN "public"."comments"."version" IS '乐观锁版本号';
-COMMENT ON COLUMN "public"."comments"."status" IS '评论状态: 1-草稿, 2-发布, 3-隐藏';
+COMMENT ON COLUMN "public"."comments"."status" IS '评论状态: 1-草稿, 2-发布';
 COMMENT ON TABLE "public"."comments" IS '评论表';
 
 -- ----------------------------
@@ -267,7 +267,8 @@ CREATE TABLE "public"."favorite_folders" (
   "is_public" int2 DEFAULT 0,
   "movie_count" int4 DEFAULT 0,
   "create_time" timestamp(6) DEFAULT CURRENT_TIMESTAMP,
-  "update_time" timestamp(6) DEFAULT CURRENT_TIMESTAMP
+  "update_time" timestamp(6) DEFAULT CURRENT_TIMESTAMP,
+  "is_default" int4 DEFAULT 0
 )
 ;
 COMMENT ON COLUMN "public"."favorite_folders"."id" IS '收藏夹ID';
@@ -278,6 +279,7 @@ COMMENT ON COLUMN "public"."favorite_folders"."is_public" IS '是否公开：0-�
 COMMENT ON COLUMN "public"."favorite_folders"."movie_count" IS '电影数量';
 COMMENT ON COLUMN "public"."favorite_folders"."create_time" IS '创建时间';
 COMMENT ON COLUMN "public"."favorite_folders"."update_time" IS '更新时间';
+COMMENT ON COLUMN "public"."favorite_folders"."is_default" IS '是否为默认收藏夹：0-否, 1-是';
 COMMENT ON TABLE "public"."favorite_folders" IS '用户自定义收藏夹';
 
 -- ----------------------------
@@ -527,7 +529,7 @@ CREATE TABLE "public"."stats_hot_movies" (
 ;
 COMMENT ON COLUMN "public"."stats_hot_movies"."id" IS '主键ID';
 COMMENT ON COLUMN "public"."stats_hot_movies"."movie_id" IS '电影ID (关联 movie 表)';
-COMMENT ON COLUMN "public"."stats_hot_movies"."period_type" IS '统计周期: DAILY(今日), WEEKLY(本周), MONTHLY(本月)';
+COMMENT ON COLUMN "public"."stats_hot_movies"."period_type" IS '统计周期: DAILY(今日), WEEKLY(本周), MONTHLY(本月), TOTAL(总榜)';
 COMMENT ON COLUMN "public"."stats_hot_movies"."hot_score" IS '热度分值 (加权计算后的结果)';
 COMMENT ON COLUMN "public"."stats_hot_movies"."calc_date" IS '计算日期 (例如 2023-11-11)';
 COMMENT ON TABLE "public"."stats_hot_movies" IS '电影热度统计表(Spark离线计算结果)';
@@ -566,7 +568,7 @@ CREATE TABLE "public"."stats_similar_movies" (
 COMMENT ON COLUMN "public"."stats_similar_movies"."movie_id" IS '基准电影ID';
 COMMENT ON COLUMN "public"."stats_similar_movies"."similar_movie_id" IS '相似电影ID';
 COMMENT ON COLUMN "public"."stats_similar_movies"."similarity_score" IS '相似度分值';
-COMMENT ON COLUMN "public"."stats_similar_movies"."similarity_type" IS '类型: 1-内容相似(标签/演员), 2-协同过滤相似(Item-based), 3-ALS隐语义相似';
+COMMENT ON COLUMN "public"."stats_similar_movies"."similarity_type" IS '类型: 1-内容相似(标签/演员), 2-协同过滤相似(Item-based)';
 COMMENT ON TABLE "public"."stats_similar_movies" IS '电影相似度关联表(用于详情页推荐)';
 
 -- ----------------------------
@@ -987,26 +989,26 @@ CREATE FUNCTION "public"."word_similarity_op"(text, text)
 -- ----------------------------
 ALTER SEQUENCE "public"."comment_likes_id_seq"
 OWNED BY "public"."comment_likes"."id";
-SELECT setval('"public"."comment_likes_id_seq"', 1, false);
+SELECT setval('"public"."comment_likes_id_seq"', 1151734394566323729, true);
 
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
 ALTER SEQUENCE "public"."comments_comment_id_seq"
 OWNED BY "public"."comments"."comment_id";
-SELECT setval('"public"."comments_comment_id_seq"', 1, false);
+SELECT setval('"public"."comments_comment_id_seq"', 1151633338352084021, true);
 
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
-SELECT setval('"public"."event_outbox_id_seq"', 11, true);
+SELECT setval('"public"."event_outbox_id_seq"', 66, true);
 
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
 ALTER SEQUENCE "public"."favorite_folders_id_seq"
 OWNED BY "public"."favorite_folders"."id";
-SELECT setval('"public"."favorite_folders_id_seq"', 1, false);
+SELECT setval('"public"."favorite_folders_id_seq"', 1152491045462596107, true);
 
 -- ----------------------------
 -- Alter sequences owned by
@@ -1069,21 +1071,21 @@ SELECT setval('"public"."stats_hidden_gems_id_seq"', 1, false);
 -- ----------------------------
 ALTER SEQUENCE "public"."stats_hot_movies_id_seq"
 OWNED BY "public"."stats_hot_movies"."id";
-SELECT setval('"public"."stats_hot_movies_id_seq"', 1, false);
+SELECT setval('"public"."stats_hot_movies_id_seq"', 100, true);
 
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
 ALTER SEQUENCE "public"."stats_similar_movies_id_seq"
 OWNED BY "public"."stats_similar_movies"."id";
-SELECT setval('"public"."stats_similar_movies_id_seq"', 1, false);
+SELECT setval('"public"."stats_similar_movies_id_seq"', 421972, true);
 
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
 ALTER SEQUENCE "public"."view_history_history_id_seq"
 OWNED BY "public"."view_history"."history_id";
-SELECT setval('"public"."view_history_history_id_seq"', 2, true);
+SELECT setval('"public"."view_history_history_id_seq"', 1152383167314031968, true);
 
 -- ----------------------------
 -- Indexes structure for table comment_likes
@@ -1115,11 +1117,26 @@ CREATE INDEX "idx_comments_user_movie" ON "public"."comments" USING btree (
   "user_id" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
   "movie_id" "pg_catalog"."int8_ops" ASC NULLS LAST
 );
+CREATE INDEX "idx_comments_user_movie_type_status" ON "public"."comments" USING btree (
+  "user_id" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
+  "movie_id" "pg_catalog"."int8_ops" ASC NULLS LAST,
+  "type" "pg_catalog"."int2_ops" ASC NULLS LAST,
+  "status" "pg_catalog"."int2_ops" ASC NULLS LAST
+);
+CREATE UNIQUE INDEX "uk_comments_long_review_draft" ON "public"."comments" USING btree (
+  "user_id" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
+  "movie_id" "pg_catalog"."int8_ops" ASC NULLS LAST
+) WHERE type = 2 AND status = 1;
+CREATE UNIQUE INDEX "uk_comments_published_per_type" ON "public"."comments" USING btree (
+  "user_id" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
+  "movie_id" "pg_catalog"."int8_ops" ASC NULLS LAST,
+  "type" "pg_catalog"."int2_ops" ASC NULLS LAST
+) WHERE status = 2;
 
 -- ----------------------------
--- Uniques structure for table comments
+-- Checks structure for table comments
 -- ----------------------------
-ALTER TABLE "public"."comments" ADD CONSTRAINT "uk_user_movie_type" UNIQUE ("user_id", "movie_id", "type");
+ALTER TABLE "public"."comments" ADD CONSTRAINT "chk_comments_no_short_draft" CHECK (NOT (type = 1 AND status = 1));
 
 -- ----------------------------
 -- Primary Key structure for table comments
@@ -1262,6 +1279,12 @@ ALTER TABLE "public"."movie_region_relation" ADD CONSTRAINT "movie_region_relati
 -- ----------------------------
 -- Indexes structure for table movies
 -- ----------------------------
+CREATE INDEX "idx_movies_actors_gin" ON "public"."movies" USING gin (
+  "actors" "pg_catalog"."jsonb_path_ops"
+);
+CREATE INDEX "idx_movies_directors_gin" ON "public"."movies" USING gin (
+  "directors" "pg_catalog"."jsonb_path_ops"
+);
 CREATE INDEX "idx_movies_douban_score" ON "public"."movies" USING btree (
   "douban_score" "pg_catalog"."numeric_ops" ASC NULLS LAST
 );
@@ -1270,12 +1293,6 @@ CREATE INDEX "idx_movies_douban_votes" ON "public"."movies" USING btree (
 );
 CREATE INDEX "idx_movies_full_search" ON "public"."movies" USING gin (
   "full_search_text" COLLATE "pg_catalog"."default" "public"."gin_trgm_ops"
-);
-CREATE INDEX "idx_movies_directors_gin" ON "public"."movies" USING gin (
-  "directors" "pg_catalog"."jsonb_path_ops"
-);
-CREATE INDEX "idx_movies_actors_gin" ON "public"."movies" USING gin (
-  "actors" "pg_catalog"."jsonb_path_ops"
 );
 CREATE INDEX "idx_movies_score_votes" ON "public"."movies" USING btree (
   "douban_score" "pg_catalog"."numeric_ops" DESC NULLS FIRST,

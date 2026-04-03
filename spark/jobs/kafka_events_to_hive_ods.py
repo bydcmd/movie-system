@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import argparse
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 from pyspark.sql import DataFrame
+from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 
 import _bootstrap  # noqa: F401
@@ -71,6 +73,31 @@ def normalize_events(source_df: DataFrame) -> DataFrame:
     )
 
 
+def normalize_hadoop_uri(spark: SparkSession, uri: str, option_name: str) -> str:
+    normalized = uri.strip()
+    if not normalized:
+        raise ValueError(f"{option_name} must not be empty.")
+
+    normalized = normalized.rstrip("/")
+    parts = urlsplit(normalized)
+    scheme = parts.scheme.lower()
+    if scheme not in {"hdfs", "viewfs"}:
+        return normalized
+    if parts.netloc:
+        return normalized
+
+    default_fs = spark.sparkContext._jsc.hadoopConfiguration().get("fs.defaultFS") or ""
+    default_parts = urlsplit(default_fs)
+    if default_parts.scheme.lower() == scheme and default_parts.netloc:
+        return urlunsplit((scheme, default_parts.netloc, parts.path or "/", "", ""))
+
+    raise ValueError(
+        f"{option_name}={uri!r} uses scheme {scheme!r} without authority. "
+        f"Configure fs.defaultFS as {scheme}://<nameservice> or use a fully qualified URI like "
+        f"{scheme}://<nameservice>{parts.path or '/'}."
+    )
+
+
 def write_micro_batch(batch_df: DataFrame, batch_id: int, sink_path: str, sink_table: str) -> None:
     partition_rows = batch_df.select("dt", "hh").dropDuplicates().collect()
     if not partition_rows:
@@ -125,11 +152,16 @@ def run() -> None:
         if not sink_table:
             raise ValueError("sink_table is required in kafka config.")
 
-        sink_path = kafka_config["sink_path"].rstrip("/")
-        checkpoint_root = args.checkpoint_root or spark_config.get("checkpoint_root", "").rstrip("/")
+        sink_path = normalize_hadoop_uri(spark, kafka_config["sink_path"], "kafka.sink_path")
+        checkpoint_root = args.checkpoint_root or spark_config.get("checkpoint_root", "")
         if not checkpoint_root:
             raise ValueError("checkpoint_root is required in args or config.")
-        checkpoint_location = f"{checkpoint_root}/kafka_event_log"
+        checkpoint_root = normalize_hadoop_uri(spark, checkpoint_root, "spark.checkpoint_root")
+        checkpoint_location = normalize_hadoop_uri(
+            spark,
+            f"{checkpoint_root}/kafka_event_log",
+            "spark.checkpoint_location",
+        )
 
         def _write_micro_batch(batch_df: DataFrame, batch_id: int) -> None:
             write_micro_batch(batch_df=batch_df, batch_id=batch_id, sink_path=sink_path, sink_table=sink_table)

@@ -18,7 +18,7 @@ from utils.spark_factory import build_spark_session
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Build ItemCF similarity and user recommendations in ADS.")
+    parser = argparse.ArgumentParser(description="Build ItemCF similarity in ADS.")
     parser.add_argument("--config", required=True, help="Path of ETL json config.")
     parser.add_argument(
         "--calc-date",
@@ -26,7 +26,6 @@ def parse_args() -> argparse.Namespace:
         help="Calculation date in format YYYY-MM-DD.",
     )
     parser.add_argument("--top-k", type=int, default=0, help="Override top K similar items per movie. 0 means use config.")
-    parser.add_argument("--top-n", type=int, default=0, help="Override top N recommendations per user. 0 means use config.")
     return parser.parse_args()
 
 
@@ -196,49 +195,6 @@ def build_item_similarity(
     )
 
 
-def build_user_recommendations(user_item_df: DataFrame, similarity_df: DataFrame, top_n: int) -> DataFrame:
-    interacted_df = user_item_df.select("user_id", "movie_id").dropDuplicates()
-
-    candidate_df = (
-        user_item_df.alias("ui")
-        .join(similarity_df.alias("sim"), F.col("ui.movie_id") == F.col("sim.movie_id"), how="inner")
-        .select(
-            F.col("ui.user_id").alias("user_id"),
-            F.col("sim.similar_movie_id").alias("movie_id"),
-            (F.col("ui.preference_score") * F.col("sim.similarity_score")).cast("double").alias("contribution"),
-            F.col("sim.similarity_score").cast("double").alias("similarity_score"),
-        )
-    )
-
-    recommendation_df = (
-        candidate_df.groupBy("user_id", "movie_id")
-        .agg(
-            F.sum("contribution").cast("double").alias("recommend_score"),
-            F.max("similarity_score").cast("double").alias("best_similarity"),
-            F.count(F.lit(1)).cast("bigint").alias("seed_item_cnt"),
-        )
-        .join(interacted_df, on=["user_id", "movie_id"], how="left_anti")
-    )
-
-    rank_window = Window.partitionBy("user_id").orderBy(
-        F.col("recommend_score").desc(),
-        F.col("best_similarity").desc(),
-        F.col("movie_id").asc(),
-    )
-    return (
-        recommendation_df.withColumn("rank_no", F.row_number().over(rank_window))
-        .where(F.col("rank_no") <= F.lit(int(top_n)))
-        .select(
-            F.col("user_id").cast("string").alias("user_id"),
-            F.col("movie_id").cast("bigint").alias("movie_id"),
-            F.col("rank_no").cast("int").alias("rank_no"),
-            F.round(F.col("recommend_score"), 8).cast("decimal(18,8)").alias("recommend_score"),
-            F.col("seed_item_cnt").cast("bigint").alias("seed_item_cnt"),
-            F.round(F.col("best_similarity"), 8).cast("decimal(18,8)").alias("best_similarity"),
-        )
-    )
-
-
 def align_similarity_schema(df: DataFrame) -> DataFrame:
     return df.select(
         F.col("movie_id").cast("bigint").alias("movie_id"),
@@ -302,7 +258,6 @@ def run() -> None:
     calc_date = args.calc_date
     lookback_days = resolve_positive_int(itemcf_config.get("lookback_days", 90), "lookback_days")
     top_k = args.top_k if args.top_k > 0 else resolve_positive_int(itemcf_config.get("top_k_similar", 100), "top_k_similar")
-    top_n = args.top_n if args.top_n > 0 else resolve_positive_int(itemcf_config.get("top_n_recommend", 30), "top_n_recommend")
 
     min_user_item_score = float(itemcf_config.get("min_user_item_score", 0.1))
     min_co_users = resolve_positive_int(itemcf_config.get("min_co_users", 2), "min_co_users")
@@ -311,15 +266,15 @@ def run() -> None:
         raise ValueError(f"Invalid shrinkage: {shrinkage}")
 
     source_table = itemcf_config["source_table"]
-    target_tables: dict[str, str] = itemcf_config["target_tables"]
-    sink_paths: dict[str, str] = itemcf_config["sink_paths"]
+    target_table = itemcf_config["target_table"]
+    sink_path = itemcf_config["sink_path"]
     weights = itemcf_config.get("event_score_weights", {})
     source_type = str(itemcf_config.get("source_type", "event_wide")).strip().lower()
     similarity_type = 2
 
-    spark = build_spark_session("movie-ads-itemcf-recommendations", spark_config)
+    spark = build_spark_session("movie-ads-itemcf-similarity", spark_config)
     similarity_staging_path = build_staging_path(
-        sink_paths["similar_movies"],
+        sink_path,
         calc_date=calc_date,
         similarity_type=similarity_type,
     )
@@ -339,11 +294,10 @@ def run() -> None:
             user_item_df, min_co_users=min_co_users, shrinkage=shrinkage,
             top_k=top_k, max_items_per_user=max_items_per_user,
         ).cache()
-        recommendation_df = build_user_recommendations(user_item_df, similarity_df, top_n=top_n).cache()
 
         merged_similarity_df = merge_with_existing_partition(
             spark,
-            target_table=target_tables["similar_movies"],
+            target_table=target_table,
             calc_date=calc_date,
             current_similarity_type=similarity_type,
             new_similarity_df=similarity_df,
@@ -356,29 +310,20 @@ def run() -> None:
 
         write_partition(
             staged_similarity_df,
-            target_tables["similar_movies"],
-            sink_paths["similar_movies"],
-            calc_date,
-            spark,
-        )
-        write_partition(
-            recommendation_df,
-            target_tables["user_recommendations"],
-            sink_paths["user_recommendations"],
+            target_table,
+            sink_path,
             calc_date,
             spark,
         )
 
         similarity_count = similarity_df.count()
-        recommendation_count = recommendation_df.count()
 
-        recommendation_df.unpersist()
         similarity_df.unpersist()
         user_item_df.unpersist()
         print(
             "ADS itemCF build finished. "
             f"source={source_table}, source_type={source_type}, dt={calc_date}, lookback_days={lookback_days}, "
-            f"top_k={top_k}, top_n={top_n}, similar_cnt={similarity_count}, recommend_cnt={recommendation_count}"
+            f"top_k={top_k}, similar_cnt={similarity_count}"
         )
     finally:
         try:

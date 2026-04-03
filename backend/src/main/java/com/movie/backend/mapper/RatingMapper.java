@@ -68,13 +68,11 @@ public interface RatingMapper {
      * 基于用户评分重算电影的本站评分与评分人数
      */
     int refreshMovieScoreAndVotes(@Param("movieId") Long movieId,
-                                  @Param("kWeight") Integer kWeight,
                                   @Param("forceUpdateVotesThreshold") Integer forceUpdateVotesThreshold);
 
     /**
      * 批量重算电影的本站评分与评分人数
      */
     int refreshMovieScoreAndVotesBatch(@Param("movieIds") Collection<Long> movieIds,
-                                       @Param("kWeight") Integer kWeight,
                                        @Param("forceUpdateVotesThreshold") Integer forceUpdateVotesThreshold);
 }

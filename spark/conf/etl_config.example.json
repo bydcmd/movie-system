@@ -240,25 +240,6 @@
     ],
     "batch_size": 1000
   },
-  "ads_hybrid_hot": {
-    "base_source_table": "dws.dws_movie_engagement_1d",
-    "recent_source_table": "dws.dws_movie_action_1d",
-    "movie_profile_source_table": "dws.dws_movie_profile_1d",
-    "target_table": "ads.ads_hybrid_hot_movies",
-    "sink_path": "hdfs:///warehouse/movie/ads/hybrid_hot_movies",
-    "period_days": {
-      "DAILY": 1,
-      "WEEKLY": 7,
-      "MONTHLY": 30
-    },
-    "top_n": 100,
-    "rerank_weights": {
-      "base_score": 1.0,
-      "recent_trend": 0.35,
-      "trend_ratio": 0.2,
-      "quality": 0.08
-    }
-  },
   "ads_user_funnel": {
     "source_table": "dwd.dwd_user_event_wide_di",
     "target_table": "ads.ads_user_funnel_1d",
@@ -280,20 +261,13 @@
   "ads_itemcf": {
     "source_table": "dws.dws_user_item_preference_1d",
     "source_type": "user_item_preference",
-    "target_tables": {
-      "similar_movies": "ads.ads_itemcf_similar_movies",
-      "user_recommendations": "ads.ads_itemcf_user_recommendations"
-    },
-    "sink_paths": {
-      "similar_movies": "hdfs:///warehouse/movie/ads/itemcf_similar_movies",
-      "user_recommendations": "hdfs:///warehouse/movie/ads/itemcf_user_recommendations"
-    },
+    "target_table": "ads.ads_itemcf_similar_movies",
+    "sink_path": "hdfs:///warehouse/movie/ads/itemcf_similar_movies",
     "lookback_days": 90,
     "min_user_item_score": 0.1,
     "min_co_users": 2,
     "shrinkage": 10.0,
     "top_k_similar": 100,
-    "top_n_recommend": 30,
     "event_score_weights": {
       "view": 1.0,
       "favorite_add": 2.0,
@@ -345,51 +319,6 @@
       3
     ],
     "batch_size": 1000
-  },
-  "ads_reco_user_item_features": {
-    "source_table": "dws.dws_user_item_preference_1d",
-    "source_type": "user_item_preference",
-    "target_table": "ads.ads_reco_user_item_features_1d",
-    "sink_path": "hdfs:///warehouse/movie/ads/reco_user_item_features_1d",
-    "lookback_days": 30,
-    "min_feature_score": 0.1,
-    "event_score_weights": {
-      "view": 1.0,
-      "favorite_add": 2.0,
-      "favorite_remove": -1.0,
-      "comment": 2.0,
-      "rating": 3.0,
-      "watched": 3.0,
-      "rating_value": 2.0
-    }
-  },
-  "ads_hybrid_reco": {
-    "base_source_table": "ads.ads_itemcf_user_recommendations",
-    "recent_event_source_table": "dwd.dwd_user_event_wide_di",
-    "recent_movie_metric_source_table": "dws.dws_movie_action_1d",
-    "movie_profile_source_table": "dws.dws_movie_profile_1d",
-    "target_table": "ads.ads_hybrid_user_recommendations",
-    "sink_path": "hdfs:///warehouse/movie/ads/hybrid_user_recommendations",
-    "lookback_days": 7,
-    "candidate_top_n": 100,
-    "top_n": 30,
-    "exclude_recently_interacted": true,
-    "rerank_weights": {
-      "base_score": 1.0,
-      "genre_match": 0.35,
-      "popularity": 0.12,
-      "quality": 0.08,
-      "recent_interaction_penalty": 0.6
-    },
-    "event_score_weights": {
-      "view": 1.0,
-      "favorite_add": 2.0,
-      "favorite_remove": -1.0,
-      "comment": 2.0,
-      "rating": 3.0,
-      "watched": 3.0,
-      "rating_value": 2.0
-    }
   },
   "ads_search_keyword_insights": {
     "source_table": "dwd.dwd_user_event_wide_di",

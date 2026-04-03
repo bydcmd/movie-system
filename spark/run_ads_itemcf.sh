@@ -7,7 +7,7 @@ usage() {
 Usage:
   bash run_ads_itemcf.sh [calc-date] [config-path]
   bash run_ads_itemcf.sh [config-path]
-  bash run_ads_itemcf.sh --calc-date YYYY-MM-DD --config conf/etl_config.json [--top-k 100] [--top-n 30]
+  bash run_ads_itemcf.sh --calc-date YYYY-MM-DD --config conf/etl_config.json [--top-k 100]
 EOF
 }
 
@@ -17,7 +17,6 @@ cd "${SCRIPT_DIR}"
 CALC_DATE="$(date +%F)"
 CONFIG_PATH="conf/etl_config.json"
 TOP_K=""
-TOP_N=""
 POSITIONAL_ARGS=()
 
 is_date() {
@@ -40,10 +39,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --top-k)
       TOP_K="${2:-}"
-      shift 2
-      ;;
-    --top-n)
-      TOP_N="${2:-}"
       shift 2
       ;;
     *)
@@ -94,10 +89,6 @@ CMD=(
 
 if [[ -n "${TOP_K}" ]]; then
   CMD+=(--top-k "${TOP_K}")
-fi
-
-if [[ -n "${TOP_N}" ]]; then
-  CMD+=(--top-n "${TOP_N}")
 fi
 
 printf 'Running command:\n%s\n' "${CMD[*]}"

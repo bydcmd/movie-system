@@ -53,6 +53,7 @@ Common wrapper to job mappings:
 
 - `run_postgres_sync.sh` -> `jobs/postgres_to_hive_ods.py`
 - `run_kafka_sync.sh` -> `jobs/kafka_events_to_hive_ods.py`
+- `run_generate_dwd_user_event_source_data.sh` -> `jobs/generate_dwd_user_event_source_data.py`
 - `run_dwd_build.sh` -> `jobs/build_dwd_user_event_wide_di.py`
 - `run_dwd_user_snapshot.sh` -> `jobs/build_dwd_user_snapshot_di.py`
 - `run_dwd_movie_snapshot.sh` -> `jobs/build_dwd_movie_snapshot_di.py`
@@ -61,13 +62,10 @@ Common wrapper to job mappings:
 - `run_dws_profiles.sh` -> `jobs/build_dws_user_movie_profiles_1d.py`
 - `run_ads_hot_movies.sh` -> `jobs/build_ads_hot_movies.py`
 - `run_ads_hot_movies_pg_sync.sh` -> `jobs/sync_ads_hot_movies_to_postgres.py`
-- `run_ads_hybrid_hot.sh` -> `jobs/build_ads_hybrid_hot_movies.py`
-- `run_ads_hybrid_reco.sh` -> `jobs/build_ads_hybrid_user_recommendations.py`
 - `run_ads_als_similar_movies.sh` -> `jobs/build_ads_als_similar_movies.py`
 - `run_ads_itemcf.sh` -> `jobs/build_ads_itemcf_recommendations.py`
 - `run_ads_itemcf_similar_movies_pg_sync.sh` -> `jobs/sync_ads_itemcf_similar_movies_to_postgres.py`
 - `run_ads_genre_preference.sh` -> `jobs/build_ads_genre_preference_1d.py`
-- `run_ads_reco_user_item_features.sh` -> `jobs/build_ads_reco_user_item_features_1d.py`
 - `run_ads_search_funnel.sh` -> `jobs/build_ads_search_funnel_1d.py`
 - `run_ads_search_keyword_insights.sh` -> `jobs/build_ads_search_keyword_insights_1d.py`
 - `run_ads_user_funnel.sh` -> `jobs/build_ads_user_funnel_1d.py`
@@ -80,6 +78,49 @@ Run:
 ```bash
 hive -f ../hive/ods/ods_pg_kafka_ddl.hql
 ```
+
+## 2.5) Generate deterministic source data for DWD
+
+`generate_dwd_user_event_source_data.py` creates a deterministic seed dataset for the full `dwd.dwd_user_event_wide_di` upstream chain:
+
+- PostgreSQL business tables: `users`, `comments`, `favorite_folders`, `ratings`, `favorites`, `view_history`, `watched_movies`, `comment_likes`
+- Existing PostgreSQL user and movie dimensions are sampled from `public.users` and `public.movies`
+- The job only inserts constructed `user_register` users into `public.users`; sampled existing users stay read-only
+- Kafka topics for all 10 event types consumed by `ods.ods_kafka_event_log_di`
+
+The generator is idempotent for the same `batch-tag`: it first deletes the previously generated rows for that batch and then recreates them with stable IDs.
+
+Direct write plus fixture export:
+
+```bash
+bash run_generate_dwd_user_event_source_data.sh \
+  --batch-date 2026-02-25 \
+  --config conf/etl_config.json \
+  --user-count 4 \
+  --movie-count 6 \
+  --events-per-type 2 \
+  --write-mode both
+```
+
+Here `--movie-count` means how many existing rows to sample from `public.movies`, not how many new movies to create.
+`--user-count` means how many existing rows to sample from `public.users`; additional registered users are still constructed from the generator itself.
+
+Fixture-only export:
+
+```bash
+bash run_generate_dwd_user_event_source_data.sh \
+  --batch-date 2026-02-25 \
+  --write-mode fixtures \
+  --fixture-dir fixtures/dwd_seed
+```
+
+Fixture export now also depends on the source PostgreSQL already containing the sampled `public.users` and `public.movies` rows, because those sampled dimensions are not re-exported as generated SQL.
+
+After direct generation, the normal chain is:
+
+1. `bash run_postgres_sync.sh 2026-02-25 conf/etl_config.json`
+2. `bash run_kafka_sync.sh conf/etl_config.json available-now`
+3. `bash run_dwd_build.sh 2026-02-25 conf/etl_config.json`
 
 ## 3) Run PostgreSQL batch ingestion
 
@@ -312,34 +353,6 @@ Important:
 - `ads.source_type=movie_metric_snapshot` still labels one full snapshot as `DAILY / WEEKLY / MONTHLY / TOTAL` for compatibility, but those periods share the same full-data snapshot metrics.
 - Old Hive partitions generated before this change may still only contain `period_type='SNAPSHOT'`; rebuild those dates before syncing them to PostgreSQL.
 
-Hybrid hot ranking keeps PostgreSQL full-data hotness as the stable base, then adds recent Kafka trend boosts without directly summing the same behavior counts across both sources.
-
-Recommended prerequisites:
-
-```bash
-bash run_dws_build.sh 2026-02-25 conf/etl_config.json
-bash run_dws_profiles.sh 2026-02-25 conf/etl_config.json
-bash run_dws_postgres_interactions.sh 2026-02-25 conf/etl_config.json
-```
-
-Build hybrid hot ranking (`ads.ads_hybrid_hot_movies`):
-
-```bash
-spark-submit \
-  --master yarn \
-  --deploy-mode client \
-  jobs/build_ads_hybrid_hot_movies.py \
-  --config conf/etl_config.json \
-  --calc-date 2026-02-25 \
-  --top-n 100
-```
-
-Wrapper script:
-
-```bash
-bash run_ads_hybrid_hot.sh 2026-02-25 conf/etl_config.json --top-n 100
-```
-
 ## 8) Build more ADS reports
 
 Three additional ADS jobs are available:
@@ -402,7 +415,6 @@ Legacy Kafka-driven source is still supported:
 Outputs:
 
 - item-item similarity: `ads.ads_itemcf_similar_movies`
-- personalized recommendations: `ads.ads_itemcf_user_recommendations`
 
 ```bash
 spark-submit \
@@ -416,7 +428,7 @@ spark-submit \
 Optional overrides:
 
 ```bash
---top-k 120 --top-n 50
+--top-k 120
 ```
 
 Main parameters are configurable in `ads_itemcf`:
@@ -490,58 +502,7 @@ bash run_ads_itemcf_similar_movies_pg_sync.sh 2026-02-25 conf/etl_config.json
 
 ## 10) Build search & recommendation mining reports
 
-### 10.1 User-item recommendation features (`ads.ads_reco_user_item_features_1d`)
-
-Recommended source:
-
-- `dws.dws_user_item_preference_1d` with `ads_reco_user_item_features.source_type=user_item_preference`
-
-```bash
-spark-submit \
-  --master yarn \
-  --deploy-mode client \
-  jobs/build_ads_reco_user_item_features_1d.py \
-  --config conf/etl_config.json \
-  --calc-date 2026-02-25
-```
-
-### 10.2 Hybrid reranked recommendations (`ads.ads_hybrid_user_recommendations`)
-
-This job keeps PostgreSQL-driven ItemCF recall, then reranks candidates with recent Kafka behavior:
-
-- recent user genre preference
-- recent duplicate-interaction suppression
-- recent movie popularity
-- movie quality score
-
-Recommended prerequisites:
-
-```bash
-bash run_dws_build.sh 2026-02-25 conf/etl_config.json
-bash run_dws_profiles.sh 2026-02-25 conf/etl_config.json
-bash run_ads_itemcf.sh 2026-02-25 conf/etl_config.json --top-n 100
-```
-
-Run hybrid rerank:
-
-```bash
-spark-submit \
-  --master yarn \
-  --deploy-mode client \
-  jobs/build_ads_hybrid_user_recommendations.py \
-  --config conf/etl_config.json \
-  --calc-date 2026-02-25 \
-  --top-n 30 \
-  --candidate-top-n 100
-```
-
-Wrapper script:
-
-```bash
-bash run_ads_hybrid_reco.sh 2026-02-25 conf/etl_config.json --top-n 30 --candidate-top-n 100
-```
-
-### 10.3 Search keyword insights (`ads.ads_search_keyword_insights_1d`)
+### 10.1 Search keyword insights (`ads.ads_search_keyword_insights_1d`)
 
 Keyword-level conversion metrics attribute each action to the latest preceding search keyword for the same user on the same day, instead of copying one user's later behavior to every keyword they searched.
 
@@ -560,7 +521,7 @@ Optional top N keywords:
 --top-n 200
 ```
 
-### 10.4 Search conversion funnel (`ads.ads_search_funnel_1d`)
+### 10.2 Search conversion funnel (`ads.ads_search_funnel_1d`)
 
 `after_search_*` metrics are computed from actions whose `event_ts` is later than the user's first search event on the calculation day. Favorite conversion only counts favorite `ADD` actions.
 

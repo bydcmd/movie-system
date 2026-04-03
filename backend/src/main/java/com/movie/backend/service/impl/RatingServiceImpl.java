@@ -30,9 +30,6 @@ public class RatingServiceImpl implements RatingService {
     @Autowired
     private KafkaEventPublisher kafkaEventPublisher;
 
-    @Value("${movie.rating.blend.k:200}")
-    private Integer ratingBlendK;
-
     @Value("${movie.rating.force-update-votes-threshold:50}")
     private Integer forceUpdateVotesThreshold;
 
@@ -129,12 +126,12 @@ public class RatingServiceImpl implements RatingService {
             }
             batchMovieIds.add(movieId);
             if (batchMovieIds.size() >= RATING_REFRESH_BATCH_SIZE) {
-                ratingMapper.refreshMovieScoreAndVotesBatch(batchMovieIds, ratingBlendK, forceUpdateVotesThreshold);
+                ratingMapper.refreshMovieScoreAndVotesBatch(batchMovieIds, forceUpdateVotesThreshold);
                 batchMovieIds.clear();
             }
         }
         if (!batchMovieIds.isEmpty()) {
-            ratingMapper.refreshMovieScoreAndVotesBatch(batchMovieIds, ratingBlendK, forceUpdateVotesThreshold);
+            ratingMapper.refreshMovieScoreAndVotesBatch(batchMovieIds, forceUpdateVotesThreshold);
         }
     }
 
@@ -142,6 +139,6 @@ public class RatingServiceImpl implements RatingService {
         if (movieId == null) {
             return;
         }
-        ratingMapper.refreshMovieScoreAndVotes(movieId, ratingBlendK, forceUpdateVotesThreshold);
+        ratingMapper.refreshMovieScoreAndVotes(movieId, forceUpdateVotesThreshold);
     }
 }

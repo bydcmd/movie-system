@@ -98,13 +98,8 @@
                 m.score AS current_score,
                 COALESCE(rs.votes, 0) AS new_votes,
                 CASE
-                    WHEN COALESCE(rs.votes, 0) = 0 THEN ROUND(COALESCE(m.douban_score, m.score, 0)::numeric, 1)
-                    WHEN m.douban_score IS NULL THEN ROUND((COALESCE(rs.avg_rating, 0) * 2)::numeric, 1)
-                    ELSE ROUND(
-                        ((#{kWeight} * m.douban_score + COALESCE(rs.votes, 0) * COALESCE(rs.avg_rating, 0) * 2.0)
-                        / (#{kWeight} + COALESCE(rs.votes, 0)))::numeric,
-                        1
-                    )
+                    WHEN COALESCE(rs.votes, 0) = 0 THEN 0
+                    ELSE ROUND((COALESCE(rs.avg_rating, 0) * 2)::numeric, 1)
                 END AS blended_score
             FROM movies m
             CROSS JOIN rating_stats rs
@@ -159,13 +154,8 @@
                 m.score AS current_score,
                 COALESCE(rs.votes, 0) AS new_votes,
                 CASE
-                    WHEN COALESCE(rs.votes, 0) = 0 THEN ROUND(COALESCE(m.douban_score, m.score, 0)::numeric, 1)
-                    WHEN m.douban_score IS NULL THEN ROUND((COALESCE(rs.avg_rating, 0) * 2)::numeric, 1)
-                    ELSE ROUND(
-                        ((#{kWeight} * m.douban_score + COALESCE(rs.votes, 0) * COALESCE(rs.avg_rating, 0) * 2.0)
-                        / (#{kWeight} + COALESCE(rs.votes, 0)))::numeric,
-                        1
-                    )
+                    WHEN COALESCE(rs.votes, 0) = 0 THEN 0
+                    ELSE ROUND((COALESCE(rs.avg_rating, 0) * 2)::numeric, 1)
                 END AS blended_score
             FROM movies m
             JOIN rating_stats rs ON rs.movie_id = m.movie_id
