@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { NEmpty } from 'naive-ui'
+import { NEmpty, NPagination } from 'naive-ui'
 import type { MovieItemVO } from '@/api/model'
 import MoviePlaceholder from '@/components/movie/MoviePlaceholder.vue'
 import { formatDateLabel, resolveAssetUrl, splitCsvLike, truncateText } from '@/utils/profile'
@@ -15,11 +15,21 @@ const props = withDefaults(
     description: string
     emptyDescription: string
     recordLabel?: string
+    page?: number
+    pageSize?: number
   }>(),
   {
-    recordLabel: '最近记录'
+    recordLabel: '最近记录',
+    page: 1,
+    pageSize: 10
   }
 )
+
+const emit = defineEmits<{
+  refresh: []
+  'update:page': [page: number]
+  'update:pageSize': [pageSize: number]
+}>()
 
 const router = useRouter()
 
@@ -52,6 +62,19 @@ function handlePosterError(movieId: number) {
 
 function shouldShowPlaceholder(movie: MovieItemVO): boolean {
   return !getPoster(movie) || failedPosterIds.value.has(movie.movieId ?? 0)
+}
+
+const showPagination = computed(() => props.total > props.pageSize)
+
+function handlePageChange(newPage: number) {
+  emit('update:page', newPage)
+  emit('refresh')
+}
+
+function handlePageSizeChange(newPageSize: number) {
+  emit('update:pageSize', newPageSize)
+  emit('update:page', 1)
+  emit('refresh')
 }
 </script>
 
@@ -147,6 +170,18 @@ function shouldShowPlaceholder(movie: MovieItemVO): boolean {
           </div>
         </div>
       </article>
+    </div>
+
+    <div v-if="showPagination && !loading" class="profile-list-pagination">
+      <n-pagination
+        :page="page"
+        :page-size="pageSize"
+        :item-count="total"
+        :page-sizes="[10, 20, 50]"
+        show-size-picker
+        @update:page="handlePageChange"
+        @update:page-size="handlePageSizeChange"
+      />
     </div>
   </div>
 </template>
@@ -297,6 +332,13 @@ function shouldShowPlaceholder(movie: MovieItemVO): boolean {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #94a3b8;
+}
+
+.profile-list-pagination {
+  display: flex;
+  justify-content: center;
+  padding-top: 1.5rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
 }
 
 @media (max-width: 639px) {

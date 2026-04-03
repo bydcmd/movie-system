@@ -73,8 +73,8 @@ const dialog = useDialog()
 const message = useMessage()
 const authStore = useAuthStore()
 const GUEST_COMMENT_LIMIT = 20
-const SIMILAR_MOVIES_DISPLAY_LIMIT = 6
-const SIMILAR_MOVIES_FETCH_LIMIT = SIMILAR_MOVIES_DISPLAY_LIMIT * 3
+const SIMILAR_MOVIES_DISPLAY_LIMIT = 20
+const SIMILAR_MOVIES_FETCH_LIMIT = SIMILAR_MOVIES_DISPLAY_LIMIT * 2
 const movieId = computed(() => Number(route.params.id))
 const currentUserId = computed(() => authStore.user?.id ?? null)
 const isGuestMode = computed(() => !authStore.isAuthenticated)

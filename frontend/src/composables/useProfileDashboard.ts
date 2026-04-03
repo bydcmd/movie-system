@@ -8,6 +8,7 @@ import { useGetMyFavorites } from '@/api/endpoints/favorite-management/favorite-
 import { useGetMyRatings } from '@/api/endpoints/rating-management/rating-management'
 import { useGetMyProfile, useUpdateMyProfile } from '@/api/endpoints/user-management/user-management'
 import { useGetMyWatchedList } from '@/api/endpoints/watched-management/watched-management'
+import { useGetMyHistory, useGetHistoryCount } from '@/api/endpoints/view-history-management/view-history-management'
 import type {
   Comment,
   FavoriteFolderVO,
@@ -19,6 +20,11 @@ import type {
 import { useAuthStore } from '@/stores/auth'
 
 const PREVIEW_SIZE = 4
+const HISTORY_PAGE_SIZE = 10
+const COMMENTS_PAGE_SIZE = 10
+const RATINGS_PAGE_SIZE = 10
+const WATCHED_PAGE_SIZE = 10
+const FAVORITES_PAGE_SIZE = 10
 
 type PageResult<T> = {
   list: T[]
@@ -84,7 +90,14 @@ export function useProfileDashboard() {
       retry: false
     }
   })
-  const favoritesQuery = useGetMyFavorites(previewParams, {
+
+  const favoritesPage = ref(1)
+  const favoritesPageSize = ref(FAVORITES_PAGE_SIZE)
+  const favoritesParams = computed(() => ({
+    page: favoritesPage.value,
+    size: favoritesPageSize.value
+  }))
+  const favoritesQuery = useGetMyFavorites(favoritesParams, {
     query: {
       enabled: false,
       retry: false
@@ -96,25 +109,45 @@ export function useProfileDashboard() {
       retry: false
     }
   })
-  const watchedQuery = useGetMyWatchedList(previewParams, {
+
+  const watchedPage = ref(1)
+  const watchedPageSize = ref(WATCHED_PAGE_SIZE)
+  const watchedParams = computed(() => ({
+    page: watchedPage.value,
+    size: watchedPageSize.value
+  }))
+  const watchedQuery = useGetMyWatchedList(watchedParams, {
     query: {
       enabled: false,
       retry: false
     }
   })
-  const ratingsQuery = useGetMyRatings(previewParams, {
+
+  const ratingsPage = ref(1)
+  const ratingsPageSize = ref(RATINGS_PAGE_SIZE)
+  const ratingsParams = computed(() => ({
+    page: ratingsPage.value,
+    size: ratingsPageSize.value
+  }))
+  const ratingsQuery = useGetMyRatings(ratingsParams, {
     query: {
       enabled: false,
       retry: false
     }
   })
-  const commentsQuery = useGetMyComments(previewParams, {
+
+  const commentsPage = ref(1)
+  const commentsPageSize = ref(COMMENTS_PAGE_SIZE)
+  const commentsParams = computed(() => ({
+    page: commentsPage.value,
+    size: commentsPageSize.value
+  }))
+  const commentsQuery = useGetMyComments(commentsParams, {
     query: {
       enabled: false,
       retry: false
     }
   })
-  const updateProfileMutation = useUpdateMyProfile()
 
   const profile = ref<UserProfileVO | null>(toFallbackProfile(authStore.user))
   const favoriteFolders = ref<FavoriteFolderVO[]>([])
@@ -122,12 +155,28 @@ export function useProfileDashboard() {
   const watchedMovies = ref<MovieItemVO[]>([])
   const ratings = ref<MyRatingVO[]>([])
   const comments = ref<Comment[]>([])
+  const historyMovies = ref<MovieItemVO[]>([])
+  const historyPage = ref(1)
+  const historyPageSize = ref(HISTORY_PAGE_SIZE)
+
+  const historyParams = computed(() => ({
+    page: historyPage.value,
+    size: historyPageSize.value
+  }))
+  const historyQuery = useGetMyHistory(historyParams, {
+    query: {
+      enabled: false,
+      retry: false
+    }
+  })
+  const updateProfileMutation = useUpdateMyProfile()
 
   const totals = ref({
     favorites: 0,
     watched: 0,
     ratings: 0,
-    comments: 0
+    comments: 0,
+    history: 0
   })
 
   const loading = ref(false)
@@ -153,14 +202,16 @@ export function useProfileDashboard() {
       favoriteResult,
       watchedResult,
       ratingResult,
-      commentResult
+      commentResult,
+      historyResult
     ] = await Promise.allSettled([
       refetchOrThrow(profileQuery),
       refetchOrThrow(favoriteFoldersQuery),
       refetchOrThrow(favoritesQuery),
       refetchOrThrow(watchedQuery),
       refetchOrThrow(ratingsQuery),
-      refetchOrThrow(commentsQuery)
+      refetchOrThrow(commentsQuery),
+      refetchOrThrow(historyQuery)
     ])
 
     if (profileResult.status === 'fulfilled') {
@@ -197,13 +248,20 @@ export function useProfileDashboard() {
       totals.value.comments = page.total
     }
 
+    if (historyResult.status === 'fulfilled') {
+      const page = normalizePage<MovieItemVO>(historyResult.value)
+      historyMovies.value = page.list
+      totals.value.history = page.total
+    }
+
     const failures = [
       profileResult,
       favoriteFoldersResult,
       favoriteResult,
       watchedResult,
       ratingResult,
-      commentResult
+      commentResult,
+      historyResult
     ].filter((result) => result.status === 'rejected')
 
     if (failures.length > 0) {
@@ -256,9 +314,20 @@ export function useProfileDashboard() {
     profile,
     favoriteFolders,
     favoriteMovies,
+    favoritesPage,
+    favoritesPageSize,
     watchedMovies,
+    watchedPage,
+    watchedPageSize,
     ratings,
+    ratingsPage,
+    ratingsPageSize,
     comments,
+    commentsPage,
+    commentsPageSize,
+    historyMovies,
+    historyPage,
+    historyPageSize,
     totals,
     loading,
     refreshing,

@@ -4,6 +4,7 @@ import { NTabs, NTabPane } from 'naive-ui'
 import type { Comment, FavoriteFolderVO, MovieItemVO, MyRatingVO } from '@/api/model'
 import ProfileCommentList from './ProfileCommentList.vue'
 import ProfileFolderList from './ProfileFolderList.vue'
+import ProfileHistoryList from './ProfileHistoryList.vue'
 import ProfileMovieGrid from './ProfileMovieGrid.vue'
 import ProfileRatingList from './ProfileRatingList.vue'
 
@@ -12,19 +13,45 @@ const props = withDefaults(defineProps<{
   watchedMovies: MovieItemVO[]
   ratings: MyRatingVO[]
   comments: Comment[]
+  historyMovies: MovieItemVO[]
   totals: {
     favorites: number
     watched: number
     ratings: number
     comments: number
+    history: number
   }
   loading?: boolean
+  watchedPage?: number
+  watchedPageSize?: number
+  ratingsPage?: number
+  ratingsPageSize?: number
+  commentsPage?: number
+  commentsPageSize?: number
+  historyPage?: number
+  historyPageSize?: number
 }>(), {
-  loading: false
+  loading: false,
+  watchedPage: 1,
+  watchedPageSize: 10,
+  ratingsPage: 1,
+  ratingsPageSize: 10,
+  commentsPage: 1,
+  commentsPageSize: 10,
+  historyPage: 1,
+  historyPageSize: 10
 })
 
 const emit = defineEmits<{
   refresh: []
+  'update:watchedPage': [page: number]
+  'update:watchedPageSize': [pageSize: number]
+  'update:ratingsPage': [page: number]
+  'update:ratingsPageSize': [pageSize: number]
+  'update:commentsPage': [page: number]
+  'update:commentsPageSize': [pageSize: number]
+  'update:historyPage': [page: number]
+  'update:historyPageSize': [pageSize: number]
 }>()
 
 const favoriteFolderCount = computed(() => props.favoriteFolders.length)
@@ -58,6 +85,11 @@ const favoriteFolderCount = computed(() => props.favoriteFolders.length)
           description="继续补齐你的观影履历。"
           empty-description="看过列表还是空的。"
           record-label="记录于"
+          :page="watchedPage"
+          :page-size="watchedPageSize"
+          @refresh="emit('refresh')"
+          @update:page="emit('update:watchedPage', $event)"
+          @update:page-size="emit('update:watchedPageSize', $event)"
         />
       </n-tab-pane>
 
@@ -66,7 +98,11 @@ const favoriteFolderCount = computed(() => props.favoriteFolders.length)
           :items="ratings"
           :total="totals.ratings"
           :loading="loading"
+          :page="ratingsPage"
+          :page-size="ratingsPageSize"
           @refresh="emit('refresh')"
+          @update:page="emit('update:ratingsPage', $event)"
+          @update:page-size="emit('update:ratingsPageSize', $event)"
         />
       </n-tab-pane>
 
@@ -75,7 +111,24 @@ const favoriteFolderCount = computed(() => props.favoriteFolders.length)
           :items="comments"
           :total="totals.comments"
           :loading="loading"
+          :page="commentsPage"
+          :page-size="commentsPageSize"
           @refresh="emit('refresh')"
+          @update:page="emit('update:commentsPage', $event)"
+          @update:page-size="emit('update:commentsPageSize', $event)"
+        />
+      </n-tab-pane>
+
+      <n-tab-pane name="history" :tab="`浏览历史 (${totals.history})`">
+        <ProfileHistoryList
+          :items="historyMovies"
+          :total="totals.history"
+          :loading="loading"
+          :page="historyPage"
+          :page-size="historyPageSize"
+          @refresh="emit('refresh')"
+          @update:page="emit('update:historyPage', $event)"
+          @update:page-size="emit('update:historyPageSize', $event)"
         />
       </n-tab-pane>
     </n-tabs>

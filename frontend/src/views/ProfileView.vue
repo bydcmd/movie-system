@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { NAlert, NButton } from 'naive-ui'
 import NavBar from '@/components/layout/NavBar.vue'
 import ProfileActivityTabs from '@/components/profile/ProfileActivityTabs.vue'
@@ -10,12 +10,22 @@ import { formatDateTimeLabel, getNameInitial, resolveAssetUrl } from '@/utils/pr
 
 const dashboard = useProfileDashboard()
 const isEditingProfile = ref(false)
+const avatarLoadError = ref(false)
 
 const displayName = computed(() => dashboard.profile.value?.nickname?.trim() || '未设置昵称')
 
 const displayEmail = computed(() => dashboard.profile.value?.email?.trim() || '未设置邮箱')
 
 const profileAvatarUrl = computed(() => resolveAssetUrl(dashboard.profile.value?.avatar))
+
+const showAvatarImage = computed(() => Boolean(profileAvatarUrl.value) && !avatarLoadError.value)
+
+watch(
+  () => dashboard.profile.value?.avatar,
+  () => {
+    avatarLoadError.value = false
+  }
+)
 
 const profileInitial = computed(() => getNameInitial(dashboard.profile.value?.nickname || dashboard.profile.value?.email))
 
@@ -45,6 +55,10 @@ function closeProfileEditor() {
 
 function refreshActivity() {
   void dashboard.loadDashboard({ silent: true })
+}
+
+function handleAvatarError() {
+  avatarLoadError.value = true
 }
 
 onMounted(() => {
@@ -91,10 +105,11 @@ onMounted(() => {
           <div class="profile-identity">
             <div class="profile-avatar">
               <img
-                v-if="profileAvatarUrl"
-                :src="profileAvatarUrl || undefined"
+                v-if="showAvatarImage"
+                :src="profileAvatarUrl ?? undefined"
                 :alt="displayName"
                 class="profile-avatar-image"
+                @error="handleAvatarError"
               />
               <span v-else class="profile-avatar-fallback">{{ profileInitial }}</span>
             </div>
@@ -137,9 +152,26 @@ onMounted(() => {
         :watched-movies="dashboard.watchedMovies.value"
         :ratings="dashboard.ratings.value"
         :comments="dashboard.comments.value"
+        :history-movies="dashboard.historyMovies.value"
         :totals="dashboard.totals.value"
         :loading="dashboard.loading.value"
+        :watched-page="dashboard.watchedPage.value"
+        :watched-page-size="dashboard.watchedPageSize.value"
+        :ratings-page="dashboard.ratingsPage.value"
+        :ratings-page-size="dashboard.ratingsPageSize.value"
+        :comments-page="dashboard.commentsPage.value"
+        :comments-page-size="dashboard.commentsPageSize.value"
+        :history-page="dashboard.historyPage.value"
+        :history-page-size="dashboard.historyPageSize.value"
         @refresh="refreshActivity"
+        @update:watched-page="dashboard.watchedPage.value = $event"
+        @update:watched-page-size="dashboard.watchedPageSize.value = $event"
+        @update:ratings-page="dashboard.ratingsPage.value = $event"
+        @update:ratings-page-size="dashboard.ratingsPageSize.value = $event"
+        @update:comments-page="dashboard.commentsPage.value = $event"
+        @update:comments-page-size="dashboard.commentsPageSize.value = $event"
+        @update:history-page="dashboard.historyPage.value = $event"
+        @update:history-page-size="dashboard.historyPageSize.value = $event"
       />
     </main>
   </div>

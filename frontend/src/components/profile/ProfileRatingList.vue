@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { NButton, NCheckbox, NEmpty, NRate, useDialog, useMessage } from 'naive-ui'
+import { NButton, NCheckbox, NEmpty, NPagination, NRate, useDialog, useMessage } from 'naive-ui'
 import {
   useClearMyRatings,
   useDeleteRatingsBatch
@@ -14,12 +14,18 @@ const props = withDefaults(defineProps<{
   items: MyRatingVO[]
   total: number
   loading?: boolean
+  page?: number
+  pageSize?: number
 }>(), {
-  loading: false
+  loading: false,
+  page: 1,
+  pageSize: 10
 })
 
 const emit = defineEmits<{
   refresh: []
+  'update:page': [page: number]
+  'update:pageSize': [pageSize: number]
 }>()
 
 const router = useRouter()
@@ -51,6 +57,18 @@ const isMutating = computed(() => deletingSelected.value || clearingAll.value)
 const isPreviewTruncated = computed(() => {
   return props.total > props.items.length && props.items.length > 0
 })
+const showPagination = computed(() => props.total > props.pageSize)
+
+function handlePageChange(newPage: number) {
+  emit('update:page', newPage)
+  emit('refresh')
+}
+
+function handlePageSizeChange(newPageSize: number) {
+  emit('update:pageSize', newPageSize)
+  emit('update:page', 1)
+  emit('refresh')
+}
 
 watch(
   selectableRatingIds,
@@ -343,6 +361,18 @@ function confirmClearRatings() {
         </div>
       </article>
     </div>
+
+    <div v-if="showPagination && !loading" class="profile-rating-pagination">
+      <n-pagination
+        :page="page"
+        :page-size="pageSize"
+        :item-count="total"
+        :page-sizes="[10, 20, 50]"
+        show-size-picker
+        @update:page="handlePageChange"
+        @update:page-size="handlePageSizeChange"
+      />
+    </div>
   </div>
 </template>
 
@@ -534,5 +564,12 @@ function confirmClearRatings() {
 
 .profile-rating-link {
   align-self: flex-start;
+}
+
+.profile-rating-pagination {
+  display: flex;
+  justify-content: center;
+  padding-top: 1.5rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
 }
 </style>

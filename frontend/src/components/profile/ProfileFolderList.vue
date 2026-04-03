@@ -1041,6 +1041,7 @@ watch(
                 <MoviePlaceholder
                   v-if="!hasPoster(movie)"
                   :title="movie.movieName"
+                  size="small"
                   class="h-full w-full"
                 />
                 <img

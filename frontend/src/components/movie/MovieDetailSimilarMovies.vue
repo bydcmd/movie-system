@@ -125,6 +125,7 @@ const openMovieDetail = (movie: Movie) => {
           <MoviePlaceholder
             v-if="!hasPoster(item)"
             :title="item.title"
+            size="small"
             class="absolute inset-0"
           />
           <img

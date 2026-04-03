@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { NButton, NCheckbox, NEmpty, NTag, useDialog, useMessage } from 'naive-ui'
+import { NButton, NCheckbox, NEmpty, NPagination, NTag, useDialog, useMessage } from 'naive-ui'
 import {
   useDeleteMyComments,
   useUpdateMyMovieCommentContent
@@ -15,12 +15,18 @@ const props = withDefaults(defineProps<{
   items: Comment[]
   total: number
   loading?: boolean
+  page?: number
+  pageSize?: number
 }>(), {
-  loading: false
+  loading: false,
+  page: 1,
+  pageSize: 10
 })
 
 const emit = defineEmits<{
   refresh: []
+  'update:page': [page: number]
+  'update:pageSize': [pageSize: number]
 }>()
 
 const router = useRouter()
@@ -72,6 +78,18 @@ const isPreviewTruncated = computed(() => {
 const isDeletingComments = computed(() => {
   return bulkDeleting.value || deletingCommentIds.value.length > 0
 })
+const showPagination = computed(() => props.total > props.pageSize)
+
+function handlePageChange(newPage: number) {
+  emit('update:page', newPage)
+  emit('refresh')
+}
+
+function handlePageSizeChange(newPageSize: number) {
+  emit('update:pageSize', newPageSize)
+  emit('update:page', 1)
+  emit('refresh')
+}
 
 watch(
   selectableCommentIds,
@@ -443,6 +461,18 @@ function confirmDeleteSelectedComments() {
         </article>
       </div>
     </template>
+
+    <div v-if="showPagination && !loading" class="profile-comment-pagination">
+      <n-pagination
+        :page="page"
+        :page-size="pageSize"
+        :item-count="total"
+        :page-sizes="[10, 20, 50]"
+        show-size-picker
+        @update:page="handlePageChange"
+        @update:page-size="handlePageSizeChange"
+      />
+    </div>
   </div>
 
   <CommentComposerModal
@@ -632,5 +662,12 @@ function confirmDeleteSelectedComments() {
   align-items: center;
   justify-content: flex-end;
   gap: 0.75rem;
+}
+
+.profile-comment-pagination {
+  display: flex;
+  justify-content: center;
+  padding-top: 1.5rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
 }
 </style>
