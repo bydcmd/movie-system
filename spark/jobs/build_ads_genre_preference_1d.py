@@ -36,7 +36,7 @@ def build_genre_preference(movie_metrics_df: DataFrame, top_n: int) -> DataFrame
             "rating_cnt",
             "watched_cnt",
             F.col("hot_score").cast("double").alias("hot_score_value"),
-            F.explode(F.split(F.coalesce(F.col("movie_genres"), F.lit("")), ",")).alias("genre"),
+            F.explode(F.split(F.coalesce(F.col("movie_genres"), F.lit("")), "[,/]")).alias("genre"),
         )
         .withColumn("genre", F.trim(F.col("genre")))
         .where(F.col("genre") != "")
@@ -49,9 +49,15 @@ def build_genre_preference(movie_metrics_df: DataFrame, top_n: int) -> DataFrame
             F.sum("watched_cnt").cast("bigint").alias("watched_cnt"),
             F.round(F.sum("hot_score_value"), 4).cast("decimal(18,4)").alias("hot_score_sum"),
         )
+        .withColumn(
+            "watched_rate",
+            F.when(F.col("view_uv") > 0, F.round(F.col("watched_cnt") / F.col("view_uv"), 4)).otherwise(F.lit(0)),
+        )
     )
 
-    rank_window = Window.orderBy(F.col("hot_score_sum").desc(), F.col("view_pv").desc(), F.col("genre").asc())
+    rank_window = Window.orderBy(
+        F.col("hot_score_sum").desc(), F.col("watched_rate").desc(), F.col("view_pv").desc(), F.col("genre").asc()
+    )
     ranked_df = genre_metrics_df.withColumn("rank_no", F.row_number().over(rank_window))
     if top_n > 0:
         ranked_df = ranked_df.where(F.col("rank_no") <= top_n)
@@ -64,6 +70,7 @@ def build_genre_preference(movie_metrics_df: DataFrame, top_n: int) -> DataFrame
         "view_uv",
         "rating_cnt",
         "watched_cnt",
+        "watched_rate",
         "hot_score_sum",
     )
 

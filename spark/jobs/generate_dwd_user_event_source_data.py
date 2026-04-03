@@ -4,6 +4,7 @@ import argparse
 import datetime as dt
 import hashlib
 import json
+import math
 import re
 import uuid
 from dataclasses import dataclass
@@ -27,6 +28,7 @@ DISPLAY_REGISTERED_USER_CAP = 24
 EXTRA_LOGIN_USER_CAP = 2
 SQL_CHUNK_SIZE = 200
 MAX_IDENTIFIER_TAG_LEN = 20
+DEFAULT_VALIDATION_MODE = "warn"
 SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
 
 EVENT_ORDER = [
@@ -258,14 +260,56 @@ def parse_args() -> argparse.Namespace:
         default="",
         help="Optional deterministic tag used in generated identifiers and cleanup scope.",
     )
+    parser.add_argument(
+        "--display-registered-user-cap",
+        type=int,
+        default=DISPLAY_REGISTERED_USER_CAP,
+        help=f"Maximum number of registered users to display, default: {DISPLAY_REGISTERED_USER_CAP}.",
+    )
+    parser.add_argument(
+        "--extra-login-user-cap",
+        type=int,
+        default=EXTRA_LOGIN_USER_CAP,
+        help=f"Additional existing users to include in login events, default: {EXTRA_LOGIN_USER_CAP}.",
+    )
+    parser.add_argument(
+        "--sql-chunk-size",
+        type=int,
+        default=SQL_CHUNK_SIZE,
+        help=f"Chunk size for SQL batch operations, default: {SQL_CHUNK_SIZE}.",
+    )
+    parser.add_argument(
+        "--max-identifier-tag-len",
+        type=int,
+        default=MAX_IDENTIFIER_TAG_LEN,
+        help=f"Maximum length for normalized batch tag, default: {MAX_IDENTIFIER_TAG_LEN}.",
+    )
+    parser.add_argument(
+        "--validation-mode",
+        choices=["none", "warn", "error"],
+        default=DEFAULT_VALIDATION_MODE,
+        help=f"Validation strictness: none (skip), warn (print issues), error (raise on issues). Default: {DEFAULT_VALIDATION_MODE}.",
+    )
+    parser.add_argument(
+        "--rating-bias",
+        type=float,
+        default=0.0,
+        help="Bias to apply to all ratings (positive for higher ratings, negative for lower). Range: -2.0 to 2.0.",
+    )
+    parser.add_argument(
+        "--spark-parallelism",
+        type=int,
+        default=None,
+        help="Spark parallelism (sets spark.sql.shuffle.partitions and spark.default.parallelism). Default: use Spark defaults.",
+    )
     return parser.parse_args()
 
 
-def normalize_batch_tag(value: str) -> str:
+def normalize_batch_tag(value: str, max_length: int = MAX_IDENTIFIER_TAG_LEN) -> str:
     normalized = re.sub(r"[^0-9A-Za-z]+", "_", value.strip().lower()).strip("_")
     if not normalized:
         raise ValueError("batch_tag must contain at least one alphanumeric character after normalization.")
-    return normalized[:MAX_IDENTIFIER_TAG_LEN]
+    return normalized[:max_length]
 
 
 def validate_positive_int(name: str, value: int) -> None:
@@ -273,8 +317,34 @@ def validate_positive_int(name: str, value: int) -> None:
         raise ValueError(f"{name} must be a positive integer, got {value}.")
 
 
+def validate_rating_bias(value: float) -> None:
+    if not -2.0 <= value <= 2.0:
+        raise ValueError(f"rating_bias must be between -2.0 and 2.0, got {value}.")
+
+
 def stable_bigint(seed: str) -> int:
     return int(hashlib.sha1(seed.encode("utf-8")).hexdigest()[:15], 16)
+
+
+def deterministic_rating(seed: str, bias: float = 0.0) -> float:
+    """Generate a deterministic rating between 1.0 and 5.0 with normal distribution."""
+    # Generate two uniform random numbers from hash
+    hash1 = int(hashlib.sha256(f"{seed}:1".encode()).hexdigest()[:16], 16)
+    hash2 = int(hashlib.sha256(f"{seed}:2".encode()).hexdigest()[:16], 16)
+
+    # Convert to (0, 1) range (avoiding exact 0)
+    u1 = hash1 / (2**64 - 1) + 1e-12
+    u2 = hash2 / (2**64 - 1) + 1e-12
+
+    # Box-Muller transform for standard normal
+    z0 = math.sqrt(-2.0 * math.log(u1)) * math.cos(2.0 * math.pi * u2)
+
+    # Transform to mean=3.5, std=1.0, apply bias
+    rating = 3.5 + z0 * 1.0 + bias
+
+    # Clamp to [1.0, 5.0] and round to 1 decimal
+    rating = max(1.0, min(5.0, rating))
+    return round(rating, 1)
 
 
 def seeded_uuid(batch_tag: str, event_type: str, index: int, key: str) -> str:
@@ -284,6 +354,31 @@ def seeded_uuid(batch_tag: str, event_type: str, index: int, key: str) -> str:
 def event_datetime(batch_date: dt.date, event_group_index: int, item_index: int) -> dt.datetime:
     base = dt.datetime.combine(batch_date, dt.time(hour=12, minute=0, tzinfo=SHANGHAI_TZ))
     return base + dt.timedelta(minutes=event_group_index * 7, seconds=item_index * 17)
+
+
+def user_event_datetime(batch_date: dt.date, user_id: str, event_type: str, item_index: int, batch_tag: str = "") -> dt.datetime:
+    """
+    Generate deterministic event datetime for a user, ensuring chronological order
+    of event types for the same user.
+
+    Timeline order for same user: register → search → view → rating → comment → favorite → watched
+    """
+    base = dt.datetime.combine(batch_date, dt.time(hour=12, minute=0, tzinfo=SHANGHAI_TZ))
+
+    # User-specific base offset (0-59 minutes) based on user_id and batch_tag hash
+    user_seed = f"{batch_tag}:{user_id}" if batch_tag else user_id
+    user_hash = stable_bigint(user_seed)
+    user_offset_minutes = user_hash % 60
+
+    # Event type offset based on EVENT_TIME_GROUP_INDEX
+    event_group_index = EVENT_TIME_GROUP_INDEX.get(event_type, 0)
+
+    # Small offset for item_index within same event type
+    item_offset_seconds = item_index * 17
+
+    # Calculate total offset
+    total_minutes = user_offset_minutes + event_group_index * 7
+    return base + dt.timedelta(minutes=total_minutes, seconds=item_offset_seconds)
 
 
 def ensure_after_anchor(
@@ -352,14 +447,14 @@ def build_delete_in_statements(
     return statements
 
 
-def build_insert_statements(table_name: str, rows: list[dict[str, Any]]) -> list[str]:
+def build_insert_statements(table_name: str, rows: list[dict[str, Any]], args: argparse.Namespace) -> list[str]:
     if not rows:
         return []
 
     columns = TABLE_COLUMNS[table_name]
     column_types = TABLE_COLUMN_TYPES.get(table_name, {})
     statements: list[str] = []
-    for row_chunk in chunked(rows, SQL_CHUNK_SIZE):
+    for row_chunk in chunked(rows, args.sql_chunk_size):
         value_lines: list[str] = []
         for row in row_chunk:
             literals = [sql_literal(row[column_name], column_types.get(column_name, "")) for column_name in columns]
@@ -587,9 +682,11 @@ def build_comment_rows(
 
 
 def build_rating_rows(
+    batch_tag: str,
     batch_date: dt.date,
     pairs: list[tuple[dict[str, Any], dict[str, Any]]],
     entity_count: int,
+    args: argparse.Namespace,
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for index in range(min(entity_count, len(pairs))):
@@ -598,7 +695,7 @@ def build_rating_rows(
             {
                 "user_id": user["user_id"],
                 "movie_id": movie["movie_id"],
-                "rating": 2 + (index % 4),
+                "rating": deterministic_rating(f"{batch_tag}:rating:{user['user_id']}:{movie['movie_id']}:{index}", args.rating_bias),
                 "rating_time": ensure_after_anchor(event_datetime(batch_date, 3, index), user.get("_register_time")),
             }
         )
@@ -718,6 +815,49 @@ def shrink_user_cohort(users: list[dict[str, Any]], ratio: float) -> list[dict[s
     return users[:target_size]
 
 
+def determine_funnel_path(user_id: str, batch_tag: str) -> dict[str, bool]:
+    """
+    Deterministically determine which funnel steps a user completes.
+    Returns a dict with keys: has_view, has_rating, has_comment, has_favorite, has_watched.
+    Target conversion rates:
+    - view -> rating: 60%
+    - rating -> comment: 50%
+    - comment -> favorite: 40%
+    - favorite -> watched: 30%
+    """
+    # Generate deterministic hash values for each step
+    base_seed = f"{batch_tag}:{user_id}"
+    # Use different seeds for each step to get independent decisions
+    view_hash = stable_bigint(f"{base_seed}:view") % 100
+    rating_hash = stable_bigint(f"{base_seed}:rating") % 100
+    comment_hash = stable_bigint(f"{base_seed}:comment") % 100
+    favorite_hash = stable_bigint(f"{base_seed}:favorite") % 100
+    watched_hash = stable_bigint(f"{base_seed}:watched") % 100
+
+    # 95% of users have view (view_history event)
+    has_view = view_hash < 95
+
+    # 60% of viewers proceed to rating
+    has_rating = has_view and (rating_hash < 60)
+
+    # 50% of raters proceed to comment
+    has_comment = has_rating and (comment_hash < 50)
+
+    # 40% of commenters proceed to favorite (ADD operation)
+    has_favorite = has_comment and (favorite_hash < 40)
+
+    # 30% of favoriters proceed to watched
+    has_watched = has_favorite and (watched_hash < 30)
+
+    return {
+        "has_view": has_view,
+        "has_rating": has_rating,
+        "has_comment": has_comment,
+        "has_favorite": has_favorite,
+        "has_watched": has_watched,
+    }
+
+
 def filter_rows_by_user_ids(rows: list[dict[str, Any]], user_ids: set[str]) -> list[dict[str, Any]]:
     if not rows or not user_ids:
         return rows
@@ -739,9 +879,14 @@ def build_kafka_records(
     view_history_rows: list[dict[str, Any]],
     watched_rows: list[dict[str, Any]],
     comment_likes: list[dict[str, Any]],
+    args: argparse.Namespace,
 ) -> list[KafkaRecord]:
     kafka_records: list[KafkaRecord] = []
-    active_registered_users = registered_users[: min(len(registered_users), max(1, min(events_per_type, DISPLAY_REGISTERED_USER_CAP)))]
+    active_registered_users = registered_users[: min(len(registered_users), max(1, min(events_per_type, args.display_registered_user_cap)))]
+    # Determine funnel path for each active user
+    user_funnel_paths = {}
+    for user in active_registered_users:
+        user_funnel_paths[user["user_id"]] = determine_funnel_path(user["user_id"], batch_tag)
     search_users = active_registered_users
     view_users = shrink_user_cohort(search_users, 0.8)
     rating_users = shrink_user_cohort(view_users, 0.75)
@@ -753,13 +898,13 @@ def build_kafka_records(
         max(len(comment_users), len(favorite_users) + 1),
     )
     folder_action_users = search_users[:folder_action_user_count] or search_users
-    login_users = existing_users[: min(len(existing_users), EXTRA_LOGIN_USER_CAP)] + search_users
+    login_users = existing_users[: min(len(existing_users), args.extra_login_user_cap)] + search_users
 
     view_user_ids = {user["user_id"] for user in view_users}
-    rating_user_ids = {user["user_id"] for user in rating_users}
-    comment_user_ids = {user["user_id"] for user in comment_users}
-    favorite_user_ids = {user["user_id"] for user in favorite_users}
-    watched_user_ids = {user["user_id"] for user in watched_users}
+    rating_user_ids = {uid for uid in {user["user_id"] for user in rating_users} if user_funnel_paths.get(uid, {}).get("has_rating", False)}
+    comment_user_ids = {uid for uid in {user["user_id"] for user in comment_users} if user_funnel_paths.get(uid, {}).get("has_comment", False)}
+    favorite_user_ids = {uid for uid in {user["user_id"] for user in favorite_users} if user_funnel_paths.get(uid, {}).get("has_favorite", False)}
+    watched_user_ids = {uid for uid in {user["user_id"] for user in watched_users} if user_funnel_paths.get(uid, {}).get("has_watched", False)}
     search_user_ids = {user["user_id"] for user in search_users}
     folder_action_user_ids = {user["user_id"] for user in folder_action_users}
 
@@ -773,21 +918,35 @@ def build_kafka_records(
 
     for event_type in EVENT_ORDER:
         for item_index in range(events_per_type):
-            occurred_at = event_datetime(batch_date, EVENT_TIME_GROUP_INDEX[event_type], item_index)
+            occurred_at = None
             if event_type == "view_history":
                 source_row = pick_cycle(stage_view_rows, item_index)
+                user_id = source_row["user_id"]
+                user_path = user_funnel_paths.get(user_id, {})
+                has_view = user_path.get("has_view", True)  # has_view always True
+                if not has_view:
+                    # Skip this event if user shouldn't have view (edge case)
+                    continue
+                occurred_at = user_event_datetime(batch_date, user_id, event_type, item_index, batch_tag)
                 key = str(source_row["movie_id"])
                 payload = {
-                    "userId": source_row["user_id"],
+                    "userId": user_id,
                     "movieId": source_row["movie_id"],
                     "viewTime": int(source_row["view_time"].timestamp() * 1000),
                 }
             elif event_type == "rating":
                 source_row = pick_cycle(stage_rating_rows, item_index)
+                user_id = source_row["user_id"]
+                user_path = user_funnel_paths.get(user_id, {})
+                has_rating = user_path.get("has_rating", False)
+                if not has_rating:
+                    # Skip rating event if user shouldn't have rating
+                    continue
+                occurred_at = user_event_datetime(batch_date, user_id, event_type, item_index, batch_tag)
                 operation = RATING_OPERATIONS[item_index % len(RATING_OPERATIONS)]
                 key = str(source_row["movie_id"])
                 payload = {
-                    "userId": source_row["user_id"],
+                    "userId": user_id,
                     "movieId": source_row["movie_id"],
                     "rating": source_row["rating"] if operation in {"CREATE", "UPDATE"} else None,
                     "operation": operation,
@@ -795,10 +954,17 @@ def build_kafka_records(
                 }
             elif event_type == "comment":
                 source_row = pick_cycle(stage_comment_rows, item_index)
+                user_id = source_row["user_id"]
+                user_path = user_funnel_paths.get(user_id, {})
+                has_comment = user_path.get("has_comment", False)
+                if not has_comment:
+                    # Skip comment event if user shouldn't have comment
+                    continue
+                occurred_at = user_event_datetime(batch_date, user_id, event_type, item_index, batch_tag)
                 operation = COMMENT_OPERATIONS[item_index % len(COMMENT_OPERATIONS)]
                 key = str(source_row["movie_id"])
                 payload = {
-                    "userId": source_row["user_id"],
+                    "userId": user_id,
                     "movieId": source_row["movie_id"],
                     "commentId": source_row["comment_id"],
                     "type": source_row["type"],
@@ -807,41 +973,60 @@ def build_kafka_records(
                 }
             elif event_type == "comment_like":
                 source_row = pick_cycle(stage_comment_like_rows, item_index)
+                user_id = source_row["user_id"]
+                occurred_at = user_event_datetime(batch_date, user_id, event_type, item_index, batch_tag)
                 key = str(source_row["comment_id"])
                 payload = {
-                    "userId": source_row["user_id"],
+                    "userId": user_id,
                     "commentId": source_row["comment_id"],
                     "operation": COMMENT_LIKE_OPERATIONS[item_index % len(COMMENT_LIKE_OPERATIONS)],
                 }
             elif event_type == "favorite":
                 source_row = pick_cycle(stage_favorite_rows, item_index)
-                if item_index < len(favorite_users):
+                user_id = source_row["user_id"]
+                user_path = user_funnel_paths.get(user_id, {})
+                has_favorite = user_path.get("has_favorite", False)
+                if not has_favorite:
+                    operation = "REMOVE"
+                elif item_index < len(favorite_users):
                     operation = "ADD"
                 else:
-                    operation = FAVORITE_OPERATIONS[(item_index - len(favorite_users) + 1) % len(FAVORITE_OPERATIONS)]
+                    # Deterministic operation selection: ~80% ADD, 20% REMOVE
+                    hash_val = stable_bigint(f"{batch_tag}:favorite:{item_index}") % 10
+                    operation = "ADD" if hash_val < 8 else "REMOVE"
+                occurred_at = user_event_datetime(batch_date, user_id, event_type, item_index, batch_tag)
                 key = str(source_row["movie_id"])
                 payload = {
-                    "userId": source_row["user_id"],
+                    "userId": user_id,
                     "movieId": source_row["movie_id"],
                     "folderId": source_row["folder_id"],
                     "operation": operation,
                 }
             elif event_type == "watched":
                 source_row = pick_cycle(stage_watched_rows, item_index)
+                user_id = source_row["user_id"]
+                user_path = user_funnel_paths.get(user_id, {})
+                has_watched = user_path.get("has_watched", False)
+                if not has_watched:
+                    # Skip watched event if user shouldn't have watched
+                    continue
+                occurred_at = user_event_datetime(batch_date, user_id, event_type, item_index, batch_tag)
                 key = str(source_row["movie_id"])
                 payload = {
-                    "userId": source_row["user_id"],
+                    "userId": user_id,
                     "movieId": source_row["movie_id"],
                     "watchedTime": int(source_row["create_time"].timestamp() * 1000),
                 }
             elif event_type == "favorite_folder_action":
                 source_row = pick_cycle(stage_folder_rows, item_index)
+                user_id = source_row["user_id"]
+                occurred_at = user_event_datetime(batch_date, user_id, event_type, item_index, batch_tag)
                 operation = FOLDER_OPERATIONS[item_index % len(FOLDER_OPERATIONS)]
                 folder_name = source_row["name"] if operation != "UPDATE" else f"{source_row['name']}_updated"
                 is_public = source_row["is_public"] if operation != "SHARE" else 1
                 key = str(source_row["id"])
                 payload = {
-                    "userId": source_row["user_id"],
+                    "userId": user_id,
                     "folderId": source_row["id"],
                     "folderName": folder_name,
                     "isPublic": is_public,
@@ -852,11 +1037,13 @@ def build_kafka_records(
                 # view/rating/favorite/watched actions on the same day, so the
                 # downstream search funnel ADS can show real conversions.
                 user = pick_cycle(search_users, item_index)
+                user_id = user["user_id"]
+                occurred_at = user_event_datetime(batch_date, user_id, event_type, item_index, batch_tag)
                 movie = pick_cycle(movies, item_index)
-                keyword = f"seed_keyword_{item_index + 1}_{batch_tag}"
+                keyword = movie["name"]
                 key = keyword
                 payload = {
-                    "userId": user["user_id"],
+                    "userId": user_id,
                     "searchKeyword": keyword,
                     "filterConditions": {
                         "genres": [movie["genres"].split("/")[0]],
@@ -864,17 +1051,21 @@ def build_kafka_records(
                         "yearTo": movie["year"] + 1,
                         "regions": [movie["regions"]],
                     },
-                    "resultCount": 10 + item_index if item_index % 2 == 0 else 0,
+                    "resultCount": 0 if stable_bigint(f"{batch_tag}:search:{item_index}") % 10 >= 7 else 5 + (stable_bigint(f"{batch_tag}:search:{item_index}") % 46),
                     "searchTime": 80 + item_index * 11,
                 }
             elif event_type == "user_register":
                 user = pick_cycle(search_users, item_index)
-                key = user["user_id"]
-                payload = {"userId": user["user_id"]}
+                user_id = user["user_id"]
+                occurred_at = user_event_datetime(batch_date, user_id, event_type, item_index, batch_tag)
+                key = user_id
+                payload = {"userId": user_id}
             elif event_type == "user_login":
                 user = pick_cycle(login_users, item_index)
-                key = user["user_id"]
-                payload = {"userId": user["user_id"]}
+                user_id = user["user_id"]
+                occurred_at = user_event_datetime(batch_date, user_id, event_type, item_index, batch_tag)
+                key = user_id
+                payload = {"userId": user_id}
             else:
                 raise ValueError(f"Unsupported event type: {event_type}")
 
@@ -900,6 +1091,7 @@ def build_table_datasets(
     view_history_rows: list[dict[str, Any]],
     watched_rows: list[dict[str, Any]],
     comment_likes: list[dict[str, Any]],
+    args: argparse.Namespace,
 ) -> list[TableDataset]:
     rows_by_table = {
         "public.users": users,
@@ -945,7 +1137,7 @@ def build_table_datasets(
                 table_name=table_name,
                 rows=rows_by_table[table_name],
                 cleanup_statements=cleanup_by_table.get(table_name, []),
-                insert_statements=build_insert_statements(table_name, rows_by_table[table_name]),
+                insert_statements=build_insert_statements(table_name, rows_by_table[table_name], args),
                 post_statements=[SEQUENCE_RESET_SQL[table_name]] if table_name in SEQUENCE_RESET_SQL else [],
             )
         )
@@ -958,8 +1150,9 @@ def generate_dataset(
     existing_users: list[dict[str, Any]],
     movies: list[dict[str, Any]],
     events_per_type: int,
+    args: argparse.Namespace,
 ) -> GeneratedDataset:
-    registered_user_count = min(max(1, events_per_type), DISPLAY_REGISTERED_USER_CAP)
+    registered_user_count = min(max(1, events_per_type), args.display_registered_user_cap)
     registered_users = build_registered_user_rows(batch_tag, batch_date, registered_user_count)
     folders = build_folder_rows(batch_tag, batch_date, registered_users)
     folder_by_user_id = {folder["user_id"]: folder for folder in folders}
@@ -967,7 +1160,7 @@ def generate_dataset(
 
     entity_count = min(max(1, events_per_type), len(registered_pairs))
     comments = build_comment_rows(batch_tag, batch_date, registered_users, movies, max(1, events_per_type))
-    ratings = build_rating_rows(batch_date, registered_pairs, entity_count)
+    ratings = build_rating_rows(batch_tag, batch_date, registered_pairs, entity_count, args)
     favorites = build_favorite_rows(batch_date, registered_pairs, folder_by_user_id, entity_count)
     view_history_rows = build_view_history_rows(batch_tag, batch_date, registered_pairs, max(1, events_per_type))
     watched_rows = build_watched_rows(batch_date, registered_pairs, entity_count)
@@ -995,6 +1188,7 @@ def generate_dataset(
         view_history_rows=view_history_rows,
         watched_rows=watched_rows,
         comment_likes=comment_likes,
+        args=args,
     )
     return GeneratedDataset(
         batch_date=batch_date.isoformat(),
@@ -1008,6 +1202,7 @@ def generate_dataset(
             view_history_rows=view_history_rows,
             watched_rows=watched_rows,
             comment_likes=comment_likes,
+            args=args,
         ),
         kafka_records=kafka_records,
     )
@@ -1088,6 +1283,73 @@ def export_fixture_files(dataset: GeneratedDataset, fixture_dir: str) -> Path:
     return batch_root
 
 
+def compute_statistics(dataset: GeneratedDataset) -> dict[str, Any]:
+    """Compute various statistics about the generated dataset."""
+    stats: dict[str, Any] = {}
+
+    # Table row counts
+    table_counts: dict[str, int] = {}
+    for table in dataset.pg_tables:
+        table_name = table.table_name.split(".")[-1]  # Remove schema
+        table_counts[table_name] = len(table.rows)
+    stats["table_counts"] = table_counts
+
+    # Rating statistics
+    rating_values: list[float] = []
+    for table in dataset.pg_tables:
+        if table.table_name == "public.ratings":
+            for row in table.rows:
+                rating = row.get("rating")
+                if rating is not None:
+                    rating_values.append(rating)
+    if rating_values:
+        stats["rating_count"] = len(rating_values)
+        stats["rating_avg"] = sum(rating_values) / len(rating_values)
+        stats["rating_min"] = min(rating_values)
+        stats["rating_max"] = max(rating_values)
+        # Distribution (count per integer value)
+        dist: dict[int, int] = {}
+        for r in rating_values:
+            key = int(round(r))
+            dist[key] = dist.get(key, 0) + 1
+        stats["rating_distribution"] = dist
+
+    # Event time range (from Kafka records)
+    timestamps: list[dt.datetime] = []
+    for record in dataset.kafka_records:
+        try:
+            data = json.loads(record.value)
+            event_time_str = data.get("data", {}).get("eventTime")
+            if event_time_str:
+                # Parse ISO format datetime
+                dt_obj = dt.datetime.fromisoformat(event_time_str.replace("Z", "+00:00"))
+                timestamps.append(dt_obj)
+        except (json.JSONDecodeError, ValueError, AttributeError):
+            pass
+    if timestamps:
+        stats["event_time_min"] = min(timestamps)
+        stats["event_time_max"] = max(timestamps)
+        stats["event_time_range_hours"] = (max(timestamps) - min(timestamps)).total_seconds() / 3600
+
+    # User activity (count events per user from Kafka)
+    user_activity: dict[str, int] = {}
+    for record in dataset.kafka_records:
+        try:
+            data = json.loads(record.value)
+            user_id = data.get("data", {}).get("userId")
+            if user_id:
+                user_activity[str(user_id)] = user_activity.get(str(user_id), 0) + 1
+        except (json.JSONDecodeError, ValueError, AttributeError):
+            pass
+    if user_activity:
+        stats["user_count"] = len(user_activity)
+        stats["user_activity_avg"] = sum(user_activity.values()) / len(user_activity)
+        stats["user_activity_min"] = min(user_activity.values())
+        stats["user_activity_max"] = max(user_activity.values())
+
+    return stats
+
+
 def print_summary(dataset: GeneratedDataset, write_mode: str, fixture_root: Path | None) -> None:
     event_type_counts: dict[str, int] = {}
     for record in dataset.kafka_records:
@@ -1104,18 +1366,101 @@ def print_summary(dataset: GeneratedDataset, write_mode: str, fixture_root: Path
     if fixture_root is not None:
         print(f"Fixture output: {fixture_root}")
 
+    # Compute and print additional statistics
+    stats = compute_statistics(dataset)
+
+    print("\n--- Dataset Statistics ---")
+
+    # Table row counts
+    if "table_counts" in stats:
+        print("Table row counts:")
+        for table_name, count in sorted(stats["table_counts"].items()):
+            print(f"  - {table_name}: {count}")
+
+    # Rating statistics
+    if "rating_count" in stats:
+        print(f"Ratings: {stats['rating_count']} total, avg {stats['rating_avg']:.2f}, min {stats['rating_min']:.1f}, max {stats['rating_max']:.1f}")
+        if "rating_distribution" in stats:
+            dist_str = ", ".join(f"{star}★: {count}" for star, count in sorted(stats["rating_distribution"].items()))
+            print(f"  Distribution: {dist_str}")
+
+    # Event time range
+    if "event_time_min" in stats and "event_time_max" in stats:
+        min_time = stats["event_time_min"].strftime("%Y-%m-%d %H:%M:%S")
+        max_time = stats["event_time_max"].strftime("%Y-%m-%d %H:%M:%S")
+        range_hours = stats.get("event_time_range_hours", 0)
+        print(f"Event time range: {min_time} to {max_time} ({range_hours:.1f} hours)")
+
+    # User activity
+    if "user_count" in stats:
+        print(f"Active users: {stats['user_count']}, avg {stats['user_activity_avg']:.1f} events/user, range [{stats['user_activity_min']}-{stats['user_activity_max']}]")
+
+
+def validate_dataset(dataset: GeneratedDataset) -> list[str]:
+    """Validate dataset integrity and return list of warnings/errors."""
+    issues: list[str] = []
+
+    # 1. Check rating values are in valid range
+    for table in dataset.pg_tables:
+        if table.table_name == "public.ratings":
+            for i, row in enumerate(table.rows):
+                rating = row.get("rating")
+                if rating is None:
+                    issues.append(f"Rating row {i} has null rating")
+                elif not (1.0 <= rating <= 5.0):
+                    issues.append(f"Rating row {i} has invalid rating {rating}")
+
+    # 2. Check timestamps are not null for timestamp columns
+    timestamp_tables = ["public.users", "public.favorite_folders", "public.comments",
+                       "public.ratings", "public.favorites", "public.view_history",
+                       "public.watched_movies", "public.comment_likes"]
+    for table in dataset.pg_tables:
+        if table.table_name in timestamp_tables:
+            for i, row in enumerate(table.rows):
+                # Check timestamp columns based on table
+                if table.table_name == "public.users":
+                    if row.get("create_time") is None:
+                        issues.append(f"User {row.get('user_id')} has null create_time")
+                elif table.table_name == "public.comments":
+                    if row.get("comment_time") is None:
+                        issues.append(f"Comment {row.get('comment_id')} has null comment_time")
+                elif table.table_name == "public.ratings":
+                    if row.get("rating_time") is None:
+                        issues.append(f"Rating for user {row.get('user_id')} has null rating_time")
+                # Add more checks as needed
+
+    # 3. Check Kafka records have required fields
+    for i, record in enumerate(dataset.kafka_records):
+        try:
+            value = json.loads(record.value)
+            if "eventId" not in value:
+                issues.append(f"Kafka record {i} missing eventId")
+            if "data" not in value:
+                issues.append(f"Kafka record {i} missing data")
+        except json.JSONDecodeError:
+            issues.append(f"Kafka record {i} has invalid JSON")
+
+    return issues
+
 
 def run() -> None:
     args = parse_args()
     validate_positive_int("user_count", args.user_count)
     validate_positive_int("movie_count", args.movie_count)
     validate_positive_int("events_per_type", args.events_per_type)
+    validate_rating_bias(args.rating_bias)
+    if args.spark_parallelism is not None:
+        validate_positive_int("spark_parallelism", args.spark_parallelism)
 
     config = load_config(args.config)
     spark_config: dict[str, Any] = config["spark"]
     pg_config: dict[str, Any] = config["postgres"]
+    # Apply Spark parallelism if specified
+    if args.spark_parallelism is not None:
+        spark_config["spark.sql.shuffle.partitions"] = args.spark_parallelism
+        spark_config["spark.default.parallelism"] = args.spark_parallelism
     batch_date = dt.date.fromisoformat(args.batch_date)
-    batch_tag = normalize_batch_tag(args.batch_tag or f"dwdsrc_{batch_date.strftime('%Y%m%d')}")
+    batch_tag = normalize_batch_tag(args.batch_tag or f"dwdsrc_{batch_date.strftime('%Y%m%d')}", args.max_identifier_tag_len)
     spark = build_spark_session("movie-generate-dwd-user-event-source-data", spark_config)
     try:
         existing_users = load_existing_users(spark, pg_config, args.user_count)
@@ -1126,7 +1471,19 @@ def run() -> None:
             existing_users=existing_users,
             movies=movies,
             events_per_type=args.events_per_type,
+            args=args,
         )
+
+        # Validate dataset integrity
+        if args.validation_mode != "none":
+            issues = validate_dataset(dataset)
+            if issues:
+                if args.validation_mode == "error":
+                    raise ValueError(f"Data validation failed with {len(issues)} issue(s):\n" + "\n".join(f"  - {issue}" for issue in issues))
+                else:  # warn
+                    print(f"WARNING: Data validation found {len(issues)} issue(s):")
+                    for issue in issues:
+                        print(f"  - {issue}")
 
         fixture_root: Path | None = None
         if args.write_mode in {"fixtures", "both"}:

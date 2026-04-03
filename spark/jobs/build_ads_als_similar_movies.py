@@ -104,10 +104,11 @@ def build_positive_training_frame(
         .where(F.col("als_score") > F.lit(0.0))
         .select("user_id", "movie_id", "als_score")
         .dropDuplicates(["user_id", "movie_id"])
+        .cache()
     )
 
     filtered_df = positive_df
-    for _ in range(2):
+    for iteration in range(2):
         user_support_df = (
             filtered_df.groupBy("user_id")
             .agg(F.count(F.lit(1)).cast("bigint").alias("positive_item_cnt"))
@@ -124,10 +125,16 @@ def build_positive_training_frame(
         )
         filtered_df = filtered_df.join(item_support_df, on="movie_id", how="inner")
 
+        # Cache intermediate result after first iteration to avoid recomputation
+        if iteration == 0:
+            filtered_df = filtered_df.cache()
+            # Force materialization to break lineage
+            filtered_df.count()
+
     movie_support_df = filtered_df.groupBy("movie_id").agg(
         F.count(F.lit(1)).cast("bigint").alias("movie_user_cnt")
     )
-    return filtered_df, movie_support_df
+    return filtered_df, movie_support_df, positive_df
 
 
 def build_index_frame(source_df: DataFrame, key_column: str, index_column: str) -> DataFrame:
@@ -145,9 +152,11 @@ def build_als_training_matrix(
     user_index_df = build_index_frame(training_df, "user_id", "user_idx")
     item_index_df = build_index_frame(training_df, "movie_id", "item_idx")
 
+    # Broadcast join avoids shuffle for typically small index DataFrames
     indexed_df = (
-        training_df.join(user_index_df, on="user_id", how="inner")
-        .join(item_index_df, on="movie_id", how="inner")
+        training_df
+        .join(F.broadcast(user_index_df), on="user_id", how="inner")
+        .join(F.broadcast(item_index_df), on="movie_id", how="inner")
         .select(
             F.col("user_idx").cast("int").alias("user_idx"),
             F.col("item_idx").cast("int").alias("item_idx"),
@@ -193,8 +202,8 @@ def build_item_factor_frame(
     )
 
     return (
-        factor_df.join(item_index_df, on="item_idx", how="inner")
-        .join(movie_support_df, on="movie_id", how="inner")
+        factor_df.join(F.broadcast(item_index_df), on="item_idx", how="inner")
+        .join(F.broadcast(movie_support_df), on="movie_id", how="inner")
         .select(
             F.col("item_idx").cast("int").alias("item_idx"),
             F.col("movie_id").cast("bigint").alias("movie_id"),
@@ -216,10 +225,12 @@ def build_similarity_frame(
     block_pairs = [(left_block_id, right_block_id) for left_block_id in range(effective_block_count) for right_block_id in range(left_block_id, effective_block_count)]
     block_pair_df = spark.createDataFrame(block_pairs, ["left_block_id", "right_block_id"])
 
+    # Use localCheckpoint to break lineage before expensive triple join
+    # This prevents Spark from tracking the full dependency chain and reduces memory pressure
     blocked_df = item_factor_df.withColumn(
         "block_id",
         F.pmod(F.col("item_idx"), F.lit(effective_block_count)).cast("int"),
-    ).cache()
+    ).localCheckpoint(eager=True)
 
     left_df = blocked_df.select(
         F.col("block_id").alias("left_block_id"),
@@ -244,6 +255,7 @@ def build_similarity_frame(
         ")"
     )
 
+    # Broadcast the small block_pair_df to all executors for efficient join
     pair_df = (
         F.broadcast(block_pair_df).alias("bp")
         .join(left_df.alias("left"), F.col("bp.left_block_id") == F.col("left.left_block_id"), how="inner")
@@ -265,6 +277,7 @@ def build_similarity_frame(
         .where(F.col("similarity_score") > F.lit(float(min_similarity_score)))
     )
 
+    # Unpersist the checkpointed DataFrame to free memory
     blocked_df.unpersist()
 
     directed_df = pair_df.select(
@@ -396,7 +409,7 @@ def run() -> None:
         spark.sql("CREATE DATABASE IF NOT EXISTS ads")
 
         source_df = spark.table(source_table).where(F.col("dt") == calc_date)
-        training_df, movie_support_df = build_positive_training_frame(
+        training_df, movie_support_df, positive_df = build_positive_training_frame(
             source_df,
             positive_score_weights=positive_score_weights,
             score_transform_config=score_transform_config,
@@ -407,6 +420,7 @@ def run() -> None:
         movie_support_df = movie_support_df.cache()
 
         if training_df.limit(1).count() == 0:
+            positive_df.unpersist()
             raise ValueError(
                 "No ALS training data after positive-score and support filtering. "
                 f"source_table={source_table}, dt={calc_date}"
@@ -419,6 +433,7 @@ def run() -> None:
 
         item_factor_df = build_item_factor_frame(model, item_index_df, movie_support_df).cache()
         if item_factor_df.limit(1).count() == 0:
+            positive_df.unpersist()
             raise ValueError(
                 "ALS model produced no usable item factors. "
                 f"source_table={source_table}, dt={calc_date}"
@@ -452,6 +467,7 @@ def run() -> None:
         training_matrix_df.unpersist()
         movie_support_df.unpersist()
         training_df.unpersist()
+        positive_df.unpersist()
 
         print(
             "ADS ALS similar movies build finished. "

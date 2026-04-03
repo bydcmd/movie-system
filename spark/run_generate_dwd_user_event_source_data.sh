@@ -14,16 +14,22 @@ Examples:
   bash run_generate_dwd_user_event_source_data.sh 2026-03-31 conf/etl_config.json
   bash run_generate_dwd_user_event_source_data.sh --batch-date 2026-03-31 --write-mode direct --events-per-type 3
   bash run_generate_dwd_user_event_source_data.sh --write-mode fixtures --fixture-dir fixtures/dwd_seed
+  bash run_generate_dwd_user_event_source_data.sh --rating-bias 1.5 --validation-mode error
 
 Arguments:
-  batch-date       Business date, default: today (YYYY-MM-DD)
-  config-path      Config file path, default: conf/etl_config.json
-  user-count       Existing PostgreSQL user sample count, default: 4
-  movie-count      Existing PostgreSQL movie sample count, default: 6
-  events-per-type  Kafka event count per event type, default: 2
-  write-mode       direct, fixtures, both; default: both
-  fixture-dir      Fixture output directory
-  batch-tag        Optional deterministic tag
+  batch-date                  Business date, default: today (YYYY-MM-DD)
+  config-path                 Config file path, default: conf/etl_config.json
+  user-count                  Existing PostgreSQL user sample count, default: 4
+  movie-count                 Existing PostgreSQL movie sample count, default: 6
+  events-per-type             Kafka event count per event type, default: 2
+  write-mode                  direct, fixtures, both; default: both
+  fixture-dir                 Fixture output directory
+  batch-tag                   Optional deterministic tag
+  rating-bias                 Rating bias (-2.0 to 2.0), default: 0.0
+  validation-mode             Validation strictness (none, warn, error), default: warn
+  spark-parallelism           Spark parallelism setting
+  display-registered-user-cap Max registered users to display, default: 24
+  extra-login-user-cap        Extra existing users for login events, default: 2
 EOF
 }
 
@@ -38,6 +44,11 @@ EVENTS_PER_TYPE="2"
 WRITE_MODE="both"
 FIXTURE_DIR="fixtures/dwd_user_event_source_data"
 BATCH_TAG=""
+RATING_BIAS=""
+VALIDATION_MODE="warn"
+SPARK_PARALLELISM=""
+DISPLAY_REGISTERED_USER_CAP="24"
+EXTRA_LOGIN_USER_CAP="2"
 POSITIONAL_ARGS=()
 
 is_date() {
@@ -80,6 +91,26 @@ while [[ $# -gt 0 ]]; do
       ;;
     --batch-tag)
       BATCH_TAG="${2:-}"
+      shift 2
+      ;;
+    --rating-bias)
+      RATING_BIAS="${2:-}"
+      shift 2
+      ;;
+    --validation-mode)
+      VALIDATION_MODE="${2:-}"
+      shift 2
+      ;;
+    --spark-parallelism)
+      SPARK_PARALLELISM="${2:-}"
+      shift 2
+      ;;
+    --display-registered-user-cap)
+      DISPLAY_REGISTERED_USER_CAP="${2:-}"
+      shift 2
+      ;;
+    --extra-login-user-cap)
+      EXTRA_LOGIN_USER_CAP="${2:-}"
       shift 2
       ;;
     *)
@@ -125,6 +156,12 @@ if [[ "${WRITE_MODE}" != "direct" && "${WRITE_MODE}" != "fixtures" && "${WRITE_M
   exit 1
 fi
 
+if [[ "${VALIDATION_MODE}" != "none" && "${VALIDATION_MODE}" != "warn" && "${VALIDATION_MODE}" != "error" ]]; then
+  echo "Invalid validation mode: ${VALIDATION_MODE}" >&2
+  echo "Expected: none, warn, error" >&2
+  exit 1
+fi
+
 CMD=(
   spark-submit
   --master yarn
@@ -138,6 +175,9 @@ CMD=(
   --events-per-type "${EVENTS_PER_TYPE}"
   --write-mode "${WRITE_MODE}"
   --fixture-dir "${FIXTURE_DIR}"
+  --validation-mode "${VALIDATION_MODE}"
+  --display-registered-user-cap "${DISPLAY_REGISTERED_USER_CAP}"
+  --extra-login-user-cap "${EXTRA_LOGIN_USER_CAP}"
 )
 
 if [[ "${WRITE_MODE}" != "fixtures" ]]; then
@@ -154,11 +194,22 @@ if [[ "${WRITE_MODE}" != "fixtures" ]]; then
     --events-per-type "${EVENTS_PER_TYPE}"
     --write-mode "${WRITE_MODE}"
     --fixture-dir "${FIXTURE_DIR}"
+    --validation-mode "${VALIDATION_MODE}"
+    --display-registered-user-cap "${DISPLAY_REGISTERED_USER_CAP}"
+    --extra-login-user-cap "${EXTRA_LOGIN_USER_CAP}"
   )
 fi
 
 if [[ -n "${BATCH_TAG}" ]]; then
   CMD+=(--batch-tag "${BATCH_TAG}")
+fi
+
+if [[ -n "${RATING_BIAS}" ]]; then
+  CMD+=(--rating-bias "${RATING_BIAS}")
+fi
+
+if [[ -n "${SPARK_PARALLELISM}" ]]; then
+  CMD+=(--spark-parallelism "${SPARK_PARALLELISM}")
 fi
 
 printf 'Running command:\n%s\n' "${CMD[*]}"

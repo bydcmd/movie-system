@@ -88,6 +88,26 @@ hive -f ../hive/ods/ods_pg_kafka_ddl.hql
 
 The generator is idempotent for the same `batch-tag`: it first deletes the previously generated rows for that batch and then recreates them with stable IDs.
 
+### Arguments
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--batch-date` | today | Business date (YYYY-MM-DD) |
+| `--config` | required | Config file path |
+| `--user-count` | 4 | Existing PostgreSQL user sample count |
+| `--movie-count` | 6 | Existing PostgreSQL movie sample count |
+| `--events-per-type` | 2 | Kafka event count per event type |
+| `--write-mode` | both | `direct`, `fixtures`, or `both` |
+| `--fixture-dir` | fixtures/dwd_user_event_source_data | Fixture output directory |
+| `--batch-tag` | dwdsrc_YYYYMMDD | Optional deterministic tag |
+| `--rating-bias` | 0.0 | Rating bias (-2.0 to 2.0) |
+| `--validation-mode` | warn | Validation strictness (`none`, `warn`, `error`) |
+| `--spark-parallelism` | (none) | Spark parallelism setting |
+| `--display-registered-user-cap` | 24 | Max registered users to display |
+| `--extra-login-user-cap` | 2 | Extra existing users for login events |
+
+### Examples
+
 Direct write plus fixture export:
 
 ```bash
@@ -100,10 +120,7 @@ bash run_generate_dwd_user_event_source_data.sh \
   --write-mode both
 ```
 
-Here `--movie-count` means how many existing rows to sample from `public.movies`, not how many new movies to create.
-`--user-count` means how many existing rows to sample from `public.users`; additional registered users are still constructed from the generator itself.
-
-Fixture-only export:
+Fixture-only export (no Kafka dependency):
 
 ```bash
 bash run_generate_dwd_user_event_source_data.sh \
@@ -111,6 +128,25 @@ bash run_generate_dwd_user_event_source_data.sh \
   --write-mode fixtures \
   --fixture-dir fixtures/dwd_seed
 ```
+
+With rating bias and strict validation:
+
+```bash
+bash run_generate_dwd_user_event_source_data.sh \
+  --rating-bias 1.5 \
+  --validation-mode error
+```
+
+With custom Spark parallelism:
+
+```bash
+bash run_generate_dwd_user_event_source_data.sh \
+  --spark-parallelism 8 \
+  --events-per-type 10
+```
+
+Here `--movie-count` means how many existing rows to sample from `public.movies`, not how many new movies to create.
+`--user-count` means how many existing rows to sample from `public.users`; additional registered users are still constructed from the generator itself.
 
 Fixture export now also depends on the source PostgreSQL already containing the sampled `public.users` and `public.movies` rows, because those sampled dimensions are not re-exported as generated SQL.
 

@@ -10,7 +10,10 @@ Usage:
   bash run_ads_pg_sync.sh --calc-date YYYY-MM-DD --config conf/etl_config.json --sync-types hot_movies,similar_movies
 
 Notes:
-  --sync-types: Comma-separated list of sync types. Options: hot_movies, similar_movies, all. Default: hot_movies,similar_movies
+  --sync-types: Comma-separated list of sync types.
+    Options: hot_movies, similar_movies, search_funnel, search_keyword_insights,
+             user_funnel, user_retention, genre_preference, all.
+    Default: hot_movies,similar_movies
 
 Examples:
   bash run_ads_pg_sync.sh
