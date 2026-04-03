@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { NEmpty } from 'naive-ui'
 import type { MovieItemVO } from '@/api/model'
@@ -22,6 +23,9 @@ const props = withDefaults(
 
 const router = useRouter()
 
+// Track which movie posters failed to load
+const failedPosterIds = ref<Set<number>>(new Set())
+
 function openMovie(movieId?: number) {
   if (!movieId) {
     return
@@ -30,12 +34,24 @@ function openMovie(movieId?: number) {
   void router.push(`/movie/${movieId}`)
 }
 
-function getPoster(movie: MovieItemVO) {
-  return resolveAssetUrl(movie.cover)
+function getPoster(movie: MovieItemVO): string | null {
+  const url = resolveAssetUrl(movie.cover)
+  // Ensure we don't return empty strings or invalid URLs
+  return url && url.trim() ? url : null
 }
 
 function getGenres(movie: MovieItemVO) {
   return splitCsvLike(movie.genres).slice(0, 3)
+}
+
+function handlePosterError(movieId: number) {
+  if (movieId) {
+    failedPosterIds.value.add(movieId)
+  }
+}
+
+function shouldShowPlaceholder(movie: MovieItemVO): boolean {
+  return !getPoster(movie) || failedPosterIds.value.has(movie.movieId ?? 0)
 }
 </script>
 
@@ -77,8 +93,9 @@ function getGenres(movie: MovieItemVO) {
           @click="openMovie(movie.movieId)"
         >
           <MoviePlaceholder
-            v-if="!getPoster(movie)"
+            v-if="shouldShowPlaceholder(movie)"
             :title="movie.movieName"
+            size="small"
             class="profile-movie-placeholder"
           />
           <img
@@ -87,6 +104,7 @@ function getGenres(movie: MovieItemVO) {
             :alt="movie.movieName"
             class="profile-movie-poster-image"
             loading="lazy"
+            @error="handlePosterError(movie.movieId ?? 0)"
           />
         </button>
 

@@ -7,6 +7,7 @@ import {
   useDeleteRatingsBatch
 } from '@/api/endpoints/rating-management/rating-management'
 import type { MyRatingVO } from '@/api/model'
+import MoviePlaceholder from '@/components/movie/MoviePlaceholder.vue'
 import { formatDateLabel, resolveAssetUrl, truncateText } from '@/utils/profile'
 
 const props = withDefaults(defineProps<{
@@ -27,6 +28,9 @@ const message = useMessage()
 const selectedRatingIds = ref<number[]>([])
 const deletingSelected = ref(false)
 const clearingAll = ref(false)
+
+// Track which rating posters failed to load
+const failedPosterIds = ref<Set<number>>(new Set())
 
 const deleteRatingsBatchMutation = useDeleteRatingsBatch()
 const clearMyRatingsMutation = useClearMyRatings()
@@ -60,6 +64,22 @@ watch(
 function getRatingId(item?: MyRatingVO | null) {
   const candidate = item?.id ?? item?.movieId
   return typeof candidate === 'number' && candidate > 0 ? candidate : null
+}
+
+function getPosterUrl(item?: MyRatingVO | null): string | null {
+  const url = resolveAssetUrl(item?.posterUrl)
+  // Ensure we don't return empty strings or invalid URLs
+  return url && url.trim() ? url : null
+}
+
+function handlePosterError(movieId: number) {
+  if (movieId) {
+    failedPosterIds.value.add(movieId)
+  }
+}
+
+function shouldShowPlaceholder(item?: MyRatingVO | null): boolean {
+  return !getPosterUrl(item) || failedPosterIds.value.has(item?.movieId ?? 0)
 }
 
 function extractErrorMessage(error: unknown): string {
@@ -280,19 +300,20 @@ function confirmClearRatings() {
           class="profile-rating-poster"
           @click="openMovie(item.movieId)"
         >
+          <MoviePlaceholder
+            v-if="shouldShowPlaceholder(item)"
+            :title="item.movieName"
+            size="small"
+            class="profile-rating-poster-image"
+          />
           <img
-            v-if="resolveAssetUrl(item.posterUrl)"
-            :src="resolveAssetUrl(item.posterUrl) || undefined"
+            v-else
+            :src="getPosterUrl(item) || undefined"
             :alt="item.movieName"
             class="profile-rating-poster-image"
             loading="lazy"
+            @error="handlePosterError(item.movieId ?? 0)"
           />
-          <div
-            v-else
-            class="profile-rating-poster-fallback"
-          >
-            评分
-          </div>
         </button>
 
         <div class="profile-rating-content">
