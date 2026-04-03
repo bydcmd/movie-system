@@ -1,6 +1,5 @@
 package com.movie.backend.controller;
 
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import com.movie.backend.common.Result;
 import com.movie.backend.common.TrendPeriod;
 import com.movie.backend.dto.SearchFunnelDTO;
@@ -9,7 +8,6 @@ import com.movie.backend.dto.TrendingMovieDTO;
 import com.movie.backend.dto.UserFunnelDTO;
 import com.movie.backend.dto.UserRetentionDTO;
 import com.movie.backend.entity.Movie;
-import com.movie.backend.entity.User;
 import com.movie.backend.service.AnalyticsService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -40,18 +38,6 @@ public class AnalyticsController {
             @Min(value = 1, message = "返回数量至少为1")
             @Max(value = 100, message = "返回数量最多为100") int limit) {
         return Result.success(analyticsService.getTrendingMovies(period, limit));
-    }
-
-    @Operation(operationId = "getPersonalizedMovies", summary = "猜你喜欢", description = "读取 stats_user_recs 离线个性化推荐；可选登录，未登录/新用户/无离线结果时自动回退到热门日榜。")
-    @GetMapping("/personalized")
-    public Result<List<Movie>> getPersonalizedMovies(
-            @AuthenticationPrincipal User user,
-            @Parameter(name = "limit", description = "返回数量，默认10条，最多100条", example = "10")
-            @RequestParam(defaultValue = "10")
-            @Min(value = 1, message = "返回数量至少为1")
-            @Max(value = 100, message = "返回数量最多为100") int limit) {
-        String userId = user == null ? null : user.getId();
-        return Result.success(analyticsService.getPersonalizedMovies(userId, limit));
     }
 
     @Deprecated

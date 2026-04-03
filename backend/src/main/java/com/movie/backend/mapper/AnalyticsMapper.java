@@ -4,7 +4,6 @@ import com.movie.backend.dto.SearchFunnelDTO;
 import com.movie.backend.dto.SearchKeywordInsightDTO;
 import com.movie.backend.dto.SimilarMovieDTO;
 import com.movie.backend.dto.UserFunnelDTO;
-import com.movie.backend.dto.UserRecDTO;
 import com.movie.backend.dto.UserRetentionDTO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -19,12 +18,6 @@ public interface AnalyticsMapper {
      */
     List<Long> selectHotMovieIds(@Param("period") String period,
                                   @Param("limit") int limit);
-
-    /**
-     * 查询用户个性化推荐
-     */
-    List<UserRecDTO> selectUserRecs(@Param("userId") String userId,
-                                     @Param("limit") int limit);
 
     /**
      * 查询相似电影

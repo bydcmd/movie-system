@@ -12,7 +12,6 @@ import com.movie.backend.entity.Movie;
 import com.movie.backend.entity.Person;
 import com.movie.backend.entity.User;
 import com.movie.backend.service.AdminService;
-import com.movie.backend.service.AnalyticsService;
 import com.movie.backend.service.GenreService;
 import com.movie.backend.service.RegionService;
 import org.junit.jupiter.api.BeforeEach;
@@ -64,9 +63,6 @@ public class AdminControllersTest {
     @InjectMocks
     private AdminRegionController adminRegionController;
 
-    @InjectMocks
-    private AdminRecommendationCacheController adminRecommendationCacheController;
-
     private MockMvc mockMvc;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -80,9 +76,6 @@ public class AdminControllersTest {
     @Mock
     private RegionService regionService;
 
-    @Mock
-    private AnalyticsService analyticsService;
-
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(
@@ -92,8 +85,7 @@ public class AdminControllersTest {
                 adminPersonController,
                 adminCommentController,
                 adminGenreController,
-                adminRegionController,
-                adminRecommendationCacheController
+                adminRegionController
         ).build();
     }
 
