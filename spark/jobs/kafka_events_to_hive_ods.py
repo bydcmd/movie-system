@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
@@ -11,8 +12,16 @@ from pyspark.sql import functions as F
 import _bootstrap  # noqa: F401
 
 from utils.config_loader import load_config
-from utils.hive_utils import add_partitions
 from utils.spark_factory import build_spark_session
+
+
+_TABLE_NAME_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)?$")
+
+
+def _validate_table_name(table_name: str) -> None:
+    """Validate table name to prevent SQL injection."""
+    if not _TABLE_NAME_PATTERN.match(table_name):
+        raise ValueError(f"Invalid table name: {table_name!r}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -99,24 +108,35 @@ def normalize_hadoop_uri(spark: SparkSession, uri: str, option_name: str) -> str
 
 
 def write_micro_batch(batch_df: DataFrame, batch_id: int, sink_path: str, sink_table: str) -> None:
-    partition_rows = batch_df.select("dt", "hh").dropDuplicates().collect()
-    if not partition_rows:
-        return
-
+    """
+    Write a micro-batch to Hive ODS table.
+    
+    Uses MSCK REPAIR TABLE for partition discovery which is more memory-efficient
+    than manually collecting partition keys to the driver.
+    """
+    _validate_table_name(sink_table)
+    
+    # Write partitioned data
     batch_df.write.mode("append").format("orc").partitionBy("dt", "hh").save(sink_path)
-    add_partitions(
-        table_name=sink_table,
-        sink_path=sink_path,
-        partition_specs=[{"dt": row["dt"], "hh": row["hh"]} for row in partition_rows],
-        spark=batch_df.sparkSession,
-    )
-    print(
-        "Kafka micro-batch committed. "
-        f"batch_id={batch_id}, partition_cnt={len(partition_rows)}, sink_table={sink_table}"
-    )
+    
+    # Use MSCK REPAIR TABLE to discover and register all partitions
+    # This avoids collecting partition metadata to driver memory
+    batch_df.sparkSession.sql(f"MSCK REPAIR TABLE {sink_table}")
+    
+    print(f"Kafka micro-batch committed. batch_id={batch_id}, sink_table={sink_table}")
 
 
 def run() -> None:
+    """
+    Run Kafka to Hive ODS streaming job.
+    
+    Memory Configuration Recommendations:
+    - Driver memory: 2-4g (handles partition metadata, not data)
+    - Executor memory: 4-8g with spark.executor.memoryOverhead=1g
+    - spark.sql.shuffle.partitions: Scale to Kafka partition count (e.g., 4-8)
+    - spark.streaming.backpressure.enabled: true for adaptive batch sizing
+    - spark.streaming.kafka.maxRatePerPartition: Limit ingestion rate to prevent spikes
+    """
     args = parse_args()
     config = load_config(args.config)
     spark_config: dict[str, Any] = config["spark"]
@@ -185,6 +205,11 @@ def run() -> None:
         )
         query.awaitTermination()
     finally:
+        # Clear all cached data before stopping Spark
+        try:
+            spark.catalog.clearCache()
+        except Exception:
+            pass
         spark.stop()
 
 

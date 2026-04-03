@@ -102,10 +102,33 @@ if ! is_run_mode "${RUN_MODE}"; then
   exit 1
 fi
 
+# Streaming job memory configuration for 4c8g pseudo-distributed cluster
+# Total memory budget: 8GB - (OS ~0.5G + HDFS/YARN ~2G) = ~5.5GB for Spark
+# - Driver: 1g (minimal, only coordination)
+# - Single executor: 2g with overhead (all data processing happens here)
+# - shuffle.partitions: minimal for small batches
 CMD=(
   spark-submit
   --master yarn
   --deploy-mode client
+  --driver-memory 1g
+  --executor-memory 2g
+  --executor-cores 2
+  --num-executors 1
+  --conf spark.executor.memoryOverhead=512m
+  --conf spark.sql.shuffle.partitions=4
+  --conf spark.sql.adaptive.enabled=true
+  --conf spark.sql.adaptive.coalescePartitions.enabled=true
+  --conf spark.sql.adaptive.advisoryPartitionSizeInBytes=67108864
+  --conf spark.memory.fraction=0.5
+  --conf spark.memory.storageFraction=0.3
+  --conf spark.streaming.backpressure.enabled=true
+  --conf spark.streaming.kafka.maxRatePerPartition=500
+  --conf spark.serializer=org.apache.spark.serializer.KryoSerializer
+  --conf spark.kryoserializer.buffer.max=128m
+  --conf spark.driver.maxResultSize=256m
+  --conf spark.network.timeout=600s
+  --conf spark.executor.heartbeatInterval=60s
   --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.4.2
   jobs/kafka_events_to_hive_ods.py
   --config "${CONFIG_PATH}"
