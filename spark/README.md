@@ -55,16 +55,14 @@ Common wrapper to job mappings:
 - `run_kafka_sync.sh` -> `jobs/kafka_events_to_hive_ods.py`
 - `run_generate_dwd_user_event_source_data.sh` -> `jobs/generate_dwd_user_event_source_data.py`
 - `run_dwd_build.sh` -> `jobs/build_dwd_user_event_wide_di.py`
-- `run_dwd_user_snapshot.sh` -> `jobs/build_dwd_user_snapshot_di.py`
-- `run_dwd_movie_snapshot.sh` -> `jobs/build_dwd_movie_snapshot_di.py`
+- `run_dwd_snapshots.sh` -> `jobs/build_dwd_snapshots_di.py`
 - `run_dws_build.sh` -> `jobs/build_dws_user_movie_metrics_di.py`
 - `run_dws_postgres_interactions.sh` -> `jobs/build_dws_postgres_interactions_1d.py`
 - `run_dws_profiles.sh` -> `jobs/build_dws_user_movie_profiles_1d.py`
 - `run_ads_hot_movies.sh` -> `jobs/build_ads_hot_movies.py`
-- `run_ads_hot_movies_pg_sync.sh` -> `jobs/sync_ads_hot_movies_to_postgres.py`
+- `run_ads_pg_sync.sh` -> `jobs/sync_ads_to_postgres.py`
 - `run_ads_als_similar_movies.sh` -> `jobs/build_ads_als_similar_movies.py`
 - `run_ads_itemcf.sh` -> `jobs/build_ads_itemcf_recommendations.py`
-- `run_ads_itemcf_similar_movies_pg_sync.sh` -> `jobs/sync_ads_itemcf_similar_movies_to_postgres.py`
 - `run_ads_genre_preference.sh` -> `jobs/build_ads_genre_preference_1d.py`
 - `run_ads_search_funnel.sh` -> `jobs/build_ads_search_funnel_1d.py`
 - `run_ads_search_keyword_insights.sh` -> `jobs/build_ads_search_keyword_insights_1d.py`
@@ -183,37 +181,31 @@ spark-submit \
 
 If `--snapshot-date` is omitted, the job resolves the latest common PostgreSQL ODS snapshot partition with `dt <= calc-date`.
 
-Two PostgreSQL-driven DWD snapshot jobs are also available:
+PostgreSQL-driven DWD snapshot job builds both user and movie snapshots in one run:
 
-### 5.1 User snapshot (`dwd.dwd_user_snapshot_di`)
+### 5.1 User and Movie snapshots (`dwd.dwd_user_snapshot_di`, `dwd.dwd_movie_snapshot_di`)
 
-This snapshot intentionally excludes the raw password field and keeps only analytics-safe user profile attributes.
-
-```bash
-spark-submit \
-  --master yarn \
-  --deploy-mode client \
-  jobs/build_dwd_user_snapshot_di.py \
-  --config conf/etl_config.json \
-  --calc-date 2026-02-25 \
-  --snapshot-date 2026-02-25
-```
-
-If `--snapshot-date` is omitted, the job resolves the latest available `ods.ods_pg_users_full.dt` partition with `dt <= calc-date`.
-
-### 5.2 Movie snapshot (`dwd.dwd_movie_snapshot_di`)
+This job builds both user and movie snapshots. The user snapshot intentionally excludes the raw password field and keeps only analytics-safe user profile attributes.
 
 ```bash
 spark-submit \
   --master yarn \
   --deploy-mode client \
-  jobs/build_dwd_movie_snapshot_di.py \
+  jobs/build_dwd_snapshots_di.py \
   --config conf/etl_config.json \
   --calc-date 2026-02-25 \
-  --snapshot-date 2026-02-25
+  --snapshot-date 2026-02-25 \
+  --snapshots user,movie
 ```
 
-If `--snapshot-date` is omitted, the job resolves the latest available `ods.ods_pg_movies_full.dt` partition with `dt <= calc-date`.
+If `--snapshot-date` is omitted, the job resolves the latest available ODS partition with `dt <= calc-date`.
+The `--snapshots` argument controls which snapshots to build: `user`, `movie`, or `all` (default: `user,movie`).
+
+Wrapper script:
+
+```bash
+bash run_dwd_snapshots.sh 2026-02-25 conf/etl_config.json
+```
 
 ## 6) Build DWS aggregates
 
@@ -326,32 +318,42 @@ Optional override top N result rows per period:
 --top-n 200
 ```
 
-Sync ADS hot rankings to PostgreSQL table `public.stats_hot_movies`:
+Sync ADS data to PostgreSQL (hot movies and similar movies):
 
 ```bash
 spark-submit \
   --master yarn \
   --deploy-mode client \
   --packages org.postgresql:postgresql:42.7.3 \
-  jobs/sync_ads_hot_movies_to_postgres.py \
+  jobs/sync_ads_to_postgres.py \
   --config conf/etl_config.json \
-  --calc-date 2026-02-25
+  --calc-date 2026-02-25 \
+  --sync-types hot_movies,similar_movies
 ```
 
-The sync job writes `DAILY`, `WEEKLY`, `MONTHLY`, and `TOTAL` rows from `ads.ads_hot_movies.dt=calc-date`.
-It deletes existing rows for the same `calc_date` before appending, so reruns stay idempotent under the unique key `(movie_id, period_type, calc_date)`.
+The sync job supports two sync types:
+- `hot_movies`: Writes `DAILY`, `WEEKLY`, `MONTHLY`, and `TOTAL` rows from `ads.ads_hot_movies.dt=calc-date` to `public.stats_hot_movies`. It deletes existing rows for the same `calc_date` before appending.
+- `similar_movies`: Writes ItemCF and ALS similar movies from `ads.ads_itemcf_similar_movies.dt=calc-date` to `public.stats_similar_movies`. It deletes existing rows for the configured `similarity_type` values before appending.
+
+The `--sync-types` argument controls which data to sync: `hot_movies`, `similar_movies`, or `all` (default: `hot_movies,similar_movies`).
 
 Wrapper script:
 
 ```bash
-bash run_ads_hot_movies_pg_sync.sh 2026-02-25 conf/etl_config.json
+bash run_ads_pg_sync.sh 2026-02-25 conf/etl_config.json
 ```
 
-Important:
+To sync only hot movies:
 
-- `ads.source_type=movie_metric_daily` is the recommended mode when weekly and monthly rankings must reflect the true recent 7/30 day windows; in this mode `TOTAL` aggregates all available daily partitions up to `calc-date`.
-- `ads.source_type=movie_metric_snapshot` still labels one full snapshot as `DAILY / WEEKLY / MONTHLY / TOTAL` for compatibility, but those periods share the same full-data snapshot metrics.
-- Old Hive partitions generated before this change may still only contain `period_type='SNAPSHOT'`; rebuild those dates before syncing them to PostgreSQL.
+```bash
+bash run_ads_pg_sync.sh 2026-02-25 conf/etl_config.json --sync-types hot_movies
+```
+
+To sync only similar movies:
+
+```bash
+bash run_ads_pg_sync.sh 2026-02-25 conf/etl_config.json --sync-types similar_movies
+```
 
 ## 8) Build more ADS reports
 
@@ -477,27 +479,6 @@ Wrapper script:
 
 ```bash
 bash run_ads_als_similar_movies.sh 2026-02-25 conf/etl_config.json --top-k 80
-```
-
-Sync ADS ItemCF similar movies to PostgreSQL table `public.stats_similar_movies`:
-
-```bash
-spark-submit \
-  --master yarn \
-  --deploy-mode client \
-  --packages org.postgresql:postgresql:42.7.3 \
-  jobs/sync_ads_itemcf_similar_movies_to_postgres.py \
-  --config conf/etl_config.json \
-  --calc-date 2026-02-25
-```
-
-The sync job writes rows from `ads.ads_itemcf_similar_movies.dt=calc-date`.
-It deletes existing rows for the configured `similarity_type` values first (default: `2` for ItemCF and `3` for ALS similar movies) and then appends the new snapshot, so reruns stay idempotent under the unique key `(movie_id, similar_movie_id, similarity_type)`.
-
-Wrapper script:
-
-```bash
-bash run_ads_itemcf_similar_movies_pg_sync.sh 2026-02-25 conf/etl_config.json
 ```
 
 ## 10) Build search & recommendation mining reports

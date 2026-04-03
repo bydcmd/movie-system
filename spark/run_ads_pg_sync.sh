@@ -5,15 +5,20 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  bash run_ads_hot_movies_pg_sync.sh [calc-date] [config-path]
-  bash run_ads_hot_movies_pg_sync.sh [config-path]
-  bash run_ads_hot_movies_pg_sync.sh --calc-date YYYY-MM-DD --config conf/etl_config.json
+  bash run_ads_pg_sync.sh [calc-date] [config-path]
+  bash run_ads_pg_sync.sh [config-path]
+  bash run_ads_pg_sync.sh --calc-date YYYY-MM-DD --config conf/etl_config.json --sync-types hot_movies,similar_movies
+
+Notes:
+  --sync-types: Comma-separated list of sync types. Options: hot_movies, similar_movies, all. Default: hot_movies,similar_movies
 
 Examples:
-  bash run_ads_hot_movies_pg_sync.sh
-  bash run_ads_hot_movies_pg_sync.sh 2026-03-25
-  bash run_ads_hot_movies_pg_sync.sh conf/etl_config.dev.json
-  bash run_ads_hot_movies_pg_sync.sh 2026-03-25 conf/etl_config.dev.json
+  bash run_ads_pg_sync.sh
+  bash run_ads_pg_sync.sh 2026-03-25
+  bash run_ads_pg_sync.sh conf/etl_config.dev.json
+  bash run_ads_pg_sync.sh 2026-03-25 conf/etl_config.dev.json
+  bash run_ads_pg_sync.sh --sync-types hot_movies
+  bash run_ads_pg_sync.sh --sync-types similar_movies
 EOF
 }
 
@@ -22,6 +27,7 @@ cd "${SCRIPT_DIR}"
 
 CALC_DATE="$(date +%F)"
 CONFIG_PATH="conf/etl_config.json"
+SYNC_TYPES="hot_movies,similar_movies"
 POSITIONAL_ARGS=()
 
 is_date() {
@@ -40,6 +46,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --config)
       CONFIG_PATH="${2:-}"
+      shift 2
+      ;;
+    --sync-types)
+      SYNC_TYPES="${2:-}"
       shift 2
       ;;
     *)
@@ -84,9 +94,10 @@ CMD=(
   --master yarn
   --deploy-mode client
   --packages org.postgresql:postgresql:42.7.3
-  jobs/sync_ads_hot_movies_to_postgres.py
+  jobs/sync_ads_to_postgres.py
   --config "${CONFIG_PATH}"
   --calc-date "${CALC_DATE}"
+  --sync-types "${SYNC_TYPES}"
 )
 
 printf 'Running command:\n%s\n' "${CMD[*]}"

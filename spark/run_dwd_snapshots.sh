@@ -5,15 +5,13 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  bash run_ads_itemcf_similar_movies_pg_sync.sh [calc-date] [config-path]
-  bash run_ads_itemcf_similar_movies_pg_sync.sh [config-path]
-  bash run_ads_itemcf_similar_movies_pg_sync.sh --calc-date YYYY-MM-DD --config conf/etl_config.json
+  bash run_dwd_snapshots.sh [calc-date] [config-path] [snapshot-date]
+  bash run_dwd_snapshots.sh [config-path]
+  bash run_dwd_snapshots.sh --calc-date YYYY-MM-DD --config conf/etl_config.json --snapshot-date YYYY-MM-DD --snapshots user,movie
 
-Examples:
-  bash run_ads_itemcf_similar_movies_pg_sync.sh
-  bash run_ads_itemcf_similar_movies_pg_sync.sh 2026-03-25
-  bash run_ads_itemcf_similar_movies_pg_sync.sh conf/etl_config.dev.json
-  bash run_ads_itemcf_similar_movies_pg_sync.sh 2026-03-25 conf/etl_config.dev.json
+Notes:
+  If snapshot-date is omitted, the job uses the latest available ODS dt partition on or before calc-date.
+  --snapshots: Comma-separated list of snapshots to build. Options: user, movie, all. Default: user,movie
 EOF
 }
 
@@ -22,6 +20,8 @@ cd "${SCRIPT_DIR}"
 
 CALC_DATE="$(date +%F)"
 CONFIG_PATH="conf/etl_config.json"
+SNAPSHOT_DATE=""
+SNAPSHOTS="user,movie"
 POSITIONAL_ARGS=()
 
 is_date() {
@@ -40,6 +40,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --config)
       CONFIG_PATH="${2:-}"
+      shift 2
+      ;;
+    --snapshot-date)
+      SNAPSHOT_DATE="${2:-}"
+      shift 2
+      ;;
+    --snapshots)
+      SNAPSHOTS="${2:-}"
       shift 2
       ;;
     *)
@@ -63,6 +71,11 @@ case "${#POSITIONAL_ARGS[@]}" in
     CALC_DATE="${POSITIONAL_ARGS[0]}"
     CONFIG_PATH="${POSITIONAL_ARGS[1]}"
     ;;
+  3)
+    CALC_DATE="${POSITIONAL_ARGS[0]}"
+    CONFIG_PATH="${POSITIONAL_ARGS[1]}"
+    SNAPSHOT_DATE="${POSITIONAL_ARGS[2]}"
+    ;;
   *)
     usage
     exit 1
@@ -83,11 +96,15 @@ CMD=(
   spark-submit
   --master yarn
   --deploy-mode client
-  --packages org.postgresql:postgresql:42.7.3
-  jobs/sync_ads_itemcf_similar_movies_to_postgres.py
+  jobs/build_dwd_snapshots_di.py
   --config "${CONFIG_PATH}"
   --calc-date "${CALC_DATE}"
+  --snapshots "${SNAPSHOTS}"
 )
+
+if [[ -n "${SNAPSHOT_DATE}" ]]; then
+  CMD+=(--snapshot-date "${SNAPSHOT_DATE}")
+fi
 
 printf 'Running command:\n%s\n' "${CMD[*]}"
 "${CMD[@]}"
