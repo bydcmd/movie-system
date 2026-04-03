@@ -6,9 +6,6 @@ import {
   useGetUserListAdmin,
   useUnfreezeUserAdmin
 } from '@/api/endpoints/admin-user-management/admin-user-management'
-import {
-  useRefreshPersonalizedRecommendationsByUserAdmin
-} from '@/api/endpoints/admin-recommendation-cache-management/admin-recommendation-cache-management'
 import type {
   GetUserListAdminParams,
   PageInfoUser,
@@ -77,7 +74,6 @@ export function useAdminUsers() {
   const freezeUserMutation = useFreezeUserAdmin()
   const unfreezeUserMutation = useUnfreezeUserAdmin()
   const deleteUserMutation = useDeleteUserAdmin()
-  const refreshUserRecommendationsMutation = useRefreshPersonalizedRecommendationsByUserAdmin()
 
   const page = computed(() => normalizePage<User>(userQuery.data.value))
   const users = computed(() => page.value.list)
@@ -212,10 +208,6 @@ export function useAdminUsers() {
 
   function isDeletingUser(userId?: string | null): boolean {
     return Boolean(userId && pendingDeletedUserId.value === userId)
-  }
-
-  function isRefreshingUserRecommendations(userId?: string | null): boolean {
-    return Boolean(userId && pendingRefreshUserId.value === userId)
   }
 
   function isFreezingUser(userId?: string | null): boolean {
@@ -398,28 +390,6 @@ export function useAdminUsers() {
     })
   }
 
-  async function refreshUserRecommendations(user: User) {
-    const userId = user.id?.trim()
-    if (!userId) {
-      message.warning('用户 ID 无效，无法刷新推荐缓存')
-      return
-    }
-
-    pendingRefreshUserId.value = userId
-
-    try {
-      await refreshUserRecommendationsMutation.mutateAsync({ targetUserId: userId })
-      message.success(`已清除 ${user.nickname || userId} 的猜你喜欢缓存`)
-    } catch (error) {
-      console.error('Failed to refresh user recommendations:', error)
-      if (!extractAdminErrorMessage(error)) {
-        message.error('刷新用户推荐缓存失败，请稍后再试')
-      }
-    } finally {
-      pendingRefreshUserId.value = null
-    }
-  }
-
   return {
     state,
     users,
@@ -443,9 +413,7 @@ export function useAdminUsers() {
     refreshUsers,
     requestToggleUserStatus,
     requestDeleteUser,
-    refreshUserRecommendations,
     isDeletingUser,
-    isRefreshingUserRecommendations,
     isFreezingUser,
     isUnfreezingUser
   }

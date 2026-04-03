@@ -36,9 +36,7 @@ const {
   refreshUsers,
   requestToggleUserStatus,
   requestDeleteUser,
-  refreshUserRecommendations,
   isDeletingUser,
-  isRefreshingUserRecommendations,
   isFreezingUser,
   isUnfreezingUser
 } = useAdminUsers()
