@@ -360,6 +360,14 @@
         ORDER BY year DESC
     </select>
 
+    <select id="selectByPersonId" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM movies
+        WHERE actors @> ('[{"id": "' || #{personId} || '"}]')::jsonb
+           OR directors @> ('[{"id": "' || #{personId} || '"}]')::jsonb
+        ORDER BY year DESC
+    </select>
+
     <select id="selectByIds" resultMap="BaseResultMap">
         SELECT <include refid="Base_Column_List"/>
         FROM movies

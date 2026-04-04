@@ -15,6 +15,8 @@ const AdminDashboardView = () => import('@/views/admin/DashboardView.vue')
 const UserManagementView = () => import('@/views/admin/UserManagementView.vue')
 const CommentManagementView = () => import('@/views/admin/CommentManagementView.vue')
 const MovieManagementView = () => import('@/views/admin/MovieManagementView.vue')
+const GenreManagementView = () => import('@/views/admin/GenreManagementView.vue')
+const RegionManagementView = () => import('@/views/admin/RegionManagementView.vue')
 const ForbiddenView = () => import('@/views/ForbiddenView.vue')
 
 declare module 'vue-router' {
@@ -130,6 +132,24 @@ const router = createRouter({
           meta: {
             adminTitle: '电影管理',
             adminDescription: '检索电影信息，快速核对封面、简介、评分和分类数据。'
+          }
+        },
+        {
+          path: 'genres',
+          name: 'admin-genres',
+          component: GenreManagementView,
+          meta: {
+            adminTitle: '类型管理',
+            adminDescription: '管理电影类型分类，支持新增、编辑和删除操作。'
+          }
+        },
+        {
+          path: 'regions',
+          name: 'admin-regions',
+          component: RegionManagementView,
+          meta: {
+            adminTitle: '地区管理',
+            adminDescription: '管理电影地区分类，支持新增、编辑和删除操作。'
           }
         }
       ]

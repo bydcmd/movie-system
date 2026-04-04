@@ -89,6 +89,11 @@ public interface MovieMapper {
      * 根据影人名称查询其参与的电影
      */
     List<Movie> selectByPersonName(@Param("personName") String personName);
+    
+    /**
+     * 根据影人ID查询其参与的电影（演员或导演）
+     */
+    List<Movie> selectByPersonId(@Param("personId") String personId);
 
     /**
      * 根据ID列表批量查询电影（保持传入顺序）

@@ -49,7 +49,7 @@ public class PersonController {
     @Operation(operationId = "getPersonMovies", summary = "获取影人相关电影", description = "查找该影人参与（导演或出演）的所有电影")
     @GetMapping("/{id}/movies")
     public Result<List<Movie>> getMovies(
-            @Parameter(description = "影人ID", required = true) @PathVariable @Min(1) Long id) {
+            @Parameter(description = "影人ID", required = true, example = "1054521") @PathVariable @Min(1) Long id) {
         return Result.success(personService.getMovies(id));
     }
 }

@@ -12,7 +12,7 @@
  Target Server Version : 170007 (170007)
  File Encoding         : 65001
 
- Date: 02/04/2026 15:33:31
+ Date: 04/04/2026 22:51:28
 */
 
 
@@ -150,10 +150,10 @@ START 1
 CACHE 1;
 
 -- ----------------------------
--- Sequence structure for stats_hidden_gems_id_seq
+-- Sequence structure for stats_genre_preference_1d_id_seq
 -- ----------------------------
-DROP SEQUENCE IF EXISTS "public"."stats_hidden_gems_id_seq";
-CREATE SEQUENCE "public"."stats_hidden_gems_id_seq" 
+DROP SEQUENCE IF EXISTS "public"."stats_genre_preference_1d_id_seq";
+CREATE SEQUENCE "public"."stats_genre_preference_1d_id_seq" 
 INCREMENT 1
 MINVALUE  1
 MAXVALUE 9223372036854775807
@@ -172,10 +172,65 @@ START 1
 CACHE 1;
 
 -- ----------------------------
+-- Sequence structure for stats_search_funnel_1d_id_seq
+-- ----------------------------
+DROP SEQUENCE IF EXISTS "public"."stats_search_funnel_1d_id_seq";
+CREATE SEQUENCE "public"."stats_search_funnel_1d_id_seq" 
+INCREMENT 1
+MINVALUE  1
+MAXVALUE 9223372036854775807
+START 1
+CACHE 1;
+
+-- ----------------------------
+-- Sequence structure for stats_search_keyword_insights_1d_id_seq
+-- ----------------------------
+DROP SEQUENCE IF EXISTS "public"."stats_search_keyword_insights_1d_id_seq";
+CREATE SEQUENCE "public"."stats_search_keyword_insights_1d_id_seq" 
+INCREMENT 1
+MINVALUE  1
+MAXVALUE 9223372036854775807
+START 1
+CACHE 1;
+
+-- ----------------------------
 -- Sequence structure for stats_similar_movies_id_seq
 -- ----------------------------
 DROP SEQUENCE IF EXISTS "public"."stats_similar_movies_id_seq";
 CREATE SEQUENCE "public"."stats_similar_movies_id_seq" 
+INCREMENT 1
+MINVALUE  1
+MAXVALUE 9223372036854775807
+START 1
+CACHE 1;
+
+-- ----------------------------
+-- Sequence structure for stats_user_funnel_1d_id_seq
+-- ----------------------------
+DROP SEQUENCE IF EXISTS "public"."stats_user_funnel_1d_id_seq";
+CREATE SEQUENCE "public"."stats_user_funnel_1d_id_seq" 
+INCREMENT 1
+MINVALUE  1
+MAXVALUE 9223372036854775807
+START 1
+CACHE 1;
+
+-- ----------------------------
+-- Sequence structure for stats_user_recs_id_seq
+-- ----------------------------
+DROP SEQUENCE IF EXISTS "public"."stats_user_recs_id_seq";
+CREATE SEQUENCE "public"."stats_user_recs_id_seq" 
+INCREMENT 1
+MINVALUE  1
+MAXVALUE 9223372036854775807
+START 1
+CACHE 1;
+
+-- ----------------------------
+-- Sequence structure for stats_user_retention_id_seq
+-- ----------------------------
+DROP SEQUENCE IF EXISTS "public"."stats_user_retention_id_seq";
+CREATE SEQUENCE "public"."stats_user_retention_id_seq" 
 INCREMENT 1
 MINVALUE  1
 MAXVALUE 9223372036854775807
@@ -500,20 +555,32 @@ COMMENT ON COLUMN "public"."regions"."create_time" IS '创建时间';
 COMMENT ON TABLE "public"."regions" IS '电影地区表';
 
 -- ----------------------------
--- Table structure for stats_hidden_gems
+-- Table structure for stats_genre_preference_1d
 -- ----------------------------
-DROP TABLE IF EXISTS "public"."stats_hidden_gems";
-CREATE TABLE "public"."stats_hidden_gems" (
-  "id" int8 NOT NULL DEFAULT nextval('stats_hidden_gems_id_seq'::regclass),
-  "movie_id" int8 NOT NULL,
-  "reason" varchar(255) COLLATE "pg_catalog"."default" DEFAULT NULL::character varying,
+DROP TABLE IF EXISTS "public"."stats_genre_preference_1d";
+CREATE TABLE "public"."stats_genre_preference_1d" (
+  "id" int8 NOT NULL DEFAULT nextval('stats_genre_preference_1d_id_seq'::regclass),
+  "genre" varchar(100) COLLATE "pg_catalog"."default" NOT NULL,
+  "rank_no" int4 NOT NULL,
+  "movie_cnt" int8 NOT NULL DEFAULT 0,
+  "view_pv" int8 NOT NULL DEFAULT 0,
+  "view_uv" int8 NOT NULL DEFAULT 0,
+  "rating_cnt" int8 NOT NULL DEFAULT 0,
+  "watched_cnt" int8 NOT NULL DEFAULT 0,
+  "hot_score_sum" numeric(18,4),
   "calc_date" date NOT NULL
 )
 ;
-COMMENT ON COLUMN "public"."stats_hidden_gems"."movie_id" IS '电影ID';
-COMMENT ON COLUMN "public"."stats_hidden_gems"."reason" IS '上榜理由(如: 9.0分但在本站仅100人看过)';
-COMMENT ON COLUMN "public"."stats_hidden_gems"."calc_date" IS '计算/上榜日期(用于区分周次)';
-COMMENT ON TABLE "public"."stats_hidden_gems" IS '冷门佳作推荐榜(每周更新)';
+COMMENT ON COLUMN "public"."stats_genre_preference_1d"."genre" IS '类型名称';
+COMMENT ON COLUMN "public"."stats_genre_preference_1d"."rank_no" IS '排名(按热度分数降序)';
+COMMENT ON COLUMN "public"."stats_genre_preference_1d"."movie_cnt" IS '该类型电影数量';
+COMMENT ON COLUMN "public"."stats_genre_preference_1d"."view_pv" IS '总浏览量';
+COMMENT ON COLUMN "public"."stats_genre_preference_1d"."view_uv" IS '独立访客数';
+COMMENT ON COLUMN "public"."stats_genre_preference_1d"."rating_cnt" IS '评分总数';
+COMMENT ON COLUMN "public"."stats_genre_preference_1d"."watched_cnt" IS '标记看过总数';
+COMMENT ON COLUMN "public"."stats_genre_preference_1d"."hot_score_sum" IS '热度分数总和';
+COMMENT ON COLUMN "public"."stats_genre_preference_1d"."calc_date" IS '计算日期';
+COMMENT ON TABLE "public"."stats_genre_preference_1d" IS '类型偏好分析统计表(每日更新)';
 
 -- ----------------------------
 -- Table structure for stats_hot_movies
@@ -535,23 +602,76 @@ COMMENT ON COLUMN "public"."stats_hot_movies"."calc_date" IS '计算日期 (例�
 COMMENT ON TABLE "public"."stats_hot_movies" IS '电影热度统计表(Spark离线计算结果)';
 
 -- ----------------------------
--- Table structure for stats_movie_analysis
+-- Table structure for stats_search_funnel_1d
 -- ----------------------------
-DROP TABLE IF EXISTS "public"."stats_movie_analysis";
-CREATE TABLE "public"."stats_movie_analysis" (
-  "movie_id" int8 NOT NULL,
-  "sentiment_score" numeric(3,2) DEFAULT NULL::numeric,
-  "positive_rate" numeric(5,2) DEFAULT NULL::numeric,
-  "keywords" jsonb,
-  "update_time" timestamp(6) DEFAULT CURRENT_TIMESTAMP
+DROP TABLE IF EXISTS "public"."stats_search_funnel_1d";
+CREATE TABLE "public"."stats_search_funnel_1d" (
+  "id" int8 NOT NULL DEFAULT nextval('stats_search_funnel_1d_id_seq'::regclass),
+  "search_user_cnt" int8 NOT NULL DEFAULT 0,
+  "search_cnt" int8 NOT NULL DEFAULT 0,
+  "search_with_result_cnt" int8 NOT NULL DEFAULT 0,
+  "search_zero_result_cnt" int8 NOT NULL DEFAULT 0,
+  "after_search_view_user_cnt" int8 NOT NULL DEFAULT 0,
+  "after_search_rating_user_cnt" int8 NOT NULL DEFAULT 0,
+  "after_search_favorite_user_cnt" int8 NOT NULL DEFAULT 0,
+  "after_search_watched_user_cnt" int8 NOT NULL DEFAULT 0,
+  "search_to_view_rate" numeric(10,4),
+  "view_to_watched_rate" numeric(10,4),
+  "search_to_rating_rate" numeric(10,4),
+  "calc_date" date NOT NULL
 )
 ;
-COMMENT ON COLUMN "public"."stats_movie_analysis"."movie_id" IS '电影ID';
-COMMENT ON COLUMN "public"."stats_movie_analysis"."sentiment_score" IS '情感综合评分(0.00-1.00)';
-COMMENT ON COLUMN "public"."stats_movie_analysis"."positive_rate" IS '好评率(百分比)';
-COMMENT ON COLUMN "public"."stats_movie_analysis"."keywords" IS '高频关键词(JSON格式,如 ["剧情反转","特效炸裂"])';
-COMMENT ON COLUMN "public"."stats_movie_analysis"."update_time" IS '更新时间';
-COMMENT ON TABLE "public"."stats_movie_analysis" IS '电影情感分析与关键词统计表';
+COMMENT ON COLUMN "public"."stats_search_funnel_1d"."search_user_cnt" IS '搜索用户数';
+COMMENT ON COLUMN "public"."stats_search_funnel_1d"."search_cnt" IS '搜索总次数';
+COMMENT ON COLUMN "public"."stats_search_funnel_1d"."search_with_result_cnt" IS '有结果的搜索次数';
+COMMENT ON COLUMN "public"."stats_search_funnel_1d"."search_zero_result_cnt" IS '零结果搜索次数';
+COMMENT ON COLUMN "public"."stats_search_funnel_1d"."after_search_view_user_cnt" IS '搜索后浏览详情的用户数';
+COMMENT ON COLUMN "public"."stats_search_funnel_1d"."after_search_rating_user_cnt" IS '搜索后评分的用户数';
+COMMENT ON COLUMN "public"."stats_search_funnel_1d"."after_search_favorite_user_cnt" IS '搜索后收藏的用户数';
+COMMENT ON COLUMN "public"."stats_search_funnel_1d"."after_search_watched_user_cnt" IS '搜索后标记看过的用户数';
+COMMENT ON COLUMN "public"."stats_search_funnel_1d"."search_to_view_rate" IS '搜索到浏览转化率';
+COMMENT ON COLUMN "public"."stats_search_funnel_1d"."view_to_watched_rate" IS '浏览到看过转化率';
+COMMENT ON COLUMN "public"."stats_search_funnel_1d"."search_to_rating_rate" IS '搜索到评分转化率';
+COMMENT ON COLUMN "public"."stats_search_funnel_1d"."calc_date" IS '计算日期';
+COMMENT ON TABLE "public"."stats_search_funnel_1d" IS '搜索漏斗分析统计表(每日更新)';
+
+-- ----------------------------
+-- Table structure for stats_search_keyword_insights_1d
+-- ----------------------------
+DROP TABLE IF EXISTS "public"."stats_search_keyword_insights_1d";
+CREATE TABLE "public"."stats_search_keyword_insights_1d" (
+  "id" int8 NOT NULL DEFAULT nextval('stats_search_keyword_insights_1d_id_seq'::regclass),
+  "search_keyword" varchar(500) COLLATE "pg_catalog"."default" NOT NULL,
+  "rank_no" int4 NOT NULL,
+  "search_cnt" int8 NOT NULL DEFAULT 0,
+  "search_user_cnt" int8 NOT NULL DEFAULT 0,
+  "zero_result_cnt" int8 NOT NULL DEFAULT 0,
+  "zero_result_rate" numeric(10,4),
+  "avg_result_count" numeric(10,2),
+  "after_search_view_user_cnt" int8 NOT NULL DEFAULT 0,
+  "after_search_watch_user_cnt" int8 NOT NULL DEFAULT 0,
+  "after_search_rating_user_cnt" int8 NOT NULL DEFAULT 0,
+  "search_to_view_rate" numeric(10,4),
+  "view_to_watch_rate" numeric(10,4),
+  "problem_score" numeric(10,4),
+  "calc_date" date NOT NULL
+)
+;
+COMMENT ON COLUMN "public"."stats_search_keyword_insights_1d"."search_keyword" IS '搜索关键词';
+COMMENT ON COLUMN "public"."stats_search_keyword_insights_1d"."rank_no" IS '排名(按问题分数降序)';
+COMMENT ON COLUMN "public"."stats_search_keyword_insights_1d"."search_cnt" IS '搜索次数';
+COMMENT ON COLUMN "public"."stats_search_keyword_insights_1d"."search_user_cnt" IS '搜索用户数';
+COMMENT ON COLUMN "public"."stats_search_keyword_insights_1d"."zero_result_cnt" IS '零结果次数';
+COMMENT ON COLUMN "public"."stats_search_keyword_insights_1d"."zero_result_rate" IS '零结果率';
+COMMENT ON COLUMN "public"."stats_search_keyword_insights_1d"."avg_result_count" IS '平均结果数';
+COMMENT ON COLUMN "public"."stats_search_keyword_insights_1d"."after_search_view_user_cnt" IS '搜索后浏览用户数';
+COMMENT ON COLUMN "public"."stats_search_keyword_insights_1d"."after_search_watch_user_cnt" IS '搜索后观看用户数';
+COMMENT ON COLUMN "public"."stats_search_keyword_insights_1d"."after_search_rating_user_cnt" IS '搜索后评分用户数';
+COMMENT ON COLUMN "public"."stats_search_keyword_insights_1d"."search_to_view_rate" IS '搜索到浏览转化率';
+COMMENT ON COLUMN "public"."stats_search_keyword_insights_1d"."view_to_watch_rate" IS '浏览到观看转化率';
+COMMENT ON COLUMN "public"."stats_search_keyword_insights_1d"."problem_score" IS '问题分数(零结果率和低转化加权)';
+COMMENT ON COLUMN "public"."stats_search_keyword_insights_1d"."calc_date" IS '计算日期';
+COMMENT ON TABLE "public"."stats_search_keyword_insights_1d" IS '搜索关键词洞察统计表(每日更新)';
 
 -- ----------------------------
 -- Table structure for stats_similar_movies
@@ -570,6 +690,83 @@ COMMENT ON COLUMN "public"."stats_similar_movies"."similar_movie_id" IS '相似�
 COMMENT ON COLUMN "public"."stats_similar_movies"."similarity_score" IS '相似度分值';
 COMMENT ON COLUMN "public"."stats_similar_movies"."similarity_type" IS '类型: 1-内容相似(标签/演员), 2-协同过滤相似(Item-based)';
 COMMENT ON TABLE "public"."stats_similar_movies" IS '电影相似度关联表(用于详情页推荐)';
+
+-- ----------------------------
+-- Table structure for stats_user_funnel_1d
+-- ----------------------------
+DROP TABLE IF EXISTS "public"."stats_user_funnel_1d";
+CREATE TABLE "public"."stats_user_funnel_1d" (
+  "id" int8 NOT NULL DEFAULT nextval('stats_user_funnel_1d_id_seq'::regclass),
+  "total_active_users" int8 NOT NULL DEFAULT 0,
+  "view_users" int8 NOT NULL DEFAULT 0,
+  "rating_users" int8 NOT NULL DEFAULT 0,
+  "comment_users" int8 NOT NULL DEFAULT 0,
+  "favorite_users" int8 NOT NULL DEFAULT 0,
+  "favorite_folder_action_users" int8 NOT NULL DEFAULT 0,
+  "watched_users" int8 NOT NULL DEFAULT 0,
+  "view_to_rating_rate" numeric(10,4),
+  "rating_to_comment_rate" numeric(10,4),
+  "comment_to_favorite_rate" numeric(10,4),
+  "favorite_to_watched_rate" numeric(10,4),
+  "calc_date" date NOT NULL
+)
+;
+COMMENT ON COLUMN "public"."stats_user_funnel_1d"."total_active_users" IS '活跃用户总数';
+COMMENT ON COLUMN "public"."stats_user_funnel_1d"."view_users" IS '浏览用户数';
+COMMENT ON COLUMN "public"."stats_user_funnel_1d"."rating_users" IS '评分用户数';
+COMMENT ON COLUMN "public"."stats_user_funnel_1d"."comment_users" IS '评论用户数';
+COMMENT ON COLUMN "public"."stats_user_funnel_1d"."favorite_users" IS '收藏用户数';
+COMMENT ON COLUMN "public"."stats_user_funnel_1d"."favorite_folder_action_users" IS '收藏夹操作用户数';
+COMMENT ON COLUMN "public"."stats_user_funnel_1d"."watched_users" IS '看过用户数';
+COMMENT ON COLUMN "public"."stats_user_funnel_1d"."view_to_rating_rate" IS '浏览到评分转化率';
+COMMENT ON COLUMN "public"."stats_user_funnel_1d"."rating_to_comment_rate" IS '评分到评论转化率';
+COMMENT ON COLUMN "public"."stats_user_funnel_1d"."comment_to_favorite_rate" IS '评论到收藏转化率';
+COMMENT ON COLUMN "public"."stats_user_funnel_1d"."favorite_to_watched_rate" IS '收藏到看过转化率';
+COMMENT ON COLUMN "public"."stats_user_funnel_1d"."calc_date" IS '计算日期';
+COMMENT ON TABLE "public"."stats_user_funnel_1d" IS '用户漏斗分析统计表(每日更新)';
+
+-- ----------------------------
+-- Table structure for stats_user_recs
+-- ----------------------------
+DROP TABLE IF EXISTS "public"."stats_user_recs";
+CREATE TABLE "public"."stats_user_recs" (
+  "id" int8 NOT NULL DEFAULT nextval('stats_user_recs_id_seq'::regclass),
+  "user_id" varchar(100) COLLATE "pg_catalog"."default" NOT NULL,
+  "movie_id" int8 NOT NULL,
+  "score" float8 NOT NULL DEFAULT 0,
+  "algorithm_type" varchar(20) COLLATE "pg_catalog"."default" DEFAULT 'ALS'::character varying,
+  "calc_time" timestamp(6) DEFAULT CURRENT_TIMESTAMP
+)
+;
+COMMENT ON COLUMN "public"."stats_user_recs"."id" IS '主键ID';
+COMMENT ON COLUMN "public"."stats_user_recs"."user_id" IS '用户ID';
+COMMENT ON COLUMN "public"."stats_user_recs"."movie_id" IS '推荐电影ID';
+COMMENT ON COLUMN "public"."stats_user_recs"."score" IS '推荐匹配度/预测评分';
+COMMENT ON COLUMN "public"."stats_user_recs"."algorithm_type" IS '算法类型: ALS, UserCF, ItemCF';
+COMMENT ON COLUMN "public"."stats_user_recs"."calc_time" IS '计算时间';
+COMMENT ON TABLE "public"."stats_user_recs" IS '用户个性化推荐结果表(离线计算)';
+
+-- ----------------------------
+-- Table structure for stats_user_retention
+-- ----------------------------
+DROP TABLE IF EXISTS "public"."stats_user_retention";
+CREATE TABLE "public"."stats_user_retention" (
+  "id" int8 NOT NULL DEFAULT nextval('stats_user_retention_id_seq'::regclass),
+  "cohort_dt" varchar(10) COLLATE "pg_catalog"."default" NOT NULL,
+  "retention_day" int4 NOT NULL,
+  "cohort_users" int8 NOT NULL DEFAULT 0,
+  "retained_users" int8 NOT NULL DEFAULT 0,
+  "retention_rate" numeric(10,4),
+  "calc_date" date NOT NULL
+)
+;
+COMMENT ON COLUMN "public"."stats_user_retention"."cohort_dt" IS '用户注册日期(群组日期)';
+COMMENT ON COLUMN "public"."stats_user_retention"."retention_day" IS '留存天数(1/7/30等)';
+COMMENT ON COLUMN "public"."stats_user_retention"."cohort_users" IS '群组用户总数';
+COMMENT ON COLUMN "public"."stats_user_retention"."retained_users" IS '留存用户数';
+COMMENT ON COLUMN "public"."stats_user_retention"."retention_rate" IS '留存率';
+COMMENT ON COLUMN "public"."stats_user_retention"."calc_date" IS '计算日期';
+COMMENT ON TABLE "public"."stats_user_retention" IS '用户留存分析统计表(每日更新)';
 
 -- ----------------------------
 -- Table structure for users
@@ -989,26 +1186,26 @@ CREATE FUNCTION "public"."word_similarity_op"(text, text)
 -- ----------------------------
 ALTER SEQUENCE "public"."comment_likes_id_seq"
 OWNED BY "public"."comment_likes"."id";
-SELECT setval('"public"."comment_likes_id_seq"', 1151734394566323729, true);
+SELECT setval('"public"."comment_likes_id_seq"', 1152844557602285249, true);
 
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
 ALTER SEQUENCE "public"."comments_comment_id_seq"
 OWNED BY "public"."comments"."comment_id";
-SELECT setval('"public"."comments_comment_id_seq"', 1151633338352084021, true);
+SELECT setval('"public"."comments_comment_id_seq"', 1152730379458285628, true);
 
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
-SELECT setval('"public"."event_outbox_id_seq"', 66, true);
+SELECT setval('"public"."event_outbox_id_seq"', 83, true);
 
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
 ALTER SEQUENCE "public"."favorite_folders_id_seq"
 OWNED BY "public"."favorite_folders"."id";
-SELECT setval('"public"."favorite_folders_id_seq"', 1152491045462596107, true);
+SELECT setval('"public"."favorite_folders_id_seq"', 1152491045462596108, true);
 
 -- ----------------------------
 -- Alter sequences owned by
@@ -1062,30 +1259,53 @@ SELECT setval('"public"."regions_id_seq"', 355, true);
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
-ALTER SEQUENCE "public"."stats_hidden_gems_id_seq"
-OWNED BY "public"."stats_hidden_gems"."id";
-SELECT setval('"public"."stats_hidden_gems_id_seq"', 1, false);
+SELECT setval('"public"."stats_genre_preference_1d_id_seq"', 83, true);
 
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
 ALTER SEQUENCE "public"."stats_hot_movies_id_seq"
 OWNED BY "public"."stats_hot_movies"."id";
-SELECT setval('"public"."stats_hot_movies_id_seq"', 100, true);
+SELECT setval('"public"."stats_hot_movies_id_seq"', 2722, true);
+
+-- ----------------------------
+-- Alter sequences owned by
+-- ----------------------------
+SELECT setval('"public"."stats_search_funnel_1d_id_seq"', 6, true);
+
+-- ----------------------------
+-- Alter sequences owned by
+-- ----------------------------
+SELECT setval('"public"."stats_search_keyword_insights_1d_id_seq"', 278, true);
 
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
 ALTER SEQUENCE "public"."stats_similar_movies_id_seq"
 OWNED BY "public"."stats_similar_movies"."id";
-SELECT setval('"public"."stats_similar_movies_id_seq"', 421972, true);
+SELECT setval('"public"."stats_similar_movies_id_seq"', 2050411, true);
+
+-- ----------------------------
+-- Alter sequences owned by
+-- ----------------------------
+SELECT setval('"public"."stats_user_funnel_1d_id_seq"', 5, true);
+
+-- ----------------------------
+-- Alter sequences owned by
+-- ----------------------------
+SELECT setval('"public"."stats_user_recs_id_seq"', 1, false);
+
+-- ----------------------------
+-- Alter sequences owned by
+-- ----------------------------
+SELECT setval('"public"."stats_user_retention_id_seq"', 33, true);
 
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
 ALTER SEQUENCE "public"."view_history_history_id_seq"
 OWNED BY "public"."view_history"."history_id";
-SELECT setval('"public"."view_history_history_id_seq"', 1152383167314031968, true);
+SELECT setval('"public"."view_history_history_id_seq"', 1152751459502767551, true);
 
 -- ----------------------------
 -- Indexes structure for table comment_likes
@@ -1358,16 +1578,15 @@ ALTER TABLE "public"."regions" ADD CONSTRAINT "uk_regions_name" UNIQUE ("name");
 ALTER TABLE "public"."regions" ADD CONSTRAINT "regions_pkey" PRIMARY KEY ("id");
 
 -- ----------------------------
--- Indexes structure for table stats_hidden_gems
+-- Indexes structure for table stats_genre_preference_1d
 -- ----------------------------
-CREATE INDEX "idx_hidden_gems_date" ON "public"."stats_hidden_gems" USING btree (
+CREATE INDEX "idx_stats_genre_preference_calc_date" ON "public"."stats_genre_preference_1d" USING btree (
   "calc_date" "pg_catalog"."date_ops" ASC NULLS LAST
 );
-
--- ----------------------------
--- Primary Key structure for table stats_hidden_gems
--- ----------------------------
-ALTER TABLE "public"."stats_hidden_gems" ADD CONSTRAINT "stats_hidden_gems_pkey" PRIMARY KEY ("id");
+CREATE INDEX "idx_stats_genre_preference_rank" ON "public"."stats_genre_preference_1d" USING btree (
+  "calc_date" "pg_catalog"."date_ops" ASC NULLS LAST,
+  "rank_no" "pg_catalog"."int4_ops" ASC NULLS LAST
+);
 
 -- ----------------------------
 -- Indexes structure for table stats_hot_movies
@@ -1388,16 +1607,22 @@ ALTER TABLE "public"."stats_hot_movies" ADD CONSTRAINT "uk_movie_period_date" UN
 ALTER TABLE "public"."stats_hot_movies" ADD CONSTRAINT "stats_hot_movies_pkey" PRIMARY KEY ("id");
 
 -- ----------------------------
--- Triggers structure for table stats_movie_analysis
+-- Indexes structure for table stats_search_funnel_1d
 -- ----------------------------
-CREATE TRIGGER "trigger_stats_analysis_update_time" BEFORE UPDATE ON "public"."stats_movie_analysis"
-FOR EACH ROW
-EXECUTE PROCEDURE "public"."update_favorite_folders_update_time"();
+CREATE INDEX "idx_stats_search_funnel_calc_date" ON "public"."stats_search_funnel_1d" USING btree (
+  "calc_date" "pg_catalog"."date_ops" ASC NULLS LAST
+);
 
 -- ----------------------------
--- Primary Key structure for table stats_movie_analysis
+-- Indexes structure for table stats_search_keyword_insights_1d
 -- ----------------------------
-ALTER TABLE "public"."stats_movie_analysis" ADD CONSTRAINT "stats_movie_analysis_pkey" PRIMARY KEY ("movie_id");
+CREATE INDEX "idx_stats_search_keyword_insights_calc_date" ON "public"."stats_search_keyword_insights_1d" USING btree (
+  "calc_date" "pg_catalog"."date_ops" ASC NULLS LAST
+);
+CREATE INDEX "idx_stats_search_keyword_insights_rank" ON "public"."stats_search_keyword_insights_1d" USING btree (
+  "calc_date" "pg_catalog"."date_ops" ASC NULLS LAST,
+  "rank_no" "pg_catalog"."int4_ops" ASC NULLS LAST
+);
 
 -- ----------------------------
 -- Indexes structure for table stats_similar_movies
@@ -1416,6 +1641,42 @@ ALTER TABLE "public"."stats_similar_movies" ADD CONSTRAINT "uk_movie_pair" UNIQU
 -- Primary Key structure for table stats_similar_movies
 -- ----------------------------
 ALTER TABLE "public"."stats_similar_movies" ADD CONSTRAINT "stats_similar_movies_pkey" PRIMARY KEY ("id");
+
+-- ----------------------------
+-- Indexes structure for table stats_user_funnel_1d
+-- ----------------------------
+CREATE INDEX "idx_stats_user_funnel_calc_date" ON "public"."stats_user_funnel_1d" USING btree (
+  "calc_date" "pg_catalog"."date_ops" ASC NULLS LAST
+);
+
+-- ----------------------------
+-- Indexes structure for table stats_user_recs
+-- ----------------------------
+CREATE INDEX "idx_user_score" ON "public"."stats_user_recs" USING btree (
+  "user_id" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
+  "score" "pg_catalog"."float8_ops" DESC NULLS FIRST
+);
+
+-- ----------------------------
+-- Uniques structure for table stats_user_recs
+-- ----------------------------
+ALTER TABLE "public"."stats_user_recs" ADD CONSTRAINT "uk_user_movie" UNIQUE ("user_id", "movie_id");
+
+-- ----------------------------
+-- Primary Key structure for table stats_user_recs
+-- ----------------------------
+ALTER TABLE "public"."stats_user_recs" ADD CONSTRAINT "pk_stats_user_recs" PRIMARY KEY ("id");
+
+-- ----------------------------
+-- Indexes structure for table stats_user_retention
+-- ----------------------------
+CREATE INDEX "idx_stats_user_retention_calc_date" ON "public"."stats_user_retention" USING btree (
+  "calc_date" "pg_catalog"."date_ops" ASC NULLS LAST
+);
+CREATE INDEX "idx_stats_user_retention_cohort" ON "public"."stats_user_retention" USING btree (
+  "cohort_dt" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
+  "retention_day" "pg_catalog"."int4_ops" ASC NULLS LAST
+);
 
 -- ----------------------------
 -- Indexes structure for table users

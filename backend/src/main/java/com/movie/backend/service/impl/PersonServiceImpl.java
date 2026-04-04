@@ -40,6 +40,6 @@ public class PersonServiceImpl implements PersonService {
         if (person == null) {
             return new ArrayList<>();
         }
-        return movieMapper.selectByPersonName(person.getName());
+        return movieMapper.selectByPersonId(String.valueOf(id));
     }
 }

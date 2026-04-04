@@ -31,7 +31,17 @@ const navItems: AdminNavItem[] = [
     name: 'admin-movies',
     label: '电影',
     description: '检索与快速跳转'
-  }
+  },
+  {
+    name: 'admin-genres',
+    label: '类型',
+    description: '管理电影类型分类'
+  },
+  {
+    name: 'admin-regions',
+    label: '地区',
+    description: '管理电影地区分类'
+  },
 ]
 
 const currentRouteName = computed(() => String(route.name || ''))

@@ -130,19 +130,30 @@ function getChartOption(panel: typeof trendPanels.value[0]) {
 }
 
 const searchFunnelChartOption = computed(() => {
-  const data = [
+  const rawData = [
     { value: searchFunnel.value.searchUserCnt || 0, name: '搜索用户' },
     { value: searchFunnel.value.afterSearchViewUserCnt || 0, name: '浏览用户' },
     { value: searchFunnel.value.afterSearchRatingUserCnt || 0, name: '评分用户' },
     { value: searchFunnel.value.afterSearchFavoriteUserCnt || 0, name: '收藏用户' },
     { value: searchFunnel.value.afterSearchWatchedUserCnt || 0, name: '看过用户' }
-  ].filter(item => item.value > 0)
+  ]
+  const data = rawData.filter(item => item.value > 0)
+  const values = data.map(d => d.value)
+
+  // Unified gradient: amber → orange → rose tones (warm funnel theme)
+  const gradientColors = ['#f59e0b', '#f97316', '#fb923c', '#f472b6', '#f43f5e']
 
   return {
     tooltip: {
       trigger: 'item',
-      formatter: (params: { name: string; value: number; percent: number }) => {
-        return `${params.name}: ${params.value} (${params.percent}%)`
+      formatter: (params: { name: string; value: number; percent: number; dataIndex: number }) => {
+        const idx = params.dataIndex
+        const prevValue = idx > 0 ? values[idx - 1] : null
+        const convRate = prevValue && prevValue > 0
+          ? ((params.value / prevValue) * 100).toFixed(1)
+          : null
+        const rateText = convRate ? `\n阶段转化: ${convRate}%` : ''
+        return `${params.name}: ${params.value}${rateText}`
       }
     },
     legend: {
@@ -165,10 +176,27 @@ const searchFunnelChartOption = computed(() => {
         label: {
           show: true,
           position: 'inside',
-          formatter: (params: { name: string; value: number; percent: number }) => {
-            return `${params.name}\n${params.value}`
+          formatter: (params: { name: string; value: number; dataIndex: number }) => {
+            const idx = params.dataIndex
+            const firstValue = values[0] ?? 0
+            const prevValue = idx > 0 ? values[idx - 1] : null
+            // Overall conversion rate (relative to first stage)
+            const overallRate = firstValue > 0
+              ? ((params.value / firstValue) * 100).toFixed(0)
+              : '0'
+            // Stage-to-stage conversion rate
+            const stageRate = prevValue && prevValue > 0
+              ? ((params.value / prevValue) * 100).toFixed(0)
+              : null
+
+            if (idx === 0) {
+              // First stage: show name and count
+              return `${params.name}\n${params.value}`
+            }
+            // Other stages: show name, count, and conversion rates
+            return `${params.name}\n${params.value} | ${stageRate}%→${overallRate}%`
           },
-          fontSize: 12,
+          fontSize: 11,
           color: '#fff'
         },
         labelLine: {
@@ -184,31 +212,42 @@ const searchFunnelChartOption = computed(() => {
         },
         emphasis: {
           label: {
-            fontSize: 14
+            fontSize: 13
           }
         },
         data: data,
-        color: ['#f59e0b', '#0ea5e9', '#10b981', '#6366f1', '#f43f5e']
+        color: gradientColors
       }
     ]
   }
 })
 
 const userFunnelChartOption = computed(() => {
-  const data = [
+  const rawData = [
     { value: userFunnel.value.totalActiveUsers || 0, name: '活跃用户' },
     { value: userFunnel.value.viewUsers || 0, name: '浏览用户' },
     { value: userFunnel.value.ratingUsers || 0, name: '评分用户' },
     { value: userFunnel.value.commentUsers || 0, name: '评论用户' },
     { value: userFunnel.value.favoriteUsers || 0, name: '收藏用户' },
     { value: userFunnel.value.watchedUsers || 0, name: '看过用户' }
-  ].filter(item => item.value > 0)
+  ]
+  const data = rawData.filter(item => item.value > 0)
+  const values = data.map(d => d.value)
+
+  // Unified gradient: indigo → sky → cyan → teal → emerald → green (cool funnel theme)
+  const gradientColors = ['#6366f1', '#818cf8', '#38bdf8', '#22d3ee', '#2dd4bf', '#10b981']
 
   return {
     tooltip: {
       trigger: 'item',
-      formatter: (params: { name: string; value: number; percent: number }) => {
-        return `${params.name}: ${params.value} (${params.percent}%)`
+      formatter: (params: { name: string; value: number; percent: number; dataIndex: number }) => {
+        const idx = params.dataIndex
+        const prevValue = idx > 0 ? values[idx - 1] : null
+        const convRate = prevValue && prevValue > 0
+          ? ((params.value / prevValue) * 100).toFixed(1)
+          : null
+        const rateText = convRate ? `\n阶段转化: ${convRate}%` : ''
+        return `${params.name}: ${params.value}${rateText}`
       }
     },
     legend: {
@@ -231,10 +270,27 @@ const userFunnelChartOption = computed(() => {
         label: {
           show: true,
           position: 'inside',
-          formatter: (params: { name: string; value: number; percent: number }) => {
-            return `${params.name}\n${params.value}`
+          formatter: (params: { name: string; value: number; dataIndex: number }) => {
+            const idx = params.dataIndex
+            const firstValue = values[0] ?? 0
+            const prevValue = idx > 0 ? values[idx - 1] : null
+            // Overall conversion rate (relative to first stage)
+            const overallRate = firstValue > 0
+              ? ((params.value / firstValue) * 100).toFixed(0)
+              : '0'
+            // Stage-to-stage conversion rate
+            const stageRate = prevValue && prevValue > 0
+              ? ((params.value / prevValue) * 100).toFixed(0)
+              : null
+
+            if (idx === 0) {
+              // First stage: show name and count
+              return `${params.name}\n${params.value}`
+            }
+            // Other stages: show name, count, and conversion rates
+            return `${params.name}\n${params.value} | ${stageRate}%→${overallRate}%`
           },
-          fontSize: 12,
+          fontSize: 11,
           color: '#fff'
         },
         labelLine: {
@@ -250,11 +306,11 @@ const userFunnelChartOption = computed(() => {
         },
         emphasis: {
           label: {
-            fontSize: 14
+            fontSize: 13
           }
         },
         data: data,
-        color: ['#6366f1', '#0ea5e9', '#f59e0b', '#10b981', '#f43f5e', '#8b5cf6']
+        color: gradientColors
       }
     ]
   }
