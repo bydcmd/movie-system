@@ -14,15 +14,14 @@ Usage:
 
 Full Pipeline Steps:
   1. ODS: PostgreSQL sync (run_postgres_sync.sh)
-  2. ODS: Kafka events sync (run_kafka_sync.sh)
-  3. DWD: Build event wide table (run_dwd_build.sh)
+  2. DWD: Build event wide table (run_dwd_build.sh)
   4. DWD: Build snapshots (run_dwd_snapshots.sh)
   5. DWS: Build metrics (run_dws_build.sh)
   6. DWS: Build profiles (run_dws_profiles.sh)
   7. DWS: Build interactions (run_dws_postgres_interactions.sh)
   8. ADS: Build hot movies (run_ads_hot_movies.sh)
   9. ADS: Build ItemCF recommendations (run_ads_itemcf.sh)
-  10. ADS: Build ALS similar movies (run_ads_als_similar_movies.sh)
+
   11. ADS: Build user funnel (run_ads_user_funnel.sh)
   12. ADS: Build user retention (run_ads_user_retention.sh)
   13. ADS: Build genre preference (run_ads_genre_preference.sh)
@@ -185,9 +184,6 @@ if [[ "${SKIP_ODS}" == "false" ]]; then
 
   # PostgreSQL snapshot sync
   run_job "ODS PostgreSQL Sync" "run_postgres_sync.sh"
-
-  # Kafka events sync (bounded run - consumes current backlog then exits)
-  run_job "ODS Kafka Events Sync" "run_kafka_sync.sh" "available-now"
 else
   echo ""
   echo "# Skipping ODS layer (--skip-ods)"
@@ -249,8 +245,6 @@ if [[ "${SKIP_ADS}" == "false" ]]; then
   # ItemCF recommendations
   run_job "ADS ItemCF Recommendations" "run_ads_itemcf.sh"
 
-  # ALS similar movies
-  run_job "ADS ALS Similar Movies" "run_ads_als_similar_movies.sh"
 
   # User funnel
   run_job "ADS User Funnel" "run_ads_user_funnel.sh"

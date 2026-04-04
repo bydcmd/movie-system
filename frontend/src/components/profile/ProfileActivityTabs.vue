@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { NTabs, NTabPane } from 'naive-ui'
+import { NTabs, NTabPane, NButton } from 'naive-ui'
 import type { Comment, FavoriteFolderVO, MovieItemVO, MyRatingVO } from '@/api/model'
+import { useWatchedManagement } from '@/composables/useWatchedManagement'
 import ProfileCommentList from './ProfileCommentList.vue'
 import ProfileFolderList from './ProfileFolderList.vue'
 import ProfileHistoryList from './ProfileHistoryList.vue'
@@ -55,6 +56,35 @@ const emit = defineEmits<{
 }>()
 
 const favoriteFolderCount = computed(() => props.favoriteFolders.length)
+
+// Watched management (aligned with ProfileCommentList pattern)
+const watchedManagement = useWatchedManagement({
+  onSuccess: () => emit('refresh')
+})
+
+// Computed for watched selection (similar to ProfileCommentList)
+const selectableWatchedIds = computed(() => {
+  return props.watchedMovies
+    .map(item => item.movieId)
+    .filter((id): id is number => typeof id === 'number')
+})
+
+const allWatchedSelected = computed(() => {
+  return selectableWatchedIds.value.length > 0 &&
+    watchedManagement.selectedCount.value === selectableWatchedIds.value.length
+})
+
+const partiallyWatchedSelected = computed(() => {
+  return watchedManagement.selectedCount.value > 0 && !allWatchedSelected.value
+})
+
+function handleToggleAllWatched(checked: boolean) {
+  if (checked) {
+    watchedManagement.selectAll(props.watchedMovies)
+  } else {
+    watchedManagement.clearSelection()
+  }
+}
 </script>
 
 <template>
@@ -87,9 +117,17 @@ const favoriteFolderCount = computed(() => props.favoriteFolders.length)
           record-label="记录于"
           :page="watchedPage"
           :page-size="watchedPageSize"
+          :selected-ids="watchedManagement.selectedIds.value"
+          :is-deleting="watchedManagement.isDeleting.value"
+          :is-clearing="watchedManagement.isClearing.value"
+          :show-clear-all="totals.watched > 0"
           @refresh="emit('refresh')"
           @update:page="emit('update:watchedPage', $event)"
           @update:page-size="emit('update:watchedPageSize', $event)"
+          @toggle-selection="watchedManagement.toggleSelection"
+          @toggle-all="handleToggleAllWatched"
+          @delete-selected="watchedManagement.confirmDeleteSelected"
+          @clear-all="watchedManagement.confirmClearAll"
         />
       </n-tab-pane>
 

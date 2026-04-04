@@ -4,15 +4,19 @@ import {
   useGetDashboardStats
 } from '@/api/endpoints/admin-dashboard-management/admin-dashboard-management'
 import {
+  useGetGenrePreference,
   useGetSearchFunnel,
   useGetSearchKeywordInsights,
-  useGetUserFunnel
+  useGetUserFunnel,
+  useGetUserRetention
 } from '@/api/endpoints/analytics/analytics'
 import type {
   AdminDashboardVO,
+  GenrePreferenceDTO,
   SearchFunnelDTO,
   SearchKeywordInsightDTO,
-  UserFunnelDTO
+  UserFunnelDTO,
+  UserRetentionDTO
 } from '@/api/model'
 import { formatDateTimeLabel } from '@/utils/profile'
 import {
@@ -78,6 +82,24 @@ export function useAdminOverview() {
       retry: false
     }
   })
+
+  const userRetentionQuery = useGetUserRetention<UserRetentionDTO[]>(
+    { limit: 100 },
+    {
+      query: {
+        retry: false
+      }
+    }
+  )
+
+  const genrePreferenceQuery = useGetGenrePreference<GenrePreferenceDTO[]>(
+    { limit: 20 },
+    {
+      query: {
+        retry: false
+      }
+    }
+  )
 
   const overview = computed(() => {
     const dashboard = dashboardQuery.data.value
@@ -201,6 +223,22 @@ export function useAdminOverview() {
     return isRecord(data) ? data : {}
   })
 
+  const userRetention = computed<UserRetentionDTO[]>(() => {
+    const data = userRetentionQuery.data.value
+    if (Array.isArray(data)) {
+      return data
+    }
+    return []
+  })
+
+  const genrePreference = computed<GenrePreferenceDTO[]>(() => {
+    const data = genrePreferenceQuery.data.value
+    if (Array.isArray(data)) {
+      return data
+    }
+    return []
+  })
+
   const loading = computed(() =>
     dashboardQuery.isLoading.value ||
     dashboardQuery.isFetching.value ||
@@ -209,13 +247,19 @@ export function useAdminOverview() {
     searchKeywordInsightsQuery.isLoading.value ||
     searchKeywordInsightsQuery.isFetching.value ||
     userFunnelQuery.isLoading.value ||
-    userFunnelQuery.isFetching.value
+    userFunnelQuery.isFetching.value ||
+    userRetentionQuery.isLoading.value ||
+    userRetentionQuery.isFetching.value ||
+    genrePreferenceQuery.isLoading.value ||
+    genrePreferenceQuery.isFetching.value
   )
   const hasLoadError = computed(() =>
     dashboardQuery.isError.value ||
     searchFunnelQuery.isError.value ||
     searchKeywordInsightsQuery.isError.value ||
-    userFunnelQuery.isError.value
+    userFunnelQuery.isError.value ||
+    userRetentionQuery.isError.value ||
+    genrePreferenceQuery.isError.value
   )
   const lastUpdatedText = computed(() => {
     if (!dashboardQuery.dataUpdatedAt.value) {
@@ -233,7 +277,9 @@ export function useAdminOverview() {
         refetchOrThrow(dashboardQuery),
         refetchOrThrow(searchFunnelQuery),
         refetchOrThrow(searchKeywordInsightsQuery),
-        refetchOrThrow(userFunnelQuery)
+        refetchOrThrow(userFunnelQuery),
+        refetchOrThrow(userRetentionQuery),
+        refetchOrThrow(genrePreferenceQuery)
       ])
       message.success('仪表盘已刷新')
     } catch (error) {
@@ -253,6 +299,8 @@ export function useAdminOverview() {
     searchFunnel,
     searchKeywordInsights,
     userFunnel,
+    userRetention,
+    genrePreference,
     loading,
     hasLoadError,
     lastUpdatedText,

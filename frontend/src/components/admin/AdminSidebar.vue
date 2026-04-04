@@ -67,11 +67,6 @@ function navigateTo(name: string) {
         <span class="sidebar-link-description">{{ item.description }}</span>
       </button>
     </nav>
-
-    <div class="sidebar-footer">
-      <p class="sidebar-footer-label">Admin Routing</p>
-      <p class="sidebar-footer-value">`/admin/*` 已独立为后台路由区</p>
-    </div>
   </aside>
 </template>
 

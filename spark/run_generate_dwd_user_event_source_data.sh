@@ -30,6 +30,7 @@ Arguments:
   validation-mode             Validation strictness (none, warn, error), default: warn
   spark-parallelism           Spark parallelism setting
   display-registered-user-cap Max registered users to display, default: 24
+  enable-event-chains       Enable event chaining (true/false), default: true
 EOF
 }
 
@@ -50,6 +51,7 @@ VALIDATION_MODE="warn"
 SPARK_PARALLELISM=""
 DISPLAY_REGISTERED_USER_CAP="24"
 EXTRA_LOGIN_USER_CAP="2"
+ENABLE_EVENT_CHAINS="true"
 POSITIONAL_ARGS=()
 
 is_date() {
@@ -116,6 +118,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --extra-login-user-cap)
       EXTRA_LOGIN_USER_CAP="${2:-}"
+      shift 2
+      ;;
+    --enable-event-chains)
+      ENABLE_EVENT_CHAINS="${2:-}"
       shift 2
       ;;
     *)
@@ -198,6 +204,7 @@ CMD=(
   --validation-mode "${VALIDATION_MODE}"
   --display-registered-user-cap "${DISPLAY_REGISTERED_USER_CAP}"
   --extra-login-user-cap "${EXTRA_LOGIN_USER_CAP}"
+  --enable-event-chains "${ENABLE_EVENT_CHAINS}"
 )
 
 if [[ "${WRITE_MODE}" != "fixtures" ]]; then

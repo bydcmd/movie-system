@@ -4,12 +4,13 @@ import { useRouter } from 'vue-router'
 import { NAlert, NButton, NEmpty, NSpin } from 'naive-ui'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { BarChart, FunnelChart } from 'echarts/charts'
+import { BarChart, FunnelChart, HeatmapChart, PieChart } from 'echarts/charts'
 import {
   GridComponent,
   TooltipComponent,
   DataZoomComponent,
-  LegendComponent
+  LegendComponent,
+  VisualMapComponent
 } from 'echarts/components'
 import VChart from 'vue-echarts'
 import { useAdminOverview } from '@/composables/admin/useAdminOverview'
@@ -18,10 +19,13 @@ use([
   CanvasRenderer,
   BarChart,
   FunnelChart,
+  HeatmapChart,
+  PieChart,
   GridComponent,
   TooltipComponent,
   DataZoomComponent,
-  LegendComponent
+  LegendComponent,
+  VisualMapComponent
 ])
 
 const router = useRouter()
@@ -32,6 +36,8 @@ const {
   searchFunnel,
   searchKeywordInsights,
   userFunnel,
+  userRetention,
+  genrePreference,
   loading,
   hasLoadError,
   lastUpdatedText,
@@ -265,6 +271,224 @@ function getProblemScoreLevel(score: number | undefined): { label: string; color
   if (score >= 40) return { label: '中', color: '#f59e0b' }
   return { label: '低', color: '#10b981' }
 }
+
+const userRetentionChartOption = computed(() => {
+  // Group retention data by cohort date
+  const cohortMap = new Map<string, Map<number, { retainedUsers: number; retentionRate: number }>>()
+  const retentionDaysSet = new Set<number>()
+
+  for (const item of userRetention.value) {
+    const cohortDt = item.cohortDt || ''
+    const retentionDay = item.retentionDay || 0
+    if (!cohortDt || retentionDay === undefined) continue
+
+    if (!cohortMap.has(cohortDt)) {
+      cohortMap.set(cohortDt, new Map())
+    }
+    cohortMap.get(cohortDt)!.set(retentionDay, {
+      retainedUsers: item.retainedUsers || 0,
+      retentionRate: item.retentionRate || 0
+    })
+    retentionDaysSet.add(retentionDay)
+  }
+
+  // Sort cohorts by date (descending) and limit to recent 10
+  const sortedCohorts = Array.from(cohortMap.keys())
+    .sort((a, b) => b.localeCompare(a))
+    .slice(0, 10)
+
+  // Sort retention days
+  const sortedRetentionDays = Array.from(retentionDaysSet).sort((a, b) => a - b)
+
+  // Build heatmap data: [x, y, value]
+  const heatmapData: Array<[number, number, number]> = []
+
+  sortedCohorts.forEach((cohort, yIndex) => {
+    const dayMap = cohortMap.get(cohort)
+    if (!dayMap) return
+
+    sortedRetentionDays.forEach((day, xIndex) => {
+      const data = dayMap.get(day)
+      heatmapData.push([
+        xIndex,
+        yIndex,
+        data ? Math.round((data.retentionRate || 0) * 100) : 0
+      ])
+    })
+  })
+
+  // Format date for display
+  const formatCohortDate = (date: string) => {
+    if (date.length >= 10) {
+      return date.slice(5) // Show MM-DD
+    }
+    return date
+  }
+
+  return {
+    tooltip: {
+      position: 'top',
+      formatter: (params: { data: [number, number, number]; value: number }) => {
+        const yIndex = params.data[1]
+        const xIndex = params.data[0]
+        const cohort = sortedCohorts[yIndex]
+        const day = sortedRetentionDays[xIndex]
+        if (!cohort || day === undefined) return ''
+        const cohortData = cohortMap.get(cohort)?.get(day)
+        const retained = cohortData?.retainedUsers || 0
+        return `${cohort}<br/>第${day}天留存: ${params.value}% (${retained}人)`
+      }
+    },
+    grid: {
+      left: '8%',
+      right: '10%',
+      top: '5%',
+      bottom: '15%',
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      data: sortedRetentionDays.map(d => `第${d}天`),
+      splitArea: { show: true },
+      axisLabel: {
+        color: '#64748b',
+        fontSize: 11
+      }
+    },
+    yAxis: {
+      type: 'category',
+      data: sortedCohorts.map(formatCohortDate),
+      splitArea: { show: true },
+      axisLabel: {
+        color: '#64748b',
+        fontSize: 11
+      }
+    },
+    visualMap: {
+      min: 0,
+      max: 100,
+      calculable: true,
+      orient: 'horizontal',
+      left: 'center',
+      bottom: '0%',
+      inRange: {
+        color: ['#fef3c7', '#fcd34d', '#f59e0b', '#d97706', '#92400e']
+      },
+      text: ['高', '低'],
+      textStyle: {
+        color: '#64748b'
+      }
+    },
+    series: [
+      {
+        type: 'heatmap',
+        data: heatmapData,
+        label: {
+          show: true,
+          fontSize: 10,
+          color: '#374151',
+          formatter: (params: { value: number }) => `${params.value}%`
+        },
+        emphasis: {
+          itemStyle: {
+            shadowBlur: 10,
+            shadowColor: 'rgba(0, 0, 0, 0.3)'
+          }
+        }
+      }
+    ]
+  }
+})
+
+function getRetentionRateColor(rate: number): string {
+  if (rate >= 0.5) return '#10b981'
+  if (rate >= 0.3) return '#f59e0b'
+  return '#ef4444'
+}
+
+const genrePreferenceChartOption = computed(() => {
+  const data = genrePreference.value.slice(0, 10)
+
+  if (data.length === 0) {
+    return {}
+  }
+
+  return {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: {
+        type: 'shadow'
+      },
+      formatter: (params: Array<{ name: string; value: number; data: { ratingCnt: number; watchedCnt: number; viewUv: number } }>) => {
+        const p = params[0]
+        if (!p) return ''
+        const item = data.find(d => d.genre === p.name)
+        if (!item) return ''
+        return `${p.name}<br/>
+热度分数: ${p.value.toFixed(0)}<br/>
+电影数量: ${item.movieCnt || 0}<br/>
+浏览量: ${item.viewPv || 0}<br/>
+评分数: ${item.ratingCnt || 0}<br/>
+看过的: ${item.watchedCnt || 0}`
+      }
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      top: '10%',
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      data: data.map(d => d.genre || ''),
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: {
+        color: '#64748b',
+        fontSize: 11,
+        interval: 0,
+        rotate: 30
+      }
+    },
+    yAxis: {
+      type: 'value',
+      name: '热度分数',
+      nameTextStyle: {
+        color: '#64748b',
+        fontSize: 11
+      },
+      splitLine: {
+        lineStyle: {
+          color: 'rgba(148, 163, 184, 0.12)'
+        }
+      },
+      axisLabel: {
+        color: '#64748b',
+        fontSize: 11
+      }
+    },
+    series: [
+      {
+        name: '热度分数',
+        type: 'bar',
+        data: data.map((d, index) => ({
+          value: d.hotScoreSum || 0,
+          itemStyle: {
+            color: ['#f59e0b', '#0ea5e9', '#10b981', '#6366f1', '#f43f5e', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#06b6d4'][index % 10],
+            borderRadius: [4, 4, 0, 0]
+          }
+        })),
+        barWidth: '50%',
+        emphasis: {
+          itemStyle: {
+            opacity: 0.8
+          }
+        }
+      }
+    ]
+  }
+})
 </script>
 
 <template>
@@ -609,6 +833,48 @@ function getProblemScoreLevel(score: number | undefined): { label: string; color
         <n-empty
           v-else
           description="暂无搜索关键词洞察数据"
+          size="small"
+          class="py-6"
+        />
+      </div>
+
+      <!-- User Retention Analytics -->
+      <div class="retention-section">
+        <h3 class="retention-section-title">用户留存分析</h3>
+        <p class="retention-section-desc">按注册日期群组展示用户留存情况，颜色越深表示留存率越高</p>
+
+        <div v-if="userRetention.length > 0" class="retention-chart-wrapper">
+          <v-chart
+            :option="userRetentionChartOption"
+            :autoresize="true"
+            class="retention-heatmap"
+          />
+        </div>
+
+        <n-empty
+          v-else
+          description="暂无用户留存数据"
+          size="small"
+          class="py-6"
+        />
+      </div>
+
+      <!-- Genre Preference Analytics -->
+      <div class="genre-section">
+        <h3 class="genre-section-title">类型偏好分析</h3>
+        <p class="genre-section-desc">各电影类型的热度分数排名，基于浏览量、评分、收藏等指标综合计算</p>
+
+        <div v-if="genrePreference.length > 0" class="genre-chart-wrapper">
+          <v-chart
+            :option="genrePreferenceChartOption"
+            :autoresize="true"
+            class="genre-bar-chart"
+          />
+        </div>
+
+        <n-empty
+          v-else
+          description="暂无类型偏好数据"
           size="small"
           class="py-6"
         />
@@ -1083,6 +1349,78 @@ function getProblemScoreLevel(score: number | undefined): { label: string; color
 
   .keyword-text {
     max-width: 120px;
+  }
+}
+
+/* User Retention Styles */
+.retention-section {
+  margin-top: 1.5rem;
+}
+
+.retention-section-title {
+  margin: 0 0 0.25rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.retention-section-desc {
+  margin: 0 0 1rem;
+  color: #64748b;
+  font-size: 0.875rem;
+}
+
+.retention-chart-wrapper {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.94);
+  padding: 1rem;
+}
+
+.retention-heatmap {
+  width: 100%;
+  height: 400px;
+}
+
+@media (max-width: 768px) {
+  .retention-heatmap {
+    height: 320px;
+  }
+}
+
+/* Genre Preference Styles */
+.genre-section {
+  margin-top: 1.5rem;
+}
+
+.genre-section-title {
+  margin: 0 0 0.25rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.genre-section-desc {
+  margin: 0 0 1rem;
+  color: #64748b;
+  font-size: 0.875rem;
+}
+
+.genre-chart-wrapper {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.94);
+  padding: 1rem;
+}
+
+.genre-bar-chart {
+  width: 100%;
+  height: 350px;
+}
+
+@media (max-width: 768px) {
+  .genre-bar-chart {
+    height: 280px;
   }
 }
 </style>

@@ -207,6 +207,22 @@ class KafkaRecord:
     key: str
     value: str
     event_type: str
+    parent_event_id: str | None = None
+    chain_id: str | None = None
+
+
+@dataclass(frozen=True)
+class EventChain:
+    """Represents a chain of causally related events for a user."""
+    chain_id: str
+    user_id: str
+    movie_id: int
+    search_event_id: str | None = None
+    view_event_id: str | None = None
+    rating_event_id: str | None = None
+    comment_event_id: str | None = None
+    favorite_event_id: str | None = None
+    watched_event_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -308,6 +324,12 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=None,
         help="Spark parallelism (sets spark.sql.shuffle.partitions and spark.default.parallelism). Default: use Spark defaults.",
+    )
+    parser.add_argument(
+        "--enable-event-chains",
+        type=lambda x: x.lower() in ("true", "1", "yes"),
+        default=True,
+        help="Enable explicit event chaining (search->view->rating->comment->favorite->watched). Default: true.",
     )
     return parser.parse_args()
 
@@ -795,8 +817,22 @@ def build_watched_rows(
     entity_count: int,
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    for index in range(min(entity_count, len(pairs))):
-        user, movie = pairs[index]
+    # Use round-robin selection to distribute across movies and users
+    # This ensures watched events are spread across different movies
+    selected_indices = set()
+    pair_count = len(pairs)
+    for index in range(min(entity_count, pair_count)):
+        # Use step-based selection to spread across movies
+        # Step size helps distribute selections across the pair list
+        step_size = max(1, pair_count // entity_count) if entity_count > 0 else 1
+        selected_idx = (index * step_size) % pair_count
+        # Avoid duplicates
+        while selected_idx in selected_indices and len(selected_indices) < pair_count:
+            selected_idx = (selected_idx + 1) % pair_count
+        if selected_idx in selected_indices:
+            break
+        selected_indices.add(selected_idx)
+        user, movie = pairs[selected_idx]
         rows.append(
             {
                 "user_id": user["user_id"],
@@ -840,13 +876,27 @@ def update_folder_movie_counts(folders: list[dict[str, Any]], favorites: list[di
         folder["movie_count"] = counts.get(folder["id"], 0)
 
 
-def build_event_envelope(batch_tag: str, event_type: str, event_index: int, key: str, occurred_at: dt.datetime, data: dict[str, Any]) -> dict[str, Any]:
-    return {
+def build_event_envelope(
+    batch_tag: str,
+    event_type: str,
+    event_index: int,
+    key: str,
+    occurred_at: dt.datetime,
+    data: dict[str, Any],
+    parent_event_id: str | None = None,
+    chain_id: str | None = None,
+) -> dict[str, Any]:
+    envelope = {
         "eventId": seeded_uuid(batch_tag, event_type, event_index, key),
         "eventType": event_type,
         "occurredAt": int(occurred_at.timestamp() * 1000),
         "data": data,
     }
+    if parent_event_id is not None:
+        envelope["parentEventId"] = parent_event_id
+    if chain_id is not None:
+        envelope["chainId"] = chain_id
+    return envelope
 
 
 def shrink_user_cohort(users: list[dict[str, Any]], ratio: float) -> list[dict[str, Any]]:
@@ -912,6 +962,69 @@ def filter_rows_by_user_ids(rows: list[dict[str, Any]], user_ids: set[str]) -> l
     return filtered_rows or rows
 
 
+def generate_chain_id(batch_tag: str, user_id: str, movie_id: int, index: int) -> str:
+    """Generate a unique chain ID for a user-movie interaction sequence."""
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"{batch_tag}:chain:{user_id}:{movie_id}:{index}"))
+
+
+def build_event_chains(
+    batch_tag: str,
+    movies: list[dict[str, Any]],
+    search_users: list[dict[str, Any]],
+    user_funnel_paths: dict[str, dict[str, bool]],
+    events_per_type: int,
+) -> list[EventChain]:
+    """
+    Build explicit event chains where search -> view -> rating -> comment -> favorite -> watched
+    are causally linked for the same user-movie pair.
+    """
+    chains: list[EventChain] = []
+    chain_index = 0
+
+    # Create chains based on search events - each search can start a chain
+    for item_index in range(events_per_type):
+        user = pick_cycle(search_users, item_index)
+        user_id = user["user_id"]
+        user_path = user_funnel_paths.get(user_id, {})
+
+        # Pick a movie using weighted distribution (same as search)
+        movie = _pick_weighted_movie(movies, batch_tag, item_index)
+        movie_id = movie["movie_id"]
+
+        # Only create chain if user has view (follows from search)
+        if not user_path.get("has_view", False):
+            continue
+
+        chain_id = generate_chain_id(batch_tag, user_id, movie_id, chain_index)
+        chain_index += 1
+
+        chains.append(
+            EventChain(
+                chain_id=chain_id,
+                user_id=user_id,
+                movie_id=movie_id,
+                search_event_id=seeded_uuid(batch_tag, "search", item_index, movie["name"]),
+                view_event_id=seeded_uuid(batch_tag, "view_history", item_index, str(movie_id))
+                if user_path.get("has_view", False)
+                else None,
+                rating_event_id=seeded_uuid(batch_tag, "rating", item_index, str(movie_id))
+                if user_path.get("has_rating", False)
+                else None,
+                comment_event_id=seeded_uuid(batch_tag, "comment", item_index, str(movie_id))
+                if user_path.get("has_comment", False)
+                else None,
+                favorite_event_id=seeded_uuid(batch_tag, "favorite", item_index, str(movie_id))
+                if user_path.get("has_favorite", False)
+                else None,
+                watched_event_id=seeded_uuid(batch_tag, "watched", item_index, str(movie_id))
+                if user_path.get("has_watched", False)
+                else None,
+            )
+        )
+
+    return chains
+
+
 def build_kafka_records(
     batch_tag: str,
     batch_date: dt.date,
@@ -928,6 +1041,7 @@ def build_kafka_records(
     watched_rows: list[dict[str, Any]],
     comment_likes: list[dict[str, Any]],
     args: argparse.Namespace,
+    enable_event_chains: bool = True,
 ) -> list[KafkaRecord]:
     kafka_records: list[KafkaRecord] = []
     active_registered_users = registered_users[: min(len(registered_users), max(1, min(events_per_type, args.display_registered_user_cap)))]
@@ -943,11 +1057,11 @@ def build_kafka_records(
     
     # Funnel cohorts include both existing and registered users
     search_users = all_active_users
-    view_users = shrink_user_cohort(search_users, 0.8)
-    rating_users = shrink_user_cohort(view_users, 0.75)
-    comment_users = shrink_user_cohort(rating_users, 0.85)
-    favorite_users = shrink_user_cohort(comment_users, 0.8)
-    watched_users = shrink_user_cohort(favorite_users, 0.75)
+    view_users = shrink_user_cohort(search_users, 1)
+    rating_users = shrink_user_cohort(view_users, 1)
+    comment_users = shrink_user_cohort(rating_users, 0.9)
+    favorite_users = shrink_user_cohort(comment_users, 0.89)
+    watched_users = shrink_user_cohort(favorite_users, 0.86)
     folder_action_user_count = min(
         len(search_users),
         max(len(comment_users), len(favorite_users) + 1),
@@ -974,9 +1088,37 @@ def build_kafka_records(
     all_folders = registered_folders + existing_folders
     stage_folder_rows = filter_rows_by_user_ids(all_folders, folder_action_user_ids)
 
+    # Build event chains for causal relationships
+    event_chains: list[EventChain] = []
+    chain_lookup: dict[tuple[str, str, int], EventChain] = {}  # (user_id, event_type, movie_id) -> chain
+    if enable_event_chains:
+        event_chains = build_event_chains(
+            batch_tag=batch_tag,
+            movies=movies,
+            search_users=search_users,
+            user_funnel_paths=user_funnel_paths,
+            events_per_type=events_per_type,
+        )
+        # Build lookup for quick chain resolution
+        for chain in event_chains:
+            if chain.search_event_id:
+                chain_lookup[(chain.user_id, "search", chain.movie_id)] = chain
+            if chain.view_event_id:
+                chain_lookup[(chain.user_id, "view_history", chain.movie_id)] = chain
+            if chain.rating_event_id:
+                chain_lookup[(chain.user_id, "rating", chain.movie_id)] = chain
+            if chain.comment_event_id:
+                chain_lookup[(chain.user_id, "comment", chain.movie_id)] = chain
+            if chain.favorite_event_id:
+                chain_lookup[(chain.user_id, "favorite", chain.movie_id)] = chain
+            if chain.watched_event_id:
+                chain_lookup[(chain.user_id, "watched", chain.movie_id)] = chain
+
     for event_type in EVENT_ORDER:
         for item_index in range(events_per_type):
             occurred_at = None
+            parent_event_id = None
+            chain_id = None
             if event_type == "view_history":
                 source_row = pick_cycle(stage_view_rows, item_index)
                 user_id = source_row["user_id"]
@@ -992,6 +1134,12 @@ def build_kafka_records(
                     "movieId": source_row["movie_id"],
                     "viewTime": int(source_row["view_time"].timestamp() * 1000),
                 }
+                # Event chain linkage
+                if enable_event_chains:
+                    chain = chain_lookup.get((user_id, "view_history", source_row["movie_id"]))
+                    if chain:
+                        chain_id = chain.chain_id
+                        parent_event_id = chain.search_event_id
             elif event_type == "rating":
                 source_row = pick_cycle(stage_rating_rows, item_index)
                 user_id = source_row["user_id"]
@@ -1010,6 +1158,12 @@ def build_kafka_records(
                     "operation": operation,
                     "ratingTime": occurred_at.isoformat(),
                 }
+                # Event chain linkage
+                if enable_event_chains:
+                    chain = chain_lookup.get((user_id, "rating", source_row["movie_id"]))
+                    if chain:
+                        chain_id = chain.chain_id
+                        parent_event_id = chain.view_event_id
             elif event_type == "comment":
                 source_row = pick_cycle(stage_comment_rows, item_index)
                 user_id = source_row["user_id"]
@@ -1029,6 +1183,12 @@ def build_kafka_records(
                     "operation": operation,
                     "contentLength": len(source_row["content"]),
                 }
+                # Event chain linkage
+                if enable_event_chains:
+                    chain = chain_lookup.get((user_id, "comment", source_row["movie_id"]))
+                    if chain:
+                        chain_id = chain.chain_id
+                        parent_event_id = chain.rating_event_id
             elif event_type == "comment_like":
                 source_row = pick_cycle(stage_comment_like_rows, item_index)
                 user_id = source_row["user_id"]
@@ -1060,6 +1220,12 @@ def build_kafka_records(
                     "folderId": source_row["folder_id"],
                     "operation": operation,
                 }
+                # Event chain linkage
+                if enable_event_chains:
+                    chain = chain_lookup.get((user_id, "favorite", source_row["movie_id"]))
+                    if chain:
+                        chain_id = chain.chain_id
+                        parent_event_id = chain.comment_event_id
             elif event_type == "watched":
                 source_row = pick_cycle(stage_watched_rows, item_index)
                 user_id = source_row["user_id"]
@@ -1075,6 +1241,12 @@ def build_kafka_records(
                     "movieId": source_row["movie_id"],
                     "watchedTime": int(source_row["create_time"].timestamp() * 1000),
                 }
+                # Event chain linkage
+                if enable_event_chains:
+                    chain = chain_lookup.get((user_id, "watched", source_row["movie_id"]))
+                    if chain:
+                        chain_id = chain.chain_id
+                        parent_event_id = chain.favorite_event_id
             elif event_type == "favorite_folder_action":
                 source_row = pick_cycle(stage_folder_rows, item_index)
                 user_id = source_row["user_id"]
@@ -1114,6 +1286,11 @@ def build_kafka_records(
                     "resultCount": 0 if stable_bigint(f"{batch_tag}:search:{item_index}") % 10 >= 7 else 5 + (stable_bigint(f"{batch_tag}:search:{item_index}") % 46),
                     "searchTime": 80 + item_index * 11,
                 }
+                # Event chain linkage - search is the root of the chain
+                if enable_event_chains:
+                    chain = chain_lookup.get((user_id, "search", movie["movie_id"]))
+                    if chain:
+                        chain_id = chain.chain_id
             elif event_type == "user_register":
                 user = pick_cycle(search_users, item_index)
                 user_id = user["user_id"]
@@ -1129,13 +1306,24 @@ def build_kafka_records(
             else:
                 raise ValueError(f"Unsupported event type: {event_type}")
 
-            envelope = build_event_envelope(batch_tag, event_type, item_index, key, occurred_at, payload)
+            envelope = build_event_envelope(
+                batch_tag=batch_tag,
+                event_type=event_type,
+                event_index=item_index,
+                key=key,
+                occurred_at=occurred_at,
+                data=payload,
+                parent_event_id=parent_event_id,
+                chain_id=chain_id,
+            )
             kafka_records.append(
                 KafkaRecord(
                     topic=TOPIC_BY_EVENT_TYPE[event_type],
                     key=key,
                     value=json.dumps(envelope, ensure_ascii=False, separators=(",", ":")),
                     event_type=event_type,
+                    parent_event_id=parent_event_id,
+                    chain_id=chain_id,
                 )
             )
 
@@ -1212,6 +1400,7 @@ def generate_dataset(
     events_per_type: int,
     registered_user_count: int,
     args: argparse.Namespace,
+    enable_event_chains: bool = True,
 ) -> GeneratedDataset:
     registered_user_count = min(max(1, registered_user_count), args.display_registered_user_cap)
     registered_users = build_registered_user_rows(batch_tag, batch_date, registered_user_count)
@@ -1282,6 +1471,7 @@ def generate_dataset(
         watched_rows=all_watched,
         comment_likes=all_comment_likes,
         args=args,
+        enable_event_chains=enable_event_chains,
     )
     
     # Only insert registered user data into PostgreSQL (existing users already in DB)
@@ -1569,6 +1759,7 @@ def run() -> None:
             events_per_type=args.events_per_type,
             registered_user_count=args.registered_user_count,
             args=args,
+            enable_event_chains=args.enable_event_chains,
         )
 
         # Validate dataset integrity
