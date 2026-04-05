@@ -7,7 +7,6 @@ import {
   useGetGenrePreference,
   useGetSearchFunnel,
   useGetSearchKeywordInsights,
-  useGetUserFunnel,
   useGetUserRetention
 } from '@/api/endpoints/analytics/analytics'
 import type {
@@ -15,7 +14,6 @@ import type {
   GenrePreferenceDTO,
   SearchFunnelDTO,
   SearchKeywordInsightDTO,
-  UserFunnelDTO,
   UserRetentionDTO
 } from '@/api/model'
 import { formatDateTimeLabel } from '@/utils/profile'
@@ -76,12 +74,6 @@ export function useAdminOverview() {
       }
     }
   )
-
-  const userFunnelQuery = useGetUserFunnel<UserFunnelDTO>({
-    query: {
-      retry: false
-    }
-  })
 
   const userRetentionQuery = useGetUserRetention<UserRetentionDTO[]>(
     { limit: 100 },
@@ -218,11 +210,6 @@ export function useAdminOverview() {
     return []
   })
 
-  const userFunnel = computed<UserFunnelDTO>(() => {
-    const data = userFunnelQuery.data.value
-    return isRecord(data) ? data : {}
-  })
-
   const userRetention = computed<UserRetentionDTO[]>(() => {
     const data = userRetentionQuery.data.value
     if (Array.isArray(data)) {
@@ -246,8 +233,6 @@ export function useAdminOverview() {
     searchFunnelQuery.isFetching.value ||
     searchKeywordInsightsQuery.isLoading.value ||
     searchKeywordInsightsQuery.isFetching.value ||
-    userFunnelQuery.isLoading.value ||
-    userFunnelQuery.isFetching.value ||
     userRetentionQuery.isLoading.value ||
     userRetentionQuery.isFetching.value ||
     genrePreferenceQuery.isLoading.value ||
@@ -257,7 +242,6 @@ export function useAdminOverview() {
     dashboardQuery.isError.value ||
     searchFunnelQuery.isError.value ||
     searchKeywordInsightsQuery.isError.value ||
-    userFunnelQuery.isError.value ||
     userRetentionQuery.isError.value ||
     genrePreferenceQuery.isError.value
   )
@@ -277,7 +261,6 @@ export function useAdminOverview() {
         refetchOrThrow(dashboardQuery),
         refetchOrThrow(searchFunnelQuery),
         refetchOrThrow(searchKeywordInsightsQuery),
-        refetchOrThrow(userFunnelQuery),
         refetchOrThrow(userRetentionQuery),
         refetchOrThrow(genrePreferenceQuery)
       ])
@@ -298,7 +281,6 @@ export function useAdminOverview() {
     trendPanels,
     searchFunnel,
     searchKeywordInsights,
-    userFunnel,
     userRetention,
     genrePreference,
     loading,

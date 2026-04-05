@@ -22,11 +22,10 @@ Full Pipeline Steps:
   8. ADS: Build hot movies (run_ads_hot_movies.sh)
   9. ADS: Build ItemCF recommendations (run_ads_itemcf.sh)
 
-  11. ADS: Build user funnel (run_ads_user_funnel.sh)
+  11. ADS: Build user behavior sankey (run_ads_user_behavior_sankey.sh)
   12. ADS: Build user retention (run_ads_user_retention.sh)
   13. ADS: Build genre preference (run_ads_genre_preference.sh)
-  14. ADS: Build search funnel (run_ads_search_funnel.sh)
-  15. ADS: Build search keyword insights (run_ads_search_keyword_insights.sh)
+  14. ADS: Build search keyword insights (run_ads_search_keyword_insights.sh)
   16. ADS: Sync to PostgreSQL (run_ads_pg_sync.sh)
 
 Options:
@@ -246,17 +245,14 @@ if [[ "${SKIP_ADS}" == "false" ]]; then
   run_job "ADS ItemCF Recommendations" "run_ads_itemcf.sh"
 
 
-  # User funnel
-  run_job "ADS User Funnel" "run_ads_user_funnel.sh"
+  # User behavior sankey
+  run_job "ADS User Behavior Sankey" "run_ads_user_behavior_sankey.sh"
 
   # User retention
   run_job "ADS User Retention" "run_ads_user_retention.sh"
 
   # Genre preference
   run_job "ADS Genre Preference" "run_ads_genre_preference.sh"
-
-  # Search funnel
-  run_job "ADS Search Funnel" "run_ads_search_funnel.sh"
 
   # Search keyword insights
   run_job "ADS Search Keyword Insights" "run_ads_search_keyword_insights.sh"

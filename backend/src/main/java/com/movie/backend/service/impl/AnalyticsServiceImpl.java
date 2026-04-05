@@ -6,7 +6,7 @@ import com.movie.backend.dto.SearchFunnelDTO;
 import com.movie.backend.dto.SearchKeywordInsightDTO;
 import com.movie.backend.dto.SimilarMovieDTO;
 import com.movie.backend.dto.TrendingMovieDTO;
-import com.movie.backend.dto.UserFunnelDTO;
+import com.movie.backend.dto.UserBehaviorSankeyDTO;
 import com.movie.backend.dto.UserRetentionDTO;
 import com.movie.backend.entity.Movie;
 import com.movie.backend.mapper.AnalyticsMapper;
@@ -81,11 +81,6 @@ public class AnalyticsServiceImpl implements AnalyticsService {
     }
 
     @Override
-    public UserFunnelDTO getUserFunnel() {
-        return analyticsMapper.selectUserFunnel();
-    }
-
-    @Override
     public List<UserRetentionDTO> getUserRetention(int limit) {
         List<UserRetentionDTO> results = analyticsMapper.selectUserRetention(limit);
         return results == null ? new ArrayList<>() : results;
@@ -94,6 +89,12 @@ public class AnalyticsServiceImpl implements AnalyticsService {
     @Override
     public List<GenrePreferenceDTO> getGenrePreference(int limit) {
         List<GenrePreferenceDTO> results = analyticsMapper.selectGenrePreference(limit);
+        return results == null ? new ArrayList<>() : results;
+    }
+
+    @Override
+    public List<UserBehaviorSankeyDTO> getUserBehaviorSankey(int limit) {
+        List<UserBehaviorSankeyDTO> results = analyticsMapper.selectUserBehaviorSankey(limit);
         return results == null ? new ArrayList<>() : results;
     }
 

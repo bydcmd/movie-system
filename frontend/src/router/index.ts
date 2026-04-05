@@ -17,6 +17,7 @@ const CommentManagementView = () => import('@/views/admin/CommentManagementView.
 const MovieManagementView = () => import('@/views/admin/MovieManagementView.vue')
 const GenreManagementView = () => import('@/views/admin/GenreManagementView.vue')
 const RegionManagementView = () => import('@/views/admin/RegionManagementView.vue')
+const PersonManagementView = () => import('@/views/admin/PersonManagementView.vue')
 const ForbiddenView = () => import('@/views/ForbiddenView.vue')
 
 declare module 'vue-router' {
@@ -150,6 +151,15 @@ const router = createRouter({
           meta: {
             adminTitle: '地区管理',
             adminDescription: '管理电影地区分类，支持新增、编辑和删除操作。'
+          }
+        },
+        {
+          path: 'people',
+          name: 'admin-people',
+          component: PersonManagementView,
+          meta: {
+            adminTitle: '影人管理',
+            adminDescription: '管理演员、导演、编剧等影人信息。'
           }
         }
       ]

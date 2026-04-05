@@ -25,7 +25,7 @@ For local execution with `uv`:
 - Run job files by path, for example:
 
 ```bash
-uv run python jobs/build_ads_user_funnel_1d.py --config conf/etl_config.json --calc-date 2026-02-25
+uv run python jobs/build_ads_user_behavior_sankey_1d.py --config conf/etl_config.json --calc-date 2026-02-25
 ```
 
 - If you prefer module mode, do **not** use `.py` in `-m`:
@@ -64,9 +64,8 @@ Common wrapper to job mappings:
 - `run_ads_als_similar_movies.sh` -> `jobs/build_ads_als_similar_movies.py`
 - `run_ads_itemcf.sh` -> `jobs/build_ads_itemcf_recommendations.py`
 - `run_ads_genre_preference.sh` -> `jobs/build_ads_genre_preference_1d.py`
-- `run_ads_search_funnel.sh` -> `jobs/build_ads_search_funnel_1d.py`
 - `run_ads_search_keyword_insights.sh` -> `jobs/build_ads_search_keyword_insights_1d.py`
-- `run_ads_user_funnel.sh` -> `jobs/build_ads_user_funnel_1d.py`
+- `run_ads_user_behavior_sankey.sh` -> `jobs/build_ads_user_behavior_sankey_1d.py`
 - `run_ads_user_retention.sh` -> `jobs/build_ads_user_retention.py`
 
 ## 2) Create Hive ODS tables
@@ -395,15 +394,15 @@ bash run_ads_pg_sync.sh 2026-02-25 conf/etl_config.json --sync-types similar_mov
 
 Three additional ADS jobs are available:
 
-### 8.1 Daily user funnel (`ads.ads_user_funnel_1d`)
+### 8.1 User behavior Sankey (`ads.ads_user_behavior_sankey_1d`)
 
-This report now also includes `favorite_folder_action_users` (daily users who performed favorite-folder create/update/share/delete actions).
+Combines search-funnel and user-funnel into a single Sankey graph. Each output row is one directed link: `(source_node, target_node, user_count)`. Actions 看过/评分/评论/收藏 are parallel (non-sequential).
 
 ```bash
 spark-submit \
   --master yarn \
   --deploy-mode client \
-  jobs/build_ads_user_funnel_1d.py \
+  jobs/build_ads_user_behavior_sankey_1d.py \
   --config conf/etl_config.json \
   --calc-date 2026-02-25
 ```
@@ -536,19 +535,6 @@ Optional top N keywords:
 
 ```bash
 --top-n 200
-```
-
-### 10.2 Search conversion funnel (`ads.ads_search_funnel_1d`)
-
-`after_search_*` metrics are computed from actions whose `event_ts` is later than the user's first search event on the calculation day. Favorite conversion only counts favorite `ADD` actions.
-
-```bash
-spark-submit \
-  --master yarn \
-  --deploy-mode client \
-  jobs/build_ads_search_funnel_1d.py \
-  --config conf/etl_config.json \
-  --calc-date 2026-02-25
 ```
 
 ## Kafka event mapping

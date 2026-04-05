@@ -35,7 +35,6 @@ const {
   trendPanels,
   searchFunnel,
   searchKeywordInsights,
-  userFunnel,
   userRetention,
   genrePreference,
   loading,
@@ -133,8 +132,8 @@ const searchFunnelChartOption = computed(() => {
   const rawData = [
     { value: searchFunnel.value.searchUserCnt || 0, name: '搜索用户' },
     { value: searchFunnel.value.afterSearchViewUserCnt || 0, name: '浏览用户' },
-    { value: searchFunnel.value.afterSearchRatingUserCnt || 0, name: '评分用户' },
     { value: searchFunnel.value.afterSearchFavoriteUserCnt || 0, name: '收藏用户' },
+    { value: searchFunnel.value.afterSearchRatingUserCnt || 0, name: '评分用户' },
     { value: searchFunnel.value.afterSearchWatchedUserCnt || 0, name: '看过用户' }
   ]
   const data = rawData.filter(item => item.value > 0)
@@ -149,11 +148,28 @@ const searchFunnelChartOption = computed(() => {
       formatter: (params: { name: string; value: number; percent: number; dataIndex: number }) => {
         const idx = params.dataIndex
         const prevValue = idx > 0 ? values[idx - 1] : null
-        const convRate = prevValue && prevValue > 0
+        const firstValue = values[0] ?? 0
+
+        const stageRate = prevValue && prevValue > 0
           ? ((params.value / prevValue) * 100).toFixed(1)
           : null
-        const rateText = convRate ? `\n阶段转化: ${convRate}%` : ''
-        return `${params.name}: ${params.value}${rateText}`
+
+        const overallRate = firstValue > 0
+          ? ((params.value / firstValue) * 100).toFixed(1)
+          : '0'
+
+        let tooltip = `${params.name}: ${params.value}人`
+
+        if (idx === 0) {
+          tooltip += `\n（起始阶段）`
+        } else {
+          if (stageRate) {
+            tooltip += `\n阶段转化率: ${stageRate}%（相对于上一阶段）`
+          }
+          tooltip += `\n总体转化率: ${overallRate}%（相对于搜索用户）`
+        }
+
+        return tooltip
       }
     },
     legend: {
@@ -177,24 +193,7 @@ const searchFunnelChartOption = computed(() => {
           show: true,
           position: 'inside',
           formatter: (params: { name: string; value: number; dataIndex: number }) => {
-            const idx = params.dataIndex
-            const firstValue = values[0] ?? 0
-            const prevValue = idx > 0 ? values[idx - 1] : null
-            // Overall conversion rate (relative to first stage)
-            const overallRate = firstValue > 0
-              ? ((params.value / firstValue) * 100).toFixed(0)
-              : '0'
-            // Stage-to-stage conversion rate
-            const stageRate = prevValue && prevValue > 0
-              ? ((params.value / prevValue) * 100).toFixed(0)
-              : null
-
-            if (idx === 0) {
-              // First stage: show name and count
-              return `${params.name}\n${params.value}`
-            }
-            // Other stages: show name, count, and conversion rates
-            return `${params.name}\n${params.value} | ${stageRate}%→${overallRate}%`
+            return `${params.name}\n${params.value}`
           },
           fontSize: 11,
           color: '#fff'
@@ -222,99 +221,6 @@ const searchFunnelChartOption = computed(() => {
   }
 })
 
-const userFunnelChartOption = computed(() => {
-  const rawData = [
-    { value: userFunnel.value.totalActiveUsers || 0, name: '活跃用户' },
-    { value: userFunnel.value.viewUsers || 0, name: '浏览用户' },
-    { value: userFunnel.value.ratingUsers || 0, name: '评分用户' },
-    { value: userFunnel.value.commentUsers || 0, name: '评论用户' },
-    { value: userFunnel.value.favoriteUsers || 0, name: '收藏用户' },
-    { value: userFunnel.value.watchedUsers || 0, name: '看过用户' }
-  ]
-  const data = rawData.filter(item => item.value > 0)
-  const values = data.map(d => d.value)
-
-  // Unified gradient: indigo → sky → cyan → teal → emerald → green (cool funnel theme)
-  const gradientColors = ['#6366f1', '#818cf8', '#38bdf8', '#22d3ee', '#2dd4bf', '#10b981']
-
-  return {
-    tooltip: {
-      trigger: 'item',
-      formatter: (params: { name: string; value: number; percent: number; dataIndex: number }) => {
-        const idx = params.dataIndex
-        const prevValue = idx > 0 ? values[idx - 1] : null
-        const convRate = prevValue && prevValue > 0
-          ? ((params.value / prevValue) * 100).toFixed(1)
-          : null
-        const rateText = convRate ? `\n阶段转化: ${convRate}%` : ''
-        return `${params.name}: ${params.value}${rateText}`
-      }
-    },
-    legend: {
-      show: false
-    },
-    series: [
-      {
-        name: '用户漏斗',
-        type: 'funnel',
-        left: '10%',
-        top: '5%',
-        bottom: '5%',
-        width: '80%',
-        min: 0,
-        max: Math.max(1, userFunnel.value.totalActiveUsers || 0),
-        minSize: '0%',
-        maxSize: '100%',
-        sort: 'descending',
-        gap: 2,
-        label: {
-          show: true,
-          position: 'inside',
-          formatter: (params: { name: string; value: number; dataIndex: number }) => {
-            const idx = params.dataIndex
-            const firstValue = values[0] ?? 0
-            const prevValue = idx > 0 ? values[idx - 1] : null
-            // Overall conversion rate (relative to first stage)
-            const overallRate = firstValue > 0
-              ? ((params.value / firstValue) * 100).toFixed(0)
-              : '0'
-            // Stage-to-stage conversion rate
-            const stageRate = prevValue && prevValue > 0
-              ? ((params.value / prevValue) * 100).toFixed(0)
-              : null
-
-            if (idx === 0) {
-              // First stage: show name and count
-              return `${params.name}\n${params.value}`
-            }
-            // Other stages: show name, count, and conversion rates
-            return `${params.name}\n${params.value} | ${stageRate}%→${overallRate}%`
-          },
-          fontSize: 11,
-          color: '#fff'
-        },
-        labelLine: {
-          length: 10,
-          lineStyle: {
-            width: 1,
-            type: 'solid'
-          }
-        },
-        itemStyle: {
-          borderColor: '#fff',
-          borderWidth: 1
-        },
-        emphasis: {
-          label: {
-            fontSize: 13
-          }
-        },
-        data: data,
-        color: gradientColors
-      }
-    ]
-  }
-})
 
 function formatPercent(value: number | undefined): string {
   if (value === undefined || value === null) return '-'
@@ -731,9 +637,9 @@ const genrePreferenceChartOption = computed(() => {
 
             <article class="funnel-card">
               <div class="funnel-metric">
-                <span class="funnel-label">浏览→看过转化率</span>
+                <span class="funnel-label">搜索→看过转化率</span>
                 <strong class="funnel-value funnel-value--rate">
-                  {{ ((searchFunnel.viewToWatchedRate || 0) * 100).toFixed(1) }}%
+                  {{ ((searchFunnel.searchToWatchedRate || 0) * 100).toFixed(1) }}%
                 </strong>
               </div>
               <div class="funnel-metric">
@@ -745,97 +651,6 @@ const genrePreferenceChartOption = computed(() => {
         </div>
       </div>
 
-      <!-- User Funnel Analytics -->
-      <div class="funnel-section">
-        <h3 class="funnel-section-title">用户漏斗分析</h3>
-        <div class="funnel-layout">
-          <!-- Funnel Chart -->
-          <article class="funnel-chart-card">
-            <v-chart
-              :option="userFunnelChartOption"
-              :autoresize="true"
-              class="funnel-echart"
-            />
-          </article>
-
-          <!-- Funnel Metrics Grid -->
-          <div class="funnel-metrics-grid">
-            <article class="funnel-card">
-              <div class="funnel-metric">
-                <span class="funnel-label">活跃用户总数</span>
-                <strong class="funnel-value">{{ formatCount(userFunnel.totalActiveUsers) }}</strong>
-              </div>
-              <div class="funnel-metric">
-                <span class="funnel-label">浏览用户数</span>
-                <strong class="funnel-value">{{ formatCount(userFunnel.viewUsers) }}</strong>
-              </div>
-            </article>
-
-            <article class="funnel-card">
-              <div class="funnel-metric">
-                <span class="funnel-label">评分用户数</span>
-                <strong class="funnel-value">{{ formatCount(userFunnel.ratingUsers) }}</strong>
-              </div>
-              <div class="funnel-metric">
-                <span class="funnel-label">评论用户数</span>
-                <strong class="funnel-value">{{ formatCount(userFunnel.commentUsers) }}</strong>
-              </div>
-            </article>
-
-            <article class="funnel-card funnel-card--highlight">
-              <div class="funnel-metric">
-                <span class="funnel-label">收藏用户数</span>
-                <strong class="funnel-value">{{ formatCount(userFunnel.favoriteUsers) }}</strong>
-              </div>
-              <div class="funnel-metric">
-                <span class="funnel-label">看过用户数</span>
-                <strong class="funnel-value">{{ formatCount(userFunnel.watchedUsers) }}</strong>
-              </div>
-            </article>
-
-            <article class="funnel-card">
-              <div class="funnel-metric">
-                <span class="funnel-label">浏览→评分转化率</span>
-                <strong class="funnel-value funnel-value--rate">
-                  {{ ((userFunnel.viewToRatingRate || 0) * 100).toFixed(1) }}%
-                </strong>
-              </div>
-              <div class="funnel-metric">
-                <span class="funnel-label">评分→评论转化率</span>
-                <strong class="funnel-value funnel-value--rate">
-                  {{ ((userFunnel.ratingToCommentRate || 0) * 100).toFixed(1) }}%
-                </strong>
-              </div>
-            </article>
-
-            <article class="funnel-card">
-              <div class="funnel-metric">
-                <span class="funnel-label">评论→收藏转化率</span>
-                <strong class="funnel-value funnel-value--rate">
-                  {{ ((userFunnel.commentToFavoriteRate || 0) * 100).toFixed(1) }}%
-                </strong>
-              </div>
-              <div class="funnel-metric">
-                <span class="funnel-label">收藏→看过转化率</span>
-                <strong class="funnel-value funnel-value--rate">
-                  {{ ((userFunnel.favoriteToWatchedRate || 0) * 100).toFixed(1) }}%
-                </strong>
-              </div>
-            </article>
-
-            <article class="funnel-card">
-              <div class="funnel-metric">
-                <span class="funnel-label">收藏夹操作用户</span>
-                <strong class="funnel-value">{{ formatCount(userFunnel.favoriteFolderActionUsers) }}</strong>
-              </div>
-              <div class="funnel-metric">
-                <span class="funnel-label">计算日期</span>
-                <strong class="funnel-value funnel-value--date">{{ userFunnel.calcDate || '-' }}</strong>
-              </div>
-            </article>
-          </div>
-        </div>
-      </div>
 
       <!-- Search Keyword Insights -->
       <div class="keyword-section">
@@ -1479,4 +1294,35 @@ const genrePreferenceChartOption = computed(() => {
     height: 280px;
   }
 }
+
+	/* Responsive funnel chart adjustments */
+	@media (max-width: 768px) {
+	  .funnel-echart {
+	    height: 220px;
+	  }
+
+	  /* Adjust label font size */
+	  :deep(.echarts-funnel-series) .echarts-label {
+	    font-size: 9px !important;
+	  }
+	}
+
+	/* Extra small screens */
+	@media (max-width: 480px) {
+	  .funnel-echart {
+	    height: 180px;
+	  }
+
+	  .funnel-chart-card {
+	    padding: 0.75rem;
+	  }
+
+	  .funnel-metrics-grid {
+	    gap: 0.75rem;
+	  }
+
+	  .funnel-card {
+	    padding: 0.9rem;
+	  }
+	}
 </style>

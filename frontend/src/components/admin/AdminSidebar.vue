@@ -42,6 +42,11 @@ const navItems: AdminNavItem[] = [
     label: '地区',
     description: '管理电影地区分类'
   },
+  {
+    name: 'admin-people',
+    label: '影人',
+    description: '管理演员、导演、编剧'
+  },
 ]
 
 const currentRouteName = computed(() => String(route.name || ''))

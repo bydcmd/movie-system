@@ -42,20 +42,20 @@ public class UserServiceImpl implements UserService {
     public UserVO login(LoginDTO loginDTO) {
         User user = userMapper.selectById(loginDTO.getId());
         if (user == null) {
-            throw new RuntimeException("User not found");
+            throw new IllegalArgumentException("用户不存在");
         }
-        
+
         // 检查用户状态
         if (UserStatus.isFrozen(user.getStatus())) {
-            throw new RuntimeException("账号已被禁用，请联系管理员");
+            throw new IllegalArgumentException("账号已被禁用，请联系管理员");
         }
         if (UserStatus.isCancelled(user.getStatus())) {
-            throw new RuntimeException("该账号已注销，无法登录");
+            throw new IllegalArgumentException("该账号已注销，无法登录");
         }
-        
+
         // 使用BCrypt验证密码
         if (!PasswordUtil.matches(loginDTO.getPassword(), user.getPassword())) {
-            throw new RuntimeException("Invalid password");
+            throw new IllegalArgumentException("密码错误");
         }
 
         UserVO userVO = new UserVO();

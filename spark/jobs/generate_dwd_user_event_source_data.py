@@ -36,11 +36,11 @@ EVENT_ORDER = [
     "user_register",
     "search",
     "view_history",
+    "watched",
     "rating",
     "comment",
     "comment_like",
     "favorite",
-    "watched",
     "favorite_folder_action",
     "user_login",
 ]
@@ -49,11 +49,11 @@ EVENT_TIME_GROUP_INDEX = {
     "user_register": 7,
     "search": 8,
     "view_history": 9,
-    "rating": 10,
-    "comment": 11,
-    "comment_like": 12,
-    "favorite": 13,
-    "watched": 14,
+    "watched": 10,
+    "rating": 11,
+    "comment": 12,
+    "comment_like": 13,
+    "favorite": 14,
     "favorite_folder_action": 15,
     "user_login": 16,
 }
@@ -219,10 +219,10 @@ class EventChain:
     movie_id: int
     search_event_id: str | None = None
     view_event_id: str | None = None
+    watched_event_id: str | None = None
     rating_event_id: str | None = None
     comment_event_id: str | None = None
     favorite_event_id: str | None = None
-    watched_event_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -329,7 +329,7 @@ def parse_args() -> argparse.Namespace:
         "--enable-event-chains",
         type=lambda x: x.lower() in ("true", "1", "yes"),
         default=True,
-        help="Enable explicit event chaining (search->view->rating->comment->favorite->watched). Default: true.",
+        help="Enable explicit event chaining (search->view->watched->rating->comment->favorite). Default: true.",
     )
     return parser.parse_args()
 
@@ -390,7 +390,7 @@ def user_event_datetime(batch_date: dt.date, user_id: str, event_type: str, item
     Generate deterministic event datetime for a user, ensuring chronological order
     of event types for the same user.
 
-    Timeline order for same user: register → search → view → rating → comment → favorite → watched
+    Timeline order for same user: register → search → view → watched → rating → comment → favorite
     """
     base = dt.datetime.combine(batch_date, dt.time(hour=12, minute=0, tzinfo=SHANGHAI_TZ))
 
@@ -911,14 +911,14 @@ def shrink_user_cohort(users: list[dict[str, Any]], ratio: float) -> list[dict[s
 def determine_funnel_path(user_id: str, batch_tag: str) -> dict[str, bool]:
     """
     Deterministically determine which funnel steps a user completes.
-    Returns a dict with keys: has_view, has_rating, has_comment, has_favorite, has_watched.
+    Returns a dict with keys: has_view, has_watched, has_rating, has_comment, has_favorite.
     
     Target conversion rates (adjusted for more realistic wide funnel):
     - view: 90% of active users
-    - rating: 75% of viewers proceed to rating
-    - comment: 60% of raters proceed to comment
-    - favorite: 55% of commenters proceed to favorite
-    - watched: 50% of favoriters proceed to watched
+    - watched: 75% of viewers proceed to watched
+    - rating: 60% of watched users proceed to rating
+    - comment: 55% of raters proceed to comment
+    - favorite: 50% of commenters proceed to favorite
     
     Final distribution: 90% → 67.5% → 40.5% → 22.3% → 11.1%
     """
@@ -926,32 +926,32 @@ def determine_funnel_path(user_id: str, batch_tag: str) -> dict[str, bool]:
     base_seed = f"{batch_tag}:{user_id}"
     # Use different seeds for each step to get independent decisions
     view_hash = stable_bigint(f"{base_seed}:view") % 100
+    watched_hash = stable_bigint(f"{base_seed}:watched") % 100
     rating_hash = stable_bigint(f"{base_seed}:rating") % 100
     comment_hash = stable_bigint(f"{base_seed}:comment") % 100
     favorite_hash = stable_bigint(f"{base_seed}:favorite") % 100
-    watched_hash = stable_bigint(f"{base_seed}:watched") % 100
 
     # 90% of users have view (view_history event)
     has_view = view_hash < 90
 
-    # 75% of viewers proceed to rating
-    has_rating = has_view and (rating_hash < 75)
+    # 75% of viewers proceed to watched
+    has_watched = has_view and (watched_hash < 75)
 
-    # 60% of raters proceed to comment
-    has_comment = has_rating and (comment_hash < 60)
+    # 60% of watched users proceed to rating
+    has_rating = has_watched and (rating_hash < 60)
 
-    # 55% of commenters proceed to favorite (ADD operation)
-    has_favorite = has_comment and (favorite_hash < 55)
+    # 55% of raters proceed to comment
+    has_comment = has_rating and (comment_hash < 55)
 
-    # 50% of favoriters proceed to watched
-    has_watched = has_favorite and (watched_hash < 50)
+    # 50% of commenters proceed to favorite (ADD operation)
+    has_favorite = has_comment and (favorite_hash < 50)
 
     return {
         "has_view": has_view,
+        "has_watched": has_watched,
         "has_rating": has_rating,
         "has_comment": has_comment,
         "has_favorite": has_favorite,
-        "has_watched": has_watched,
     }
 
 
@@ -975,7 +975,7 @@ def build_event_chains(
     events_per_type: int,
 ) -> list[EventChain]:
     """
-    Build explicit event chains where search -> view -> rating -> comment -> favorite -> watched
+    Build explicit event chains where search -> view -> watched -> rating -> comment -> favorite
     are causally linked for the same user-movie pair.
     """
     chains: list[EventChain] = []
@@ -1007,6 +1007,9 @@ def build_event_chains(
                 view_event_id=seeded_uuid(batch_tag, "view_history", item_index, str(movie_id))
                 if user_path.get("has_view", False)
                 else None,
+                watched_event_id=seeded_uuid(batch_tag, "watched", item_index, str(movie_id))
+                if user_path.get("has_watched", False)
+                else None,
                 rating_event_id=seeded_uuid(batch_tag, "rating", item_index, str(movie_id))
                 if user_path.get("has_rating", False)
                 else None,
@@ -1015,9 +1018,6 @@ def build_event_chains(
                 else None,
                 favorite_event_id=seeded_uuid(batch_tag, "favorite", item_index, str(movie_id))
                 if user_path.get("has_favorite", False)
-                else None,
-                watched_event_id=seeded_uuid(batch_tag, "watched", item_index, str(movie_id))
-                if user_path.get("has_watched", False)
                 else None,
             )
         )
@@ -1058,10 +1058,10 @@ def build_kafka_records(
     # Funnel cohorts include both existing and registered users
     search_users = all_active_users
     view_users = shrink_user_cohort(search_users, 1)
-    rating_users = shrink_user_cohort(view_users, 1)
-    comment_users = shrink_user_cohort(rating_users, 0.9)
-    favorite_users = shrink_user_cohort(comment_users, 0.89)
-    watched_users = shrink_user_cohort(favorite_users, 0.86)
+    watched_users = shrink_user_cohort(view_users, 1)
+    rating_users = shrink_user_cohort(watched_users, 0.9)
+    comment_users = shrink_user_cohort(rating_users, 0.89)
+    favorite_users = shrink_user_cohort(comment_users, 0.86)
     folder_action_user_count = min(
         len(search_users),
         max(len(comment_users), len(favorite_users) + 1),
@@ -1071,19 +1071,19 @@ def build_kafka_records(
     login_users = existing_users + active_registered_users
 
     view_user_ids = {user["user_id"] for user in view_users}
+    watched_user_ids = {uid for uid in {user["user_id"] for user in watched_users} if user_funnel_paths.get(uid, {}).get("has_watched", False)}
     rating_user_ids = {uid for uid in {user["user_id"] for user in rating_users} if user_funnel_paths.get(uid, {}).get("has_rating", False)}
     comment_user_ids = {uid for uid in {user["user_id"] for user in comment_users} if user_funnel_paths.get(uid, {}).get("has_comment", False)}
     favorite_user_ids = {uid for uid in {user["user_id"] for user in favorite_users} if user_funnel_paths.get(uid, {}).get("has_favorite", False)}
-    watched_user_ids = {uid for uid in {user["user_id"] for user in watched_users} if user_funnel_paths.get(uid, {}).get("has_watched", False)}
     search_user_ids = {user["user_id"] for user in search_users}
     folder_action_user_ids = {user["user_id"] for user in folder_action_users}
 
     stage_view_rows = filter_rows_by_user_ids(view_history_rows, view_user_ids)
+    stage_watched_rows = filter_rows_by_user_ids(watched_rows, watched_user_ids)
     stage_rating_rows = filter_rows_by_user_ids(ratings, rating_user_ids)
     stage_comment_rows = filter_rows_by_user_ids(comments, comment_user_ids)
     stage_comment_like_rows = filter_rows_by_user_ids(comment_likes, search_user_ids)
     stage_favorite_rows = filter_rows_by_user_ids(favorites, favorite_user_ids)
-    stage_watched_rows = filter_rows_by_user_ids(watched_rows, watched_user_ids)
     # Combine registered and existing folders for folder action events
     all_folders = registered_folders + existing_folders
     stage_folder_rows = filter_rows_by_user_ids(all_folders, folder_action_user_ids)
@@ -1163,7 +1163,7 @@ def build_kafka_records(
                     chain = chain_lookup.get((user_id, "rating", source_row["movie_id"]))
                     if chain:
                         chain_id = chain.chain_id
-                        parent_event_id = chain.view_event_id
+                        parent_event_id = chain.watched_event_id
             elif event_type == "comment":
                 source_row = pick_cycle(stage_comment_rows, item_index)
                 user_id = source_row["user_id"]
@@ -1246,7 +1246,7 @@ def build_kafka_records(
                     chain = chain_lookup.get((user_id, "watched", source_row["movie_id"]))
                     if chain:
                         chain_id = chain.chain_id
-                        parent_event_id = chain.favorite_event_id
+                        parent_event_id = chain.view_event_id
             elif event_type == "favorite_folder_action":
                 source_row = pick_cycle(stage_folder_rows, item_index)
                 user_id = source_row["user_id"]

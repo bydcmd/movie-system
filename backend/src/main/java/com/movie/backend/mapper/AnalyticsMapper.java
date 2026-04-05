@@ -4,7 +4,7 @@ import com.movie.backend.dto.GenrePreferenceDTO;
 import com.movie.backend.dto.SearchFunnelDTO;
 import com.movie.backend.dto.SearchKeywordInsightDTO;
 import com.movie.backend.dto.SimilarMovieDTO;
-import com.movie.backend.dto.UserFunnelDTO;
+import com.movie.backend.dto.UserBehaviorSankeyDTO;
 import com.movie.backend.dto.UserRetentionDTO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -38,11 +38,6 @@ public interface AnalyticsMapper {
     List<SearchKeywordInsightDTO> selectSearchKeywordInsights(@Param("limit") int limit);
 
     /**
-     * 查询用户漏斗分析数据（取最新 calc_date）
-     */
-    UserFunnelDTO selectUserFunnel();
-
-    /**
      * 查询用户留存分析数据（取最新 calc_date）
      */
     List<UserRetentionDTO> selectUserRetention(@Param("limit") int limit);
@@ -51,4 +46,9 @@ public interface AnalyticsMapper {
      * 查询类型偏好分析数据（取最新 calc_date）
      */
     List<GenrePreferenceDTO> selectGenrePreference(@Param("limit") int limit);
+
+    /**
+     * 查询用户行为桑基图数据（取最新 calc_date）
+     */
+    List<UserBehaviorSankeyDTO> selectUserBehaviorSankey(@Param("limit") int limit);
 }

@@ -30,23 +30,6 @@ STORED AS ORC
 LOCATION '/warehouse/movie/ads/hot_movies'
 TBLPROPERTIES ('orc.compress'='SNAPPY');
 
-CREATE EXTERNAL TABLE IF NOT EXISTS ads.ads_user_funnel_1d (
-  total_active_users bigint,
-  view_users bigint,
-  rating_users bigint,
-  comment_users bigint,
-  favorite_users bigint,
-  favorite_folder_action_users bigint,
-  watched_users bigint,
-  view_to_rating_rate decimal(10,4),
-  rating_to_comment_rate decimal(10,4),
-  comment_to_favorite_rate decimal(10,4),
-  favorite_to_watched_rate decimal(10,4)
-)
-PARTITIONED BY (dt string)
-STORED AS ORC
-LOCATION '/warehouse/movie/ads/user_funnel_1d'
-TBLPROPERTIES ('orc.compress'='SNAPPY');
 
 CREATE EXTERNAL TABLE IF NOT EXISTS ads.ads_user_retention (
   cohort_dt string,
@@ -167,20 +150,14 @@ STORED AS ORC
 LOCATION '/warehouse/movie/ads/search_keyword_insights_1d'
 TBLPROPERTIES ('orc.compress'='SNAPPY');
 
-CREATE EXTERNAL TABLE IF NOT EXISTS ads.ads_search_funnel_1d (
-  search_user_cnt bigint,
-  search_cnt bigint,
-  search_with_result_cnt bigint,
-  search_zero_result_cnt bigint,
-  after_search_view_user_cnt bigint,
-  after_search_rating_user_cnt bigint,
-  after_search_favorite_user_cnt bigint,
-  after_search_watched_user_cnt bigint,
-  search_to_view_rate decimal(10,4),
-  view_to_watched_rate decimal(10,4),
-  search_to_rating_rate decimal(10,4)
+CREATE EXTERNAL TABLE IF NOT EXISTS ads.ads_user_behavior_sankey_1d (
+  source_node string COMMENT 'Sankey source node name',
+  target_node string COMMENT 'Sankey target node name',
+  user_count bigint COMMENT 'Number of users flowing from source to target'
 )
 PARTITIONED BY (dt string)
 STORED AS ORC
-LOCATION '/warehouse/movie/ads/search_funnel_1d'
+LOCATION '/warehouse/movie/ads/user_behavior_sankey_1d'
 TBLPROPERTIES ('orc.compress'='SNAPPY');
+
+

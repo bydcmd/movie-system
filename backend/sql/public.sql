@@ -616,7 +616,7 @@ CREATE TABLE "public"."stats_search_funnel_1d" (
   "after_search_favorite_user_cnt" int8 NOT NULL DEFAULT 0,
   "after_search_watched_user_cnt" int8 NOT NULL DEFAULT 0,
   "search_to_view_rate" numeric(10,4),
-  "view_to_watched_rate" numeric(10,4),
+  "search_to_watched_rate" numeric(10,4),
   "search_to_rating_rate" numeric(10,4),
   "calc_date" date NOT NULL
 )
@@ -630,7 +630,7 @@ COMMENT ON COLUMN "public"."stats_search_funnel_1d"."after_search_rating_user_cn
 COMMENT ON COLUMN "public"."stats_search_funnel_1d"."after_search_favorite_user_cnt" IS '搜索后收藏的用户数';
 COMMENT ON COLUMN "public"."stats_search_funnel_1d"."after_search_watched_user_cnt" IS '搜索后标记看过的用户数';
 COMMENT ON COLUMN "public"."stats_search_funnel_1d"."search_to_view_rate" IS '搜索到浏览转化率';
-COMMENT ON COLUMN "public"."stats_search_funnel_1d"."view_to_watched_rate" IS '浏览到看过转化率';
+COMMENT ON COLUMN "public"."stats_search_funnel_1d"."search_to_watched_rate" IS '搜索到看过转化率';
 COMMENT ON COLUMN "public"."stats_search_funnel_1d"."search_to_rating_rate" IS '搜索到评分转化率';
 COMMENT ON COLUMN "public"."stats_search_funnel_1d"."calc_date" IS '计算日期';
 COMMENT ON TABLE "public"."stats_search_funnel_1d" IS '搜索漏斗分析统计表(每日更新)';
@@ -699,29 +699,29 @@ CREATE TABLE "public"."stats_user_funnel_1d" (
   "id" int8 NOT NULL DEFAULT nextval('stats_user_funnel_1d_id_seq'::regclass),
   "total_active_users" int8 NOT NULL DEFAULT 0,
   "view_users" int8 NOT NULL DEFAULT 0,
+  "watched_users" int8 NOT NULL DEFAULT 0,
   "rating_users" int8 NOT NULL DEFAULT 0,
   "comment_users" int8 NOT NULL DEFAULT 0,
   "favorite_users" int8 NOT NULL DEFAULT 0,
   "favorite_folder_action_users" int8 NOT NULL DEFAULT 0,
-  "watched_users" int8 NOT NULL DEFAULT 0,
-  "view_to_rating_rate" numeric(10,4),
+  "view_to_watched_rate" numeric(10,4),
+  "watched_to_rating_rate" numeric(10,4),
   "rating_to_comment_rate" numeric(10,4),
   "comment_to_favorite_rate" numeric(10,4),
-  "favorite_to_watched_rate" numeric(10,4),
   "calc_date" date NOT NULL
 )
 ;
 COMMENT ON COLUMN "public"."stats_user_funnel_1d"."total_active_users" IS '活跃用户总数';
 COMMENT ON COLUMN "public"."stats_user_funnel_1d"."view_users" IS '浏览用户数';
+COMMENT ON COLUMN "public"."stats_user_funnel_1d"."watched_users" IS '看过用户数';
 COMMENT ON COLUMN "public"."stats_user_funnel_1d"."rating_users" IS '评分用户数';
 COMMENT ON COLUMN "public"."stats_user_funnel_1d"."comment_users" IS '评论用户数';
 COMMENT ON COLUMN "public"."stats_user_funnel_1d"."favorite_users" IS '收藏用户数';
 COMMENT ON COLUMN "public"."stats_user_funnel_1d"."favorite_folder_action_users" IS '收藏夹操作用户数';
-COMMENT ON COLUMN "public"."stats_user_funnel_1d"."watched_users" IS '看过用户数';
-COMMENT ON COLUMN "public"."stats_user_funnel_1d"."view_to_rating_rate" IS '浏览到评分转化率';
+COMMENT ON COLUMN "public"."stats_user_funnel_1d"."view_to_watched_rate" IS '浏览到看过转化率';
+COMMENT ON COLUMN "public"."stats_user_funnel_1d"."watched_to_rating_rate" IS '看过到评分转化率';
 COMMENT ON COLUMN "public"."stats_user_funnel_1d"."rating_to_comment_rate" IS '评分到评论转化率';
 COMMENT ON COLUMN "public"."stats_user_funnel_1d"."comment_to_favorite_rate" IS '评论到收藏转化率';
-COMMENT ON COLUMN "public"."stats_user_funnel_1d"."favorite_to_watched_rate" IS '收藏到看过转化率';
 COMMENT ON COLUMN "public"."stats_user_funnel_1d"."calc_date" IS '计算日期';
 COMMENT ON TABLE "public"."stats_user_funnel_1d" IS '用户漏斗分析统计表(每日更新)';
 

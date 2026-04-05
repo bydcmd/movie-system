@@ -6,7 +6,7 @@ import com.movie.backend.dto.GenrePreferenceDTO;
 import com.movie.backend.dto.SearchFunnelDTO;
 import com.movie.backend.dto.SearchKeywordInsightDTO;
 import com.movie.backend.dto.TrendingMovieDTO;
-import com.movie.backend.dto.UserFunnelDTO;
+import com.movie.backend.dto.UserBehaviorSankeyDTO;
 import com.movie.backend.dto.UserRetentionDTO;
 import com.movie.backend.entity.Movie;
 import com.movie.backend.service.AnalyticsService;
@@ -79,16 +79,6 @@ public class AnalyticsController {
         return Result.success(analyticsService.getSearchKeywordInsights(limit));
     }
 
-    @Operation(operationId = "getUserFunnel", summary = "获取用户漏斗分析", description = "返回用户行为的漏斗分析数据，包括活跃用户数、转化率等指标。底层基于 Hive/Spark 离线计算。")
-    @GetMapping("/user-funnel")
-    public Result<UserFunnelDTO> getUserFunnel() {
-        UserFunnelDTO result = analyticsService.getUserFunnel();
-        if (result == null) {
-            return Result.notFound("暂无用户漏斗数据");
-        }
-        return Result.success(result);
-    }
-
     @Operation(operationId = "getUserRetention", summary = "获取用户留存分析", description = "返回用户留存数据，按群组日期和留存天数分组。底层基于 Hive/Spark 离线计算。")
     @GetMapping("/user-retention")
     public Result<List<UserRetentionDTO>> getUserRetention(
@@ -107,6 +97,16 @@ public class AnalyticsController {
             @Min(value = 1, message = "返回数量至少为1")
             @Max(value = 200, message = "返回数量最多为200") int limit) {
         return Result.success(analyticsService.getGenrePreference(limit));
+    }
+
+    @Operation(operationId = "getUserBehaviorSankey", summary = "获取用户行为桑基图", description = "返回用户行为桑基图的链接数据，用于可视化用户行为流转路径。底层基于 Hive/Spark 离线计算。")
+    @GetMapping("/user-behavior-sankey")
+    public Result<List<UserBehaviorSankeyDTO>> getUserBehaviorSankey(
+            @Parameter(name = "limit", description = "返回数量，默认100条，最多500条", example = "100")
+            @RequestParam(defaultValue = "100")
+            @Min(value = 1, message = "返回数量至少为1")
+            @Max(value = 500, message = "返回数量最多为500") int limit) {
+        return Result.success(analyticsService.getUserBehaviorSankey(limit));
     }
 }
 

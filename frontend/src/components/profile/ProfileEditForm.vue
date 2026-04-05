@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { computed, reactive, ref, useTemplateRef, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { NButton, NForm, NFormItem, NInput } from 'naive-ui'
 import { useMessage } from 'naive-ui'
 import { useUploadImage } from '@/api/endpoints/file-management/file-management'
+import { useChangePassword } from '@/api/endpoints/auth-management/auth-management'
+import { useAuthStore } from '@/stores/auth'
 import type { UpdateUserProfileDTO, UserProfileVO } from '@/api/model'
 import { getNameInitial, resolveAssetUrl } from '@/utils/profile'
 
@@ -10,6 +13,12 @@ type ProfileFormState = {
   nickname: string
   avatar: string
   email: string
+}
+
+type PasswordFormState = {
+  oldPassword: string
+  newPassword: string
+  confirmPassword: string
 }
 
 const props = defineProps<{
@@ -28,8 +37,17 @@ const form = reactive<ProfileFormState>({
   email: ''
 })
 
+const passwordForm = reactive<PasswordFormState>({
+  oldPassword: '',
+  newPassword: '',
+  confirmPassword: ''
+})
+
+const router = useRouter()
 const message = useMessage()
+const authStore = useAuthStore()
 const uploadImageMutation = useUploadImage()
+const changePasswordMutation = useChangePassword()
 const avatarInputRef = useTemplateRef<HTMLInputElement>('avatarInput')
 const avatarUploading = ref(false)
 const hasHydratedForm = ref(false)
@@ -62,6 +80,12 @@ const normalizedOriginal = computed<ProfileFormState>(() => toFormState(props.pr
 const hasChanges = computed(() => {
   return !isSameFormState(form, normalizedOriginal.value)
 })
+
+const hasPasswordChanges = computed(() => {
+  return passwordForm.oldPassword || passwordForm.newPassword || passwordForm.confirmPassword
+})
+
+const passwordChanging = computed(() => changePasswordMutation.isPending.value)
 
 const avatarPreview = computed(() => resolveAssetUrl(form.avatar))
 
@@ -174,6 +198,63 @@ async function handleAvatarChange(event: Event) {
     }
   }
 }
+
+function validatePasswordForm(): boolean {
+  if (!passwordForm.oldPassword) {
+    message.error('请输入当前密码')
+    return false
+  }
+
+  if (!passwordForm.newPassword) {
+    message.error('请输入新密码')
+    return false
+  }
+
+  if (passwordForm.newPassword.length < 6) {
+    message.error('新密码长度至少为 6 位')
+    return false
+  }
+
+  if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+    message.error('两次输入的密码不一致')
+    return false
+  }
+
+  return true
+}
+
+async function handlePasswordChange() {
+  if (!validatePasswordForm()) {
+    return
+  }
+
+  try {
+    await changePasswordMutation.mutateAsync({
+      data: {
+        oldPassword: passwordForm.oldPassword,
+        newPassword: passwordForm.newPassword
+      }
+    })
+    message.success('密码修改成功，请重新登录')
+    // Clear password form
+    passwordForm.oldPassword = ''
+    passwordForm.newPassword = ''
+    passwordForm.confirmPassword = ''
+    // Clear auth store (token invalidated on server) before redirecting to login
+    authStore.clearAuth()
+    // Redirect to login page after successful password change
+    router.replace('/login')
+  } catch (error) {
+    console.error('Failed to change password:', error)
+    message.error('密码修改失败，请检查当前密码是否正确')
+  }
+}
+
+function resetPasswordForm() {
+  passwordForm.oldPassword = ''
+  passwordForm.newPassword = ''
+  passwordForm.confirmPassword = ''
+}
 </script>
 
 <template>
@@ -240,7 +321,64 @@ async function handleAvatarChange(event: Event) {
             maxlength="100"
           />
         </n-form-item>
+      </n-form>
 
+      <div class="password-section">
+        <h3 class="password-section-title">修改密码</h3>
+        <p class="password-section-description">
+          修改密码后需要重新登录，所有已登录设备将被登出。
+        </p>
+        <n-form label-placement="top" class="profile-form">
+          <n-form-item label="当前密码">
+            <n-input
+              v-model:value="passwordForm.oldPassword"
+              type="password"
+              placeholder="请输入当前密码"
+              show-password-on="click"
+            />
+          </n-form-item>
+
+          <n-form-item label="新密码">
+            <n-input
+              v-model:value="passwordForm.newPassword"
+              type="password"
+              placeholder="至少 6 位字符"
+              show-password-on="click"
+            />
+          </n-form-item>
+
+          <n-form-item label="确认新密码">
+            <n-input
+              v-model:value="passwordForm.confirmPassword"
+              type="password"
+              placeholder="再次输入新密码"
+              show-password-on="click"
+            />
+          </n-form-item>
+
+          <div class="profile-form-actions">
+            <n-button
+              type="primary"
+              class="rounded-full px-6"
+              :loading="passwordChanging"
+              :disabled="!hasPasswordChanges || avatarUploading || saving"
+              @click="handlePasswordChange"
+            >
+              修改密码
+            </n-button>
+            <n-button
+              tertiary
+              class="rounded-full px-6"
+              :disabled="!hasPasswordChanges || passwordChanging"
+              @click="resetPasswordForm"
+            >
+              清空
+            </n-button>
+          </div>
+        </n-form>
+      </div>
+
+      <n-form label-placement="top" class="profile-form">
         <div class="profile-form-actions">
           <n-button
             type="primary"
@@ -397,6 +535,27 @@ async function handleAvatarChange(event: Event) {
   flex-wrap: wrap;
   gap: 0.75rem;
   padding-top: 0.5rem;
+}
+
+.password-section {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.24);
+}
+
+.password-section-title {
+  margin: 0 0 0.25rem;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.password-section-description {
+  margin: 0 0 1rem;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: #64748b;
 }
 
 @media (max-width: 767px) {

@@ -35,7 +35,7 @@
                after_search_favorite_user_cnt AS afterSearchFavoriteUserCnt,
                after_search_watched_user_cnt AS afterSearchWatchedUserCnt,
                search_to_view_rate AS searchToViewRate,
-               view_to_watched_rate AS viewToWatchedRate,
+               search_to_watched_rate AS searchToWatchedRate,
                search_to_rating_rate AS searchToRatingRate,
                TO_CHAR(calc_date, 'YYYY-MM-DD') AS calcDate
         FROM stats_search_funnel_1d
@@ -63,24 +63,6 @@
         LIMIT #{limit}
     </select>
 
-    <select id="selectUserFunnel" resultType="com.movie.backend.dto.UserFunnelDTO">
-        SELECT total_active_users AS totalActiveUsers,
-               view_users AS viewUsers,
-               rating_users AS ratingUsers,
-               comment_users AS commentUsers,
-               favorite_users AS favoriteUsers,
-               favorite_folder_action_users AS favoriteFolderActionUsers,
-               watched_users AS watchedUsers,
-               view_to_rating_rate AS viewToRatingRate,
-               rating_to_comment_rate AS ratingToCommentRate,
-               comment_to_favorite_rate AS commentToFavoriteRate,
-               favorite_to_watched_rate AS favoriteToWatchedRate,
-               TO_CHAR(calc_date, 'YYYY-MM-DD') AS calcDate
-        FROM stats_user_funnel_1d
-        WHERE calc_date = (SELECT MAX(calc_date) FROM stats_user_funnel_1d)
-        LIMIT 1
-    </select>
-
     <select id="selectUserRetention" resultType="com.movie.backend.dto.UserRetentionDTO">
         SELECT cohort_dt AS cohortDt,
                retention_day AS retentionDay,
@@ -106,6 +88,16 @@
         FROM stats_genre_preference_1d
         WHERE calc_date = (SELECT MAX(calc_date) FROM stats_genre_preference_1d)
         ORDER BY rank_no ASC
+        LIMIT #{limit}
+    </select>
+
+    <select id="selectUserBehaviorSankey" resultType="com.movie.backend.dto.UserBehaviorSankeyDTO">
+        SELECT source_node AS sourceNode,
+               target_node AS targetNode,
+               user_count AS userCount
+        FROM stats_user_behavior_sankey_1d
+        WHERE calc_date = (SELECT MAX(calc_date) FROM stats_user_behavior_sankey_1d)
+        ORDER BY user_count DESC
         LIMIT #{limit}
     </select>
 

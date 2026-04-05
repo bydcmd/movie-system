@@ -11,8 +11,8 @@ Usage:
 
 Notes:
   --sync-types: Comma-separated list of sync types.
-    Options: hot_movies, similar_movies, search_funnel, search_keyword_insights,
-             user_funnel, user_retention, genre_preference, all.
+    Options: hot_movies, similar_movies, search_keyword_insights,
+             user_behavior_sankey, user_retention, genre_preference, all.
     Default: hot_movies,similar_movies
 
 Examples:

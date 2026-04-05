@@ -29,21 +29,9 @@ DEFAULT_ADS_SIMILAR_MOVIES_SYNC_CONFIG: dict[str, Any] = {
     "batch_size": 1000,
 }
 
-DEFAULT_ADS_SEARCH_FUNNEL_SYNC_CONFIG: dict[str, Any] = {
-    "source_table": "ads.ads_search_funnel_1d",
-    "target_table": "public.stats_search_funnel_1d",
-    "batch_size": 1000,
-}
-
 DEFAULT_ADS_SEARCH_KEYWORD_INSIGHTS_SYNC_CONFIG: dict[str, Any] = {
     "source_table": "ads.ads_search_keyword_insights_1d",
     "target_table": "public.stats_search_keyword_insights_1d",
-    "batch_size": 1000,
-}
-
-DEFAULT_ADS_USER_FUNNEL_SYNC_CONFIG: dict[str, Any] = {
-    "source_table": "ads.ads_user_funnel_1d",
-    "target_table": "public.stats_user_funnel_1d",
     "batch_size": 1000,
 }
 
@@ -56,6 +44,12 @@ DEFAULT_ADS_USER_RETENTION_SYNC_CONFIG: dict[str, Any] = {
 DEFAULT_ADS_GENRE_PREFERENCE_SYNC_CONFIG: dict[str, Any] = {
     "source_table": "ads.ads_genre_preference_1d",
     "target_table": "public.stats_genre_preference_1d",
+    "batch_size": 1000,
+}
+
+DEFAULT_ADS_USER_BEHAVIOR_SANKEY_SYNC_CONFIG: dict[str, Any] = {
+    "source_table": "ads.ads_user_behavior_sankey_1d",
+    "target_table": "public.stats_user_behavior_sankey_1d",
     "batch_size": 1000,
 }
 
@@ -89,7 +83,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--sync-types",
         default="hot_movies,similar_movies",
-        help="Comma-separated list of sync types. Options: hot_movies, similar_movies, search_funnel, search_keyword_insights, user_funnel, user_retention, all. Default: hot_movies,similar_movies",
+        help="Comma-separated list of sync types. Options: hot_movies, similar_movies, search_funnel, search_keyword_insights, user_retention, all. Default: hot_movies,similar_movies",
     )
     return parser.parse_args()
 
@@ -138,23 +132,23 @@ def parse_sync_types_arg(sync_types_arg: str) -> set[str]:
             "similar_movies",
             "search_funnel",
             "search_keyword_insights",
-            "user_funnel",
             "user_retention",
             "genre_preference",
+            "user_behavior_sankey",
         }
     valid = {
         "hot_movies",
         "similar_movies",
         "search_funnel",
         "search_keyword_insights",
-        "user_funnel",
         "user_retention",
         "genre_preference",
+        "user_behavior_sankey",
     }
     invalid = sync_types - valid
     if invalid:
         raise ValueError(
-            f"Invalid sync types: {invalid}. Valid options: hot_movies, similar_movies, search_funnel, search_keyword_insights, user_funnel, user_retention, genre_preference, all"
+            f"Invalid sync types: {invalid}. Valid options: hot_movies, similar_movies, search_funnel, search_keyword_insights, user_retention, genre_preference, user_behavior_sankey, all"
         )
     return sync_types
 
@@ -256,31 +250,6 @@ def build_similar_movies_source_frame(
     return filtered_df
 
 
-def build_search_funnel_source_frame(
-    spark: SparkSession,
-    source_table: str,
-    calc_date: str,
-) -> DataFrame:
-    source_df = spark.table(source_table).where(F.col("dt") == calc_date)
-    ensure_non_empty_partition(source_df, source_table, {"dt": calc_date}, spark=spark)
-
-    filtered_df = source_df.select(
-        F.col("search_user_cnt").cast("bigint").alias("search_user_cnt"),
-        F.col("search_cnt").cast("bigint").alias("search_cnt"),
-        F.col("search_with_result_cnt").cast("bigint").alias("search_with_result_cnt"),
-        F.col("search_zero_result_cnt").cast("bigint").alias("search_zero_result_cnt"),
-        F.col("after_search_view_user_cnt").cast("bigint").alias("after_search_view_user_cnt"),
-        F.col("after_search_rating_user_cnt").cast("bigint").alias("after_search_rating_user_cnt"),
-        F.col("after_search_favorite_user_cnt").cast("bigint").alias("after_search_favorite_user_cnt"),
-        F.col("after_search_watched_user_cnt").cast("bigint").alias("after_search_watched_user_cnt"),
-        F.col("search_to_view_rate").cast("decimal(10,4)").alias("search_to_view_rate"),
-        F.col("view_to_watched_rate").cast("decimal(10,4)").alias("view_to_watched_rate"),
-        F.col("search_to_rating_rate").cast("decimal(10,4)").alias("search_to_rating_rate"),
-    ).withColumn("calc_date", F.lit(calc_date).cast("date"))
-
-    return filtered_df
-
-
 def build_search_keyword_insights_source_frame(
     spark: SparkSession,
     source_table: str,
@@ -303,31 +272,6 @@ def build_search_keyword_insights_source_frame(
         F.col("search_to_view_rate").cast("decimal(10,4)").alias("search_to_view_rate"),
         F.col("view_to_watch_rate").cast("decimal(10,4)").alias("view_to_watch_rate"),
         F.col("problem_score").cast("decimal(10,4)").alias("problem_score"),
-    ).withColumn("calc_date", F.lit(calc_date).cast("date"))
-
-    return filtered_df
-
-
-def build_user_funnel_source_frame(
-    spark: SparkSession,
-    source_table: str,
-    calc_date: str,
-) -> DataFrame:
-    source_df = spark.table(source_table).where(F.col("dt") == calc_date)
-    ensure_non_empty_partition(source_df, source_table, {"dt": calc_date}, spark=spark)
-
-    filtered_df = source_df.select(
-        F.col("total_active_users").cast("bigint").alias("total_active_users"),
-        F.col("view_users").cast("bigint").alias("view_users"),
-        F.col("rating_users").cast("bigint").alias("rating_users"),
-        F.col("comment_users").cast("bigint").alias("comment_users"),
-        F.col("favorite_users").cast("bigint").alias("favorite_users"),
-        F.col("favorite_folder_action_users").cast("bigint").alias("favorite_folder_action_users"),
-        F.col("watched_users").cast("bigint").alias("watched_users"),
-        F.col("view_to_rating_rate").cast("decimal(10,4)").alias("view_to_rating_rate"),
-        F.col("rating_to_comment_rate").cast("decimal(10,4)").alias("rating_to_comment_rate"),
-        F.col("comment_to_favorite_rate").cast("decimal(10,4)").alias("comment_to_favorite_rate"),
-        F.col("favorite_to_watched_rate").cast("decimal(10,4)").alias("favorite_to_watched_rate"),
     ).withColumn("calc_date", F.lit(calc_date).cast("date"))
 
     return filtered_df
@@ -369,6 +313,23 @@ def build_genre_preference_source_frame(
         F.col("rating_cnt").cast("bigint").alias("rating_cnt"),
         F.col("watched_cnt").cast("bigint").alias("watched_cnt"),
         F.col("hot_score_sum").cast("decimal(18,4)").alias("hot_score_sum"),
+    ).withColumn("calc_date", F.lit(calc_date).cast("date"))
+
+    return filtered_df
+
+
+def build_user_behavior_sankey_source_frame(
+    spark: SparkSession,
+    source_table: str,
+    calc_date: str,
+) -> DataFrame:
+    source_df = spark.table(source_table).where(F.col("dt") == calc_date)
+    ensure_non_empty_partition(source_df, source_table, {"dt": calc_date}, spark=spark)
+
+    filtered_df = source_df.select(
+        F.col("source_node").alias("source_node"),
+        F.col("target_node").alias("target_node"),
+        F.col("user_count").cast("bigint").alias("user_count"),
     ).withColumn("calc_date", F.lit(calc_date).cast("date"))
 
     return filtered_df
@@ -591,43 +552,6 @@ def sync_similar_movies(
         result_df.unpersist()
 
 
-def sync_search_funnel(
-    spark: SparkSession,
-    pg_config: dict[str, Any],
-    sync_config: dict[str, Any],
-    calc_date: str,
-) -> str:
-    """Sync search funnel from ADS to PostgreSQL. Returns result message."""
-    source_table = str(sync_config["source_table"]).strip()
-    target_table = str(sync_config["target_table"]).strip()
-    batch_size = int(sync_config.get("batch_size", 1000))
-    if batch_size <= 0:
-        raise ValueError(f"Invalid batch_size: {batch_size}")
-
-    result_df = build_search_funnel_source_frame(
-        spark=spark,
-        source_table=source_table,
-        calc_date=calc_date,
-    ).cache()
-    try:
-        row_count = result_df.count()
-        deleted_rows = delete_by_calc_date(
-            spark=spark,
-            pg_config=pg_config,
-            target_table=target_table,
-            calc_date=calc_date,
-        )
-        write_to_postgres(
-            df=result_df,
-            pg_config=pg_config,
-            target_table=target_table,
-            batch_size=batch_size,
-        )
-        return f"search_funnel: source={source_table}, target={target_table}, rows={row_count}, deleted={deleted_rows}"
-    finally:
-        result_df.unpersist()
-
-
 def sync_search_keyword_insights(
     spark: SparkSession,
     pg_config: dict[str, Any],
@@ -661,43 +585,6 @@ def sync_search_keyword_insights(
             batch_size=batch_size,
         )
         return f"search_keyword_insights: source={source_table}, target={target_table}, rows={row_count}, deleted={deleted_rows}"
-    finally:
-        result_df.unpersist()
-
-
-def sync_user_funnel(
-    spark: SparkSession,
-    pg_config: dict[str, Any],
-    sync_config: dict[str, Any],
-    calc_date: str,
-) -> str:
-    """Sync user funnel from ADS to PostgreSQL. Returns result message."""
-    source_table = str(sync_config["source_table"]).strip()
-    target_table = str(sync_config["target_table"]).strip()
-    batch_size = int(sync_config.get("batch_size", 1000))
-    if batch_size <= 0:
-        raise ValueError(f"Invalid batch_size: {batch_size}")
-
-    result_df = build_user_funnel_source_frame(
-        spark=spark,
-        source_table=source_table,
-        calc_date=calc_date,
-    ).cache()
-    try:
-        row_count = result_df.count()
-        deleted_rows = delete_by_calc_date(
-            spark=spark,
-            pg_config=pg_config,
-            target_table=target_table,
-            calc_date=calc_date,
-        )
-        write_to_postgres(
-            df=result_df,
-            pg_config=pg_config,
-            target_table=target_table,
-            batch_size=batch_size,
-        )
-        return f"user_funnel: source={source_table}, target={target_table}, rows={row_count}, deleted={deleted_rows}"
     finally:
         result_df.unpersist()
 
@@ -776,6 +663,43 @@ def sync_genre_preference(
         result_df.unpersist()
 
 
+def sync_user_behavior_sankey(
+    spark: SparkSession,
+    pg_config: dict[str, Any],
+    sync_config: dict[str, Any],
+    calc_date: str,
+) -> str:
+    """Sync user behavior sankey from ADS to PostgreSQL. Returns result message."""
+    source_table = str(sync_config["source_table"]).strip()
+    target_table = str(sync_config["target_table"]).strip()
+    batch_size = int(sync_config.get("batch_size", 1000))
+    if batch_size <= 0:
+        raise ValueError(f"Invalid batch_size: {batch_size}")
+
+    result_df = build_user_behavior_sankey_source_frame(
+        spark=spark,
+        source_table=source_table,
+        calc_date=calc_date,
+    ).cache()
+    try:
+        row_count = result_df.count()
+        deleted_rows = delete_by_calc_date(
+            spark=spark,
+            pg_config=pg_config,
+            target_table=target_table,
+            calc_date=calc_date,
+        )
+        write_to_postgres(
+            df=result_df,
+            pg_config=pg_config,
+            target_table=target_table,
+            batch_size=batch_size,
+        )
+        return f"user_behavior_sankey: source={source_table}, target={target_table}, rows={row_count}, deleted={deleted_rows}"
+    finally:
+        result_df.unpersist()
+
+
 def run() -> None:
     args = parse_args()
     config = load_config(args.config)
@@ -790,17 +714,9 @@ def run() -> None:
         DEFAULT_ADS_SIMILAR_MOVIES_SYNC_CONFIG,
         config.get("ads_itemcf_similar_movies_postgres_sync", {}),
     )
-    search_funnel_sync_config = merge_nested_dict(
-        DEFAULT_ADS_SEARCH_FUNNEL_SYNC_CONFIG,
-        config.get("ads_search_funnel_postgres_sync", {}),
-    )
     search_keyword_insights_sync_config = merge_nested_dict(
         DEFAULT_ADS_SEARCH_KEYWORD_INSIGHTS_SYNC_CONFIG,
         config.get("ads_search_keyword_insights_postgres_sync", {}),
-    )
-    user_funnel_sync_config = merge_nested_dict(
-        DEFAULT_ADS_USER_FUNNEL_SYNC_CONFIG,
-        config.get("ads_user_funnel_postgres_sync", {}),
     )
     user_retention_sync_config = merge_nested_dict(
         DEFAULT_ADS_USER_RETENTION_SYNC_CONFIG,
@@ -809,6 +725,10 @@ def run() -> None:
     genre_preference_sync_config = merge_nested_dict(
         DEFAULT_ADS_GENRE_PREFERENCE_SYNC_CONFIG,
         config.get("ads_genre_preference_postgres_sync", {}),
+    )
+    user_behavior_sankey_sync_config = merge_nested_dict(
+        DEFAULT_ADS_USER_BEHAVIOR_SANKEY_SYNC_CONFIG,
+        config.get("ads_user_behavior_sankey_postgres_sync", {}),
     )
 
     sync_types = parse_sync_types_arg(args.sync_types)
@@ -835,29 +755,11 @@ def run() -> None:
             )
             results.append(result)
 
-        if "search_funnel" in sync_types:
-            result = sync_search_funnel(
-                spark=spark,
-                pg_config=pg_config,
-                sync_config=search_funnel_sync_config,
-                calc_date=args.calc_date,
-            )
-            results.append(result)
-
         if "search_keyword_insights" in sync_types:
             result = sync_search_keyword_insights(
                 spark=spark,
                 pg_config=pg_config,
                 sync_config=search_keyword_insights_sync_config,
-                calc_date=args.calc_date,
-            )
-            results.append(result)
-
-        if "user_funnel" in sync_types:
-            result = sync_user_funnel(
-                spark=spark,
-                pg_config=pg_config,
-                sync_config=user_funnel_sync_config,
                 calc_date=args.calc_date,
             )
             results.append(result)
@@ -876,6 +778,15 @@ def run() -> None:
                 spark=spark,
                 pg_config=pg_config,
                 sync_config=genre_preference_sync_config,
+                calc_date=args.calc_date,
+            )
+            results.append(result)
+
+        if "user_behavior_sankey" in sync_types:
+            result = sync_user_behavior_sankey(
+                spark=spark,
+                pg_config=pg_config,
+                sync_config=user_behavior_sankey_sync_config,
                 calc_date=args.calc_date,
             )
             results.append(result)

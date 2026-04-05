@@ -5,9 +5,9 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  bash run_ads_user_funnel.sh [calc-date] [config-path]
-  bash run_ads_user_funnel.sh [config-path]
-  bash run_ads_user_funnel.sh --calc-date YYYY-MM-DD --config conf/etl_config.json
+  bash run_ads_user_behavior_sankey.sh [calc-date] [config-path]
+  bash run_ads_user_behavior_sankey.sh [config-path]
+  bash run_ads_user_behavior_sankey.sh --calc-date YYYY-MM-DD --config conf/etl_config.json
 EOF
 }
 
@@ -91,7 +91,7 @@ CMD=(
   --conf spark.serializer=org.apache.spark.serializer.KryoSerializer
   --conf spark.driver.maxResultSize=256m
   --conf spark.network.timeout=600s
-  jobs/build_ads_user_funnel_1d.py
+  jobs/build_ads_user_behavior_sankey_1d.py
   --config "${CONFIG_PATH}"
   --calc-date "${CALC_DATE}"
 )

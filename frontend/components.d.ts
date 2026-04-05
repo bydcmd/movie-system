@@ -26,7 +26,6 @@ declare module 'vue' {
     MoviePlaceholder: typeof import('./src/components/movie/MoviePlaceholder.vue')['default']
     NavBar: typeof import('./src/components/layout/NavBar.vue')['default']
     NButton: typeof import('naive-ui')['NButton']
-    NSpace: typeof import('naive-ui')['NSpace']
     ProfileActivityTabs: typeof import('./src/components/profile/ProfileActivityTabs.vue')['default']
     ProfileCommentList: typeof import('./src/components/profile/ProfileCommentList.vue')['default']
     ProfileEditForm: typeof import('./src/components/profile/ProfileEditForm.vue')['default']

@@ -5,7 +5,7 @@ import com.movie.backend.dto.GenrePreferenceDTO;
 import com.movie.backend.dto.SearchFunnelDTO;
 import com.movie.backend.dto.SearchKeywordInsightDTO;
 import com.movie.backend.dto.TrendingMovieDTO;
-import com.movie.backend.dto.UserFunnelDTO;
+import com.movie.backend.dto.UserBehaviorSankeyDTO;
 import com.movie.backend.dto.UserRetentionDTO;
 import com.movie.backend.entity.Movie;
 
@@ -51,13 +51,6 @@ public interface AnalyticsService {
     List<SearchKeywordInsightDTO> getSearchKeywordInsights(int limit);
 
     /**
-     * 获取用户漏斗分析数据
-     *
-     * @return 用户漏斗数据，无数据时返回null
-     */
-    UserFunnelDTO getUserFunnel();
-
-    /**
      * 获取用户留存分析数据
      *
      * @param limit 返回数量
@@ -72,4 +65,12 @@ public interface AnalyticsService {
      * @return 类型偏好数据列表
      */
     List<GenrePreferenceDTO> getGenrePreference(int limit);
+
+    /**
+     * 获取用户行为桑基图数据
+     *
+     * @param limit 返回数量
+     * @return 桑基图链接数据列表
+     */
+    List<UserBehaviorSankeyDTO> getUserBehaviorSankey(int limit);
 }
