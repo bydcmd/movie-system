@@ -322,6 +322,16 @@
     "top_n": 200,
     "min_search_cnt": 5
   },
+  "ads_search_funnel": {
+    "source_table": "dwd.dwd_user_event_wide_di",
+    "target_table": "ads.ads_search_funnel_1d",
+    "sink_path": "hdfs:///warehouse/movie/ads/search_funnel_1d"
+  },
+  "ads_search_funnel_postgres_sync": {
+    "source_table": "ads.ads_search_funnel_1d",
+    "target_table": "public.stats_search_funnel_1d",
+    "batch_size": 1000
+  },
   "ads_user_behavior_sankey": {
     "source_table": "dwd.dwd_user_event_wide_di",
     "target_table": "ads.ads_user_behavior_sankey_1d",

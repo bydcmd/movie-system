@@ -130,6 +130,24 @@ STORED AS ORC
 LOCATION '/warehouse/movie/ads/hybrid_user_recommendations'
 TBLPROPERTIES ('orc.compress'='SNAPPY');
 
+CREATE EXTERNAL TABLE IF NOT EXISTS ads.ads_search_funnel_1d (
+  search_user_cnt bigint COMMENT 'Number of unique search users',
+  search_cnt bigint COMMENT 'Total search event count',
+  search_with_result_cnt bigint COMMENT 'Searches with at least one result',
+  search_zero_result_cnt bigint COMMENT 'Searches with zero results',
+  after_search_view_user_cnt bigint COMMENT 'Users who viewed details after search',
+  after_search_rating_user_cnt bigint COMMENT 'Users who rated after search',
+  after_search_favorite_user_cnt bigint COMMENT 'Users who added favorites after search',
+  after_search_watched_user_cnt bigint COMMENT 'Users who marked watched after search',
+  search_to_view_rate decimal(10,4) COMMENT 'Search to view conversion rate',
+  search_to_watched_rate decimal(10,4) COMMENT 'Search to watched conversion rate',
+  search_to_rating_rate decimal(10,4) COMMENT 'Search to rating conversion rate'
+)
+PARTITIONED BY (dt string)
+STORED AS ORC
+LOCATION '/warehouse/movie/ads/search_funnel_1d'
+TBLPROPERTIES ('orc.compress'='SNAPPY');
+
 CREATE EXTERNAL TABLE IF NOT EXISTS ads.ads_search_keyword_insights_1d (
   search_keyword string,
   rank_no int,

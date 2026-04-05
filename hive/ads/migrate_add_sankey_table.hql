@@ -1,14 +1,13 @@
--- Migration: replace two funnel tables with user_behavior_sankey_1d
+-- Migration: replace user funnel table with user_behavior_sankey_1d, keep search funnel
 -- Date: 2026-04-05
--- Description: Drop ads_user_funnel_1d and ads_search_funnel_1d,
---              create Sankey link table combining both into a single graph.
+-- Description: Drop ads_user_funnel_1d (replaced by Sankey),
+--              keep ads_search_funnel_1d (still used by backend API).
 
 CREATE DATABASE IF NOT EXISTS ads;
 USE ads;
 
--- Drop old funnel tables (replaced by Sankey)
+-- Drop old user funnel table (replaced by Sankey)
 DROP TABLE IF EXISTS ads.ads_user_funnel_1d;
-DROP TABLE IF EXISTS ads.ads_search_funnel_1d;
 
 CREATE EXTERNAL TABLE IF NOT EXISTS ads.ads_user_behavior_sankey_1d (
   source_node string COMMENT 'Sankey source node name',

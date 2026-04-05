@@ -5,23 +5,9 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  bash run_ads_pg_sync.sh [calc-date] [config-path]
-  bash run_ads_pg_sync.sh [config-path]
-  bash run_ads_pg_sync.sh --calc-date YYYY-MM-DD --config conf/etl_config.json --sync-types hot_movies,similar_movies
-
-Notes:
-  --sync-types: Comma-separated list of sync types.
-    Options: hot_movies, similar_movies, search_keyword_insights,
-             user_behavior_sankey, user_retention, genre_preference, all.
-    Default: all
-
-Examples:
-  bash run_ads_pg_sync.sh
-  bash run_ads_pg_sync.sh 2026-03-25
-  bash run_ads_pg_sync.sh conf/etl_config.dev.json
-  bash run_ads_pg_sync.sh 2026-03-25 conf/etl_config.dev.json
-  bash run_ads_pg_sync.sh --sync-types hot_movies
-  bash run_ads_pg_sync.sh --sync-types similar_movies
+  bash run_ads_search_funnel.sh [calc-date] [config-path]
+  bash run_ads_search_funnel.sh [config-path]
+  bash run_ads_search_funnel.sh --calc-date YYYY-MM-DD --config conf/etl_config.json
 EOF
 }
 
@@ -30,7 +16,6 @@ cd "${SCRIPT_DIR}"
 
 CALC_DATE="$(date +%F)"
 CONFIG_PATH="conf/etl_config.json"
-SYNC_TYPES="all"
 POSITIONAL_ARGS=()
 
 is_date() {
@@ -49,10 +34,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --config)
       CONFIG_PATH="${2:-}"
-      shift 2
-      ;;
-    --sync-types)
-      SYNC_TYPES="${2:-}"
       shift 2
       ;;
     *)
@@ -110,11 +91,9 @@ CMD=(
   --conf spark.serializer=org.apache.spark.serializer.KryoSerializer
   --conf spark.driver.maxResultSize=256m
   --conf spark.network.timeout=600s
-  --packages org.postgresql:postgresql:42.7.3
-  jobs/sync_ads_to_postgres.py
+  jobs/build_ads_search_funnel_1d.py
   --config "${CONFIG_PATH}"
   --calc-date "${CALC_DATE}"
-  --sync-types "${SYNC_TYPES}"
 )
 
 printf 'Running command:\n%s\n' "${CMD[*]}"

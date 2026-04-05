@@ -38,8 +38,8 @@ public class SearchFunnelDTO {
     @Schema(description = "搜索到浏览转化率")
     private BigDecimal searchToViewRate;
 
-    @Schema(description = "浏览到看过转化率")
-    private BigDecimal viewToWatchedRate;
+    @Schema(description = "搜索到看过转化率")
+    private BigDecimal searchToWatchedRate;
 
     @Schema(description = "搜索到评分转化率")
     private BigDecimal searchToRatingRate;

@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { NAlert, NButton, NEmpty, NSpin } from 'naive-ui'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { BarChart, FunnelChart, HeatmapChart, PieChart } from 'echarts/charts'
+import { BarChart, HeatmapChart, PieChart } from 'echarts/charts'
 import {
   GridComponent,
   TooltipComponent,
@@ -18,7 +18,6 @@ import { useAdminOverview } from '@/composables/admin/useAdminOverview'
 use([
   CanvasRenderer,
   BarChart,
-  FunnelChart,
   HeatmapChart,
   PieChart,
   GridComponent,
@@ -127,99 +126,6 @@ function getChartOption(panel: typeof trendPanels.value[0]) {
     ]
   }
 }
-
-const searchFunnelChartOption = computed(() => {
-  const rawData = [
-    { value: searchFunnel.value.searchUserCnt || 0, name: '搜索用户' },
-    { value: searchFunnel.value.afterSearchViewUserCnt || 0, name: '浏览用户' },
-    { value: searchFunnel.value.afterSearchFavoriteUserCnt || 0, name: '收藏用户' },
-    { value: searchFunnel.value.afterSearchRatingUserCnt || 0, name: '评分用户' },
-    { value: searchFunnel.value.afterSearchWatchedUserCnt || 0, name: '看过用户' }
-  ]
-  const data = rawData.filter(item => item.value > 0)
-  const values = data.map(d => d.value)
-
-  // Unified gradient: amber → orange → rose tones (warm funnel theme)
-  const gradientColors = ['#f59e0b', '#f97316', '#fb923c', '#f472b6', '#f43f5e']
-
-  return {
-    tooltip: {
-      trigger: 'item',
-      formatter: (params: { name: string; value: number; percent: number; dataIndex: number }) => {
-        const idx = params.dataIndex
-        const prevValue = idx > 0 ? values[idx - 1] : null
-        const firstValue = values[0] ?? 0
-
-        const stageRate = prevValue && prevValue > 0
-          ? ((params.value / prevValue) * 100).toFixed(1)
-          : null
-
-        const overallRate = firstValue > 0
-          ? ((params.value / firstValue) * 100).toFixed(1)
-          : '0'
-
-        let tooltip = `${params.name}: ${params.value}人`
-
-        if (idx === 0) {
-          tooltip += `\n（起始阶段）`
-        } else {
-          if (stageRate) {
-            tooltip += `\n阶段转化率: ${stageRate}%（相对于上一阶段）`
-          }
-          tooltip += `\n总体转化率: ${overallRate}%（相对于搜索用户）`
-        }
-
-        return tooltip
-      }
-    },
-    legend: {
-      show: false
-    },
-    series: [
-      {
-        name: '搜索漏斗',
-        type: 'funnel',
-        left: '10%',
-        top: '5%',
-        bottom: '5%',
-        width: '80%',
-        min: 0,
-        max: Math.max(1, searchFunnel.value.searchUserCnt || 0),
-        minSize: '0%',
-        maxSize: '100%',
-        sort: 'descending',
-        gap: 2,
-        label: {
-          show: true,
-          position: 'inside',
-          formatter: (params: { name: string; value: number; dataIndex: number }) => {
-            return `${params.name}\n${params.value}`
-          },
-          fontSize: 11,
-          color: '#fff'
-        },
-        labelLine: {
-          length: 10,
-          lineStyle: {
-            width: 1,
-            type: 'solid'
-          }
-        },
-        itemStyle: {
-          borderColor: '#fff',
-          borderWidth: 1
-        },
-        emphasis: {
-          label: {
-            fontSize: 13
-          }
-        },
-        data: data,
-        color: gradientColors
-      }
-    ]
-  }
-})
 
 
 function formatPercent(value: number | undefined): string {
@@ -564,18 +470,7 @@ const genrePreferenceChartOption = computed(() => {
       <!-- Search Funnel Analytics -->
       <div class="funnel-section">
         <h3 class="funnel-section-title">搜索漏斗分析</h3>
-        <div class="funnel-layout">
-          <!-- Funnel Chart -->
-          <article class="funnel-chart-card">
-            <v-chart
-              :option="searchFunnelChartOption"
-              :autoresize="true"
-              class="funnel-echart"
-            />
-          </article>
-
-          <!-- Funnel Metrics Grid -->
-          <div class="funnel-metrics-grid">
+        <div class="funnel-metrics-grid">
             <article class="funnel-card">
               <div class="funnel-metric">
                 <span class="funnel-label">搜索次数</span>
@@ -647,7 +542,6 @@ const genrePreferenceChartOption = computed(() => {
                 <strong class="funnel-value funnel-value--date">{{ searchFunnel.calcDate || '-' }}</strong>
               </div>
             </article>
-          </div>
         </div>
       </div>
 
@@ -1027,27 +921,6 @@ const genrePreferenceChartOption = computed(() => {
   color: #0f172a;
 }
 
-.funnel-layout {
-  display: grid;
-  grid-template-columns: minmax(300px, 1fr) minmax(0, 2fr);
-  gap: 1rem;
-}
-
-.funnel-chart-card {
-  display: flex;
-  flex-direction: column;
-  padding: 1rem;
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  border-radius: 1.5rem;
-  background: rgba(255, 255, 255, 0.94);
-  min-height: 320px;
-}
-
-.funnel-echart {
-  width: 100%;
-  height: 280px;
-}
-
 .funnel-metrics-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1098,19 +971,7 @@ const genrePreferenceChartOption = computed(() => {
   color: #475569;
 }
 
-@media (max-width: 1200px) {
-  .funnel-layout {
-    grid-template-columns: 1fr;
-  }
 
-  .funnel-chart-card {
-    min-height: 280px;
-  }
-
-  .funnel-echart {
-    height: 240px;
-  }
-}
 
 @media (max-width: 768px) {
   .funnel-metrics-grid {
@@ -1295,28 +1156,8 @@ const genrePreferenceChartOption = computed(() => {
   }
 }
 
-	/* Responsive funnel chart adjustments */
-	@media (max-width: 768px) {
-	  .funnel-echart {
-	    height: 220px;
-	  }
-
-	  /* Adjust label font size */
-	  :deep(.echarts-funnel-series) .echarts-label {
-	    font-size: 9px !important;
-	  }
-	}
-
 	/* Extra small screens */
 	@media (max-width: 480px) {
-	  .funnel-echart {
-	    height: 180px;
-	  }
-
-	  .funnel-chart-card {
-	    padding: 0.75rem;
-	  }
-
 	  .funnel-metrics-grid {
 	    gap: 0.75rem;
 	  }
