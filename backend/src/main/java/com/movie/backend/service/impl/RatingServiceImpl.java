@@ -62,7 +62,7 @@ public class RatingServiceImpl implements RatingService {
         }
 
         String eventAction = existingRating == null ? "CREATE" : "UPDATE";
-        RatingEvent event = new RatingEvent(userId, movieId, rating, eventAction, ratingTimeStr);
+        RatingEvent event = new RatingEvent(userId, movieId, rating, eventAction, ratingTimeStr, null);
         kafkaEventPublisher.publishRatingEvent(event);
     }
 
@@ -97,7 +97,7 @@ public class RatingServiceImpl implements RatingService {
         ratingMapper.deleteByUserId(userId);
         refreshMovieRatings(affectedMovieIds);
 
-        RatingEvent event = new RatingEvent(userId, null, null, "CLEAR", null);
+        RatingEvent event = new RatingEvent(userId, null, null, "CLEAR", null, null);
         kafkaEventPublisher.publishRatingEvent(event);
     }
 
@@ -109,7 +109,7 @@ public class RatingServiceImpl implements RatingService {
             ratingMapper.deleteBatch(userId, movieIds);
             refreshMovieRatings(affectedMovieIds);
             for (Long movieId : affectedMovieIds) {
-                RatingEvent event = new RatingEvent(userId, movieId, null, "DELETE", null);
+                RatingEvent event = new RatingEvent(userId, movieId, null, "DELETE", null, null);
                 kafkaEventPublisher.publishRatingEvent(event);
             }
         }

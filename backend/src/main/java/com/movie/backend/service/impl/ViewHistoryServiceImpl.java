@@ -11,10 +11,13 @@ import com.movie.backend.service.ViewHistoryService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+
+
 import java.util.List;
-
-@Service
+
+
+@Service
+
 public class ViewHistoryServiceImpl implements ViewHistoryService {
     
     @Autowired
@@ -30,14 +33,19 @@ public class ViewHistoryServiceImpl implements ViewHistoryService {
         }
         // 异步写入：记录浏览事件，由 Kafka 消费端落库
         long now = System.currentTimeMillis();
-        ViewHistoryEvent event = new ViewHistoryEvent(userId, movieId, now);
+        ViewHistoryEvent event = new ViewHistoryEvent(userId, movieId, now, null);
         kafkaEventPublisher.publishViewHistory(event);
     }
-
-    @Override
-    @SuppressWarnings("resource")
-    public PageInfo<MovieItemVO> getUserViewHistory(String userId, int page, int size) {
-        PageHelper.startPage(page, size);
+
+
+    @Override
+
+    @SuppressWarnings("resource")
+
+    public PageInfo<MovieItemVO> getUserViewHistory(String userId, int page, int size) {
+
+        PageHelper.startPage(page, size);
+
         List<MovieItemVO> list = viewHistoryMapper.selectHistoryByUserId(userId);
         return new PageInfo<>(list);
     }

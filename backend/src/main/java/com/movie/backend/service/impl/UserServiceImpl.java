@@ -68,7 +68,7 @@ public class UserServiceImpl implements UserService {
         userVO.setAccessToken(JwtUtil.generateAccessToken(user.getId(), user.getNickname(), user.getRole(), passwordVersion));
         userVO.setRefreshToken(JwtUtil.generateRefreshToken(user.getId(), user.getNickname(), user.getRole(), passwordVersion));
 
-        UserLoginEvent event = new UserLoginEvent(user.getId());
+        UserLoginEvent event = new UserLoginEvent(user.getId(), null);
         kafkaEventPublisher.publishUserLoginEvent(event);
 
         return userVO;
@@ -92,7 +92,7 @@ public class UserServiceImpl implements UserService {
         user.setUpdateTime(new Date());
 
         userMapper.insert(user);
-        UserRegisterEvent event = new UserRegisterEvent(user.getId());
+        UserRegisterEvent event = new UserRegisterEvent(user.getId(), null);
         kafkaEventPublisher.publishUserRegisterEvent(event);
     }
 

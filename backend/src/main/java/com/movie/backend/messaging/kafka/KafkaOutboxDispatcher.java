@@ -19,7 +19,7 @@ public class KafkaOutboxDispatcher {
     private final KafkaEventPublisher kafkaEventPublisher;
     private final OutboxProperties outboxProperties;
 
-    @Scheduled(fixedDelayString = "${app.kafka.outbox.poll-interval-ms:36000000}")
+    @Scheduled(fixedDelayString = "${app.kafka.outbox.poll-interval-ms:3600}")
     public void dispatch() {
         List<OutboxEvent> pending = outboxEventMapper.selectPending(new Date(), outboxProperties.getBatchSize());
         if (pending.isEmpty()) {

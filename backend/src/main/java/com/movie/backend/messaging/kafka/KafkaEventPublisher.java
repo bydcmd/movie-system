@@ -12,10 +12,13 @@ import com.movie.backend.messaging.event.FavoriteFolderActionEvent;
 import com.movie.backend.messaging.event.KeyedEvent;
 import com.movie.backend.messaging.event.RatingEvent;
 import com.movie.backend.messaging.event.SearchEvent;
+import com.movie.backend.messaging.event.SessionContext;
+import com.movie.backend.messaging.event.SessionTrackedEvent;
 import com.movie.backend.messaging.event.UserLoginEvent;
 import com.movie.backend.messaging.event.UserRegisterEvent;
 import com.movie.backend.messaging.event.ViewHistoryEvent;
 import com.movie.backend.messaging.event.WatchedEvent;
+import com.movie.backend.messaging.session.SessionContextHolder;
 import com.movie.backend.mapper.OutboxEventMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -84,13 +87,30 @@ public class KafkaEventPublisher {
     }
 
     private <T extends KeyedEvent> void publishEvent(String topic, EventType eventType, T event, boolean afterCommit) {
-        EventEnvelope<T> envelope = EventEnvelope.of(eventType, event);
+        EventEnvelope<T> envelope = createEnvelope(eventType, event);
         String key = resolveKey(event);
         if (afterCommit) {
             publishAfterCommit(topic, key, envelope);
             return;
         }
         publishNow(topic, key, envelope);
+    }
+
+    /**
+     * Create event envelope with optional session context.
+     * If session context is available in SessionContextHolder, it will be attached to the envelope.
+     */
+    private <T extends KeyedEvent> EventEnvelope<T> createEnvelope(EventType eventType, T event) {
+        SessionContext sessionContext = SessionContextHolder.get();
+
+        if (sessionContext != null && event instanceof SessionTrackedEvent sessionTrackedEvent) {
+            sessionTrackedEvent.setSessionContext(sessionContext);
+            EventEnvelope<T> envelope = EventEnvelope.of(eventType, event);
+            envelope.setSessionContext(sessionContext);
+            return envelope;
+        }
+
+        return EventEnvelope.of(eventType, event);
     }
 
     private void publishAfterCommit(String topic, String key, Object payload) {

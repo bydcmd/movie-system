@@ -105,7 +105,7 @@ public class CommentServiceImpl implements CommentService {
 
             commentMapper.insert(comment);
             // 插入后 comment.getId() 会自动填充数据库生成的自增ID
-            CommentEvent event = new CommentEvent(userId, movieId, comment.getId(), SHORT_COMMENT_TYPE, "CREATE", content.length());
+            CommentEvent event = new CommentEvent(userId, movieId, comment.getId(), SHORT_COMMENT_TYPE, "CREATE", content.length(), null);
             kafkaEventPublisher.publishCommentEvent(event);
         } catch (org.springframework.dao.DuplicateKeyException e) {
             // 唯一索引冲突，说明用户已发表过短评
@@ -147,7 +147,7 @@ public class CommentServiceImpl implements CommentService {
             if (existingDraft != null) {
                 commentMapper.deleteByIdAndUserId(existingDraft.getId(), userId);
             }
-            CommentEvent event = new CommentEvent(userId, dto.getMovieId(), comment.getId(), LONG_REVIEW_TYPE, "CREATE", dto.getContent().length());
+            CommentEvent event = new CommentEvent(userId, dto.getMovieId(), comment.getId(), LONG_REVIEW_TYPE, "CREATE", dto.getContent().length(), null);
             kafkaEventPublisher.publishCommentEvent(event);
         } catch (org.springframework.dao.DuplicateKeyException e) {
             throw new BusinessException(409, "您已经发表过长评了，如需修改请前往个人中心");
@@ -203,7 +203,7 @@ public class CommentServiceImpl implements CommentService {
         }
         Comment comment = commentMapper.selectByUserAndMovieAndType(userId, movieId, SHORT_COMMENT_TYPE);
         Long commentId = comment != null ? comment.getId() : null;
-        CommentEvent event = new CommentEvent(userId, movieId, commentId, SHORT_COMMENT_TYPE, "UPDATE", content.length());
+        CommentEvent event = new CommentEvent(userId, movieId, commentId, SHORT_COMMENT_TYPE, "UPDATE", content.length(), null);
         kafkaEventPublisher.publishCommentEvent(event);
     }
 
@@ -229,7 +229,7 @@ public class CommentServiceImpl implements CommentService {
         }
         Comment comment = commentMapper.selectByUserAndMovieAndType(userId, movieId, SHORT_COMMENT_TYPE);
         Long commentId = comment != null ? comment.getId() : null;
-        CommentEvent event = new CommentEvent(userId, movieId, commentId, SHORT_COMMENT_TYPE, "UPDATE", content.length());
+        CommentEvent event = new CommentEvent(userId, movieId, commentId, SHORT_COMMENT_TYPE, "UPDATE", content.length(), null);
         kafkaEventPublisher.publishCommentEvent(event);
     }
 
@@ -262,7 +262,7 @@ public class CommentServiceImpl implements CommentService {
         Comment comment = commentMapper.selectByUserAndMovieAndTypeAndStatus(
                 userId, movieId, LONG_REVIEW_TYPE, STATUS_PUBLISHED);
         Long commentId = comment != null ? comment.getId() : null;
-        CommentEvent event = new CommentEvent(userId, movieId, commentId, LONG_REVIEW_TYPE, "UPDATE", content.length());
+        CommentEvent event = new CommentEvent(userId, movieId, commentId, LONG_REVIEW_TYPE, "UPDATE", content.length(), null);
         kafkaEventPublisher.publishCommentEvent(event);
     }
 
@@ -281,7 +281,7 @@ public class CommentServiceImpl implements CommentService {
                 throw new BusinessException(404, "评论不存在");
             }
 
-            CommentLikeEvent event = new CommentLikeEvent(userId, commentId, "LIKE");
+            CommentLikeEvent event = new CommentLikeEvent(userId, commentId, "LIKE", null);
             kafkaEventPublisher.publishCommentLikeEvent(event);
             return true;
         } catch (org.springframework.dao.DuplicateKeyException e) {
@@ -304,7 +304,7 @@ public class CommentServiceImpl implements CommentService {
             throw new BusinessException(404, "评论不存在");
         }
 
-        CommentLikeEvent event = new CommentLikeEvent(userId, commentId, "UNLIKE");
+        CommentLikeEvent event = new CommentLikeEvent(userId, commentId, "UNLIKE", null);
         kafkaEventPublisher.publishCommentLikeEvent(event);
         return false;
     }
@@ -333,7 +333,7 @@ public class CommentServiceImpl implements CommentService {
             int rows = commentMapper.deleteByIdAndUserId(commentId, userId);
             if (rows > 0) {
                 commentLikeMapper.deleteByCommentId(commentId);
-                CommentEvent event = new CommentEvent(userId, null, commentId, null, "DELETE", null);
+                CommentEvent event = new CommentEvent(userId, null, commentId, null, "DELETE", null, null);
                 kafkaEventPublisher.publishCommentEvent(event);
                 deletedCount++;
             }
@@ -511,7 +511,7 @@ public class CommentServiceImpl implements CommentService {
 
             CommentEvent event = new CommentEvent(
                     userId, draft.getMovieId(), existingPublished.getId(), LONG_REVIEW_TYPE, "UPDATE",
-                    normalizedContent.length());
+                    normalizedContent.length(), null);
             kafkaEventPublisher.publishCommentEvent(event);
             return;
         }
@@ -524,8 +524,8 @@ public class CommentServiceImpl implements CommentService {
 
         // 发送事件
         CommentEvent event = new CommentEvent(
-                userId, draft.getMovieId(), commentId, LONG_REVIEW_TYPE, "CREATE", 
-                normalizedContent.length());
+                userId, draft.getMovieId(), commentId, LONG_REVIEW_TYPE, "CREATE",
+                normalizedContent.length(), null);
         kafkaEventPublisher.publishCommentEvent(event);
     }
 }

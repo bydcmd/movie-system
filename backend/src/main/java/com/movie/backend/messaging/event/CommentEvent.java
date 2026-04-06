@@ -2,12 +2,14 @@ package com.movie.backend.messaging.event;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 @Data
+@EqualsAndHashCode(callSuper = false)
 @NoArgsConstructor
 @AllArgsConstructor
-public class CommentEvent implements KeyedEvent {
+public class CommentEvent implements SessionTrackedEvent {
     private String userId;
     private Long movieId;
     private Long commentId;
@@ -20,6 +22,11 @@ public class CommentEvent implements KeyedEvent {
      */
     private String operation;
     private Integer contentLength;
+
+    /**
+     * Session context for user behavior tracking.
+     */
+    private SessionContext sessionContext;
 
     @Override
     public Object getKeyId() {

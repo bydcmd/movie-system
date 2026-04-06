@@ -52,6 +52,9 @@ def normalize_events(source_df: DataFrame) -> DataFrame:
     occurred_at = F.to_timestamp(F.from_unixtime((occurred_at_ms / F.lit(1000)).cast("double")))
     event_ts = F.coalesce(occurred_at, F.col("timestamp"))
 
+    # Session context fields for user behavior tracking
+    session_ctx = F.get_json_object(value_col, "$.sessionContext")
+
     return (
         source_df.select(
             F.col("topic").alias("topic"),
@@ -77,6 +80,16 @@ def normalize_events(source_df: DataFrame) -> DataFrame:
             F.current_timestamp().alias("ingest_time"),
             F.date_format(event_ts, "yyyy-MM-dd").alias("dt"),
             F.date_format(event_ts, "HH").alias("hh"),
+            # Session tracking fields
+            F.get_json_object(session_ctx, "$.sessionId").alias("session_id"),
+            F.get_json_object(session_ctx, "$.pageUrl").alias("page_url"),
+            F.get_json_object(session_ctx, "$.referrer").alias("referrer"),
+            F.get_json_object(session_ctx, "$.entryUrl").alias("entry_url"),
+            F.get_json_object(session_ctx, "$.sessionStartTime").cast("bigint").alias("session_start_time"),
+            F.get_json_object(session_ctx, "$.sequenceNumber").cast("int").alias("sequence_number"),
+            F.get_json_object(session_ctx, "$.deviceType").alias("device_type"),
+            F.get_json_object(session_ctx, "$.userAgent").alias("user_agent"),
+            F.get_json_object(session_ctx, "$.clientTimestamp").cast("bigint").alias("client_timestamp"),
         )
         .where(F.col("dt").isNotNull())
     )

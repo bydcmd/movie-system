@@ -39,7 +39,7 @@ public class WatchedServiceImpl implements WatchedService {
         watched.setMovieId(movieId);
         watched.setCreateTime(new Date());
         watchedMapper.insert(watched);
-        WatchedEvent event = new WatchedEvent(userId, movieId, watched.getCreateTime().getTime());
+        WatchedEvent event = new WatchedEvent(userId, movieId, watched.getCreateTime().getTime(), null);
         kafkaEventPublisher.publishWatchedEvent(event);
     }
 

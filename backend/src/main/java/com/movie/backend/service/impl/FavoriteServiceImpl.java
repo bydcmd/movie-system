@@ -56,7 +56,7 @@ public class FavoriteServiceImpl implements FavoriteService {
         // 更新默认收藏夹的电影数量
         favoriteFolderMapper.incrementMovieCount(defaultFolderId);
 
-        FavoriteEvent event = new FavoriteEvent(userId, movieId, defaultFolderId, "ADD");
+        FavoriteEvent event = new FavoriteEvent(userId, movieId, defaultFolderId, "ADD", null);
         kafkaEventPublisher.publishFavoriteEvent(event);
     }
 
@@ -76,7 +76,7 @@ public class FavoriteServiceImpl implements FavoriteService {
         favorite.setCreateTime(new Date());
 
         favoriteMapper.insert(favorite);
-        FavoriteEvent event = new FavoriteEvent(userId, movieId, folderId, "ADD");
+        FavoriteEvent event = new FavoriteEvent(userId, movieId, folderId, "ADD", null);
         kafkaEventPublisher.publishFavoriteEvent(event);
 
         // 更新收藏夹的电影数量
@@ -91,7 +91,7 @@ public class FavoriteServiceImpl implements FavoriteService {
 
         // 删除收藏记录
         favoriteMapper.deleteByUserAndMovie(userId, movieId);
-        FavoriteEvent event = new FavoriteEvent(userId, movieId, null, "REMOVE");
+        FavoriteEvent event = new FavoriteEvent(userId, movieId, null, "REMOVE", null);
         kafkaEventPublisher.publishFavoriteEvent(event);
 
         // 更新每个收藏夹的电影数量
@@ -108,7 +108,7 @@ public class FavoriteServiceImpl implements FavoriteService {
     public void removeFavoriteFromFolder(String userId, Long movieId, Long folderId) {
         // 从指定收藏夹中删除
         favoriteMapper.deleteByUserMovieAndFolder(userId, movieId, folderId);
-        FavoriteEvent event = new FavoriteEvent(userId, movieId, folderId, "REMOVE");
+        FavoriteEvent event = new FavoriteEvent(userId, movieId, folderId, "REMOVE", null);
         kafkaEventPublisher.publishFavoriteEvent(event);
 
         // 更新收藏夹的电影数量
@@ -170,7 +170,7 @@ public class FavoriteServiceImpl implements FavoriteService {
         // 删除收藏记录
         favoriteMapper.deleteBatchByUserAndMovies(userId, movieIds);
         for (Long movieId : movieIds) {
-            FavoriteEvent event = new FavoriteEvent(userId, movieId, null, "REMOVE");
+            FavoriteEvent event = new FavoriteEvent(userId, movieId, null, "REMOVE", null);
             kafkaEventPublisher.publishFavoriteEvent(event);
         }
 
@@ -194,7 +194,7 @@ public class FavoriteServiceImpl implements FavoriteService {
     @Override
     public void clearUserFavorites(String userId) {
         favoriteMapper.deleteAllByUserId(userId);
-        FavoriteEvent event = new FavoriteEvent(userId, null, null, "REMOVE");
+        FavoriteEvent event = new FavoriteEvent(userId, null, null, "REMOVE", null);
         kafkaEventPublisher.publishFavoriteEvent(event);
     }
 

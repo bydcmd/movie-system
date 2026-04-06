@@ -44,7 +44,8 @@ public class FavoriteFolderServiceImpl implements FavoriteFolderService {
                 folder.getId(),
                 folder.getName(),
                 folder.getIsPublic(),
-                "CREATE"
+                "CREATE",
+                null
         );
         kafkaEventPublisher.publishFavoriteFolderActionEvent(event);
         return folder;
@@ -84,7 +85,8 @@ public class FavoriteFolderServiceImpl implements FavoriteFolderService {
                 dto.getId(),
                 currentName,
                 currentPublic,
-                operation
+                operation,
+                null
         );
         kafkaEventPublisher.publishFavoriteFolderActionEvent(event);
     }
@@ -110,7 +112,8 @@ public class FavoriteFolderServiceImpl implements FavoriteFolderService {
                 folderId,
                 existing != null ? existing.getName() : null,
                 existing != null ? existing.getIsPublic() : null,
-                "DELETE"
+                "DELETE",
+                null
         );
         kafkaEventPublisher.publishFavoriteFolderActionEvent(event);
     }
