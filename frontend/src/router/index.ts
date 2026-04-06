@@ -7,6 +7,7 @@ const RegisterView = () => import('@/views/RegisterView.vue')
 const MoviesView = () => import('@/views/MoviesView.vue')
 const TrendingMoviesView = () => import('@/views/TrendingMoviesView.vue')
 const MovieDetailView = () => import('@/views/MovieDetailView.vue')
+const PersonDetailView = () => import('@/views/PersonDetailView.vue')
 const LongReviewDetailView = () => import('@/views/LongReviewDetailView.vue')
 const LongReviewEditorView = () => import('@/views/LongReviewEditorView.vue')
 const ProfileView = () => import('@/views/ProfileView.vue')
@@ -65,6 +66,11 @@ const router = createRouter({
       name: 'movie-detail',
       component: MovieDetailView,
       props: true
+    },
+    {
+      path: '/person/:id',
+      name: 'person-detail',
+      component: PersonDetailView
     },
     {
       path: '/movie/:id/reviews/:commentId',

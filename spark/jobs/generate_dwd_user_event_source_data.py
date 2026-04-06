@@ -1055,10 +1055,19 @@ def build_kafka_records(
     for user in all_active_users:
         user_funnel_paths[user["user_id"]] = determine_funnel_path(user["user_id"], batch_tag)
     
-    # Funnel cohorts include both existing and registered users
-    search_users = all_active_users
-    view_users = shrink_user_cohort(search_users, 1)
-    watched_users = shrink_user_cohort(view_users, 1)
+    # Split users into two cohorts:
+    # - search_users: users who search first (then may or may not view)
+    # - direct_view_users: users who view directly without searching
+    # This creates the 搜索后浏览 vs 直接浏览 distinction for Sankey diagram
+    total_users = len(all_active_users)
+    search_cohort_size = max(1, int(total_users * 0.6))  # 60% search first
+    
+    search_users = all_active_users[:search_cohort_size]
+    direct_view_users = all_active_users[search_cohort_size:]  # 40% view directly
+    
+    # All search_users + direct_view_users can have view events
+    view_users = all_active_users
+    watched_users = shrink_user_cohort(view_users, 0.75)
     rating_users = shrink_user_cohort(watched_users, 0.9)
     comment_users = shrink_user_cohort(rating_users, 0.89)
     favorite_users = shrink_user_cohort(comment_users, 0.86)
@@ -1076,6 +1085,7 @@ def build_kafka_records(
     comment_user_ids = {uid for uid in {user["user_id"] for user in comment_users} if user_funnel_paths.get(uid, {}).get("has_comment", False)}
     favorite_user_ids = {uid for uid in {user["user_id"] for user in favorite_users} if user_funnel_paths.get(uid, {}).get("has_favorite", False)}
     search_user_ids = {user["user_id"] for user in search_users}
+    direct_view_user_ids = {user["user_id"] for user in direct_view_users}
     folder_action_user_ids = {user["user_id"] for user in folder_action_users}
 
     stage_view_rows = filter_rows_by_user_ids(view_history_rows, view_user_ids)

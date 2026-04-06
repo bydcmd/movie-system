@@ -7,6 +7,7 @@ import {
   useGetGenrePreference,
   useGetSearchFunnel,
   useGetSearchKeywordInsights,
+  useGetUserBehaviorSankey,
   useGetUserRetention
 } from '@/api/endpoints/analytics/analytics'
 import type {
@@ -14,6 +15,7 @@ import type {
   GenrePreferenceDTO,
   SearchFunnelDTO,
   SearchKeywordInsightDTO,
+  UserBehaviorSankeyDTO,
   UserRetentionDTO
 } from '@/api/model'
 import { formatDateTimeLabel } from '@/utils/profile'
@@ -86,6 +88,15 @@ export function useAdminOverview() {
 
   const genrePreferenceQuery = useGetGenrePreference<GenrePreferenceDTO[]>(
     { limit: 20 },
+    {
+      query: {
+        retry: false
+      }
+    }
+  )
+
+  const userBehaviorSankeyQuery = useGetUserBehaviorSankey<UserBehaviorSankeyDTO[]>(
+    { limit: 200 },
     {
       query: {
         retry: false
@@ -226,6 +237,14 @@ export function useAdminOverview() {
     return []
   })
 
+  const userBehaviorSankey = computed<UserBehaviorSankeyDTO[]>(() => {
+    const data = userBehaviorSankeyQuery.data.value
+    if (Array.isArray(data)) {
+      return data
+    }
+    return []
+  })
+
   const loading = computed(() =>
     dashboardQuery.isLoading.value ||
     dashboardQuery.isFetching.value ||
@@ -236,14 +255,17 @@ export function useAdminOverview() {
     userRetentionQuery.isLoading.value ||
     userRetentionQuery.isFetching.value ||
     genrePreferenceQuery.isLoading.value ||
-    genrePreferenceQuery.isFetching.value
+    genrePreferenceQuery.isFetching.value ||
+    userBehaviorSankeyQuery.isLoading.value ||
+    userBehaviorSankeyQuery.isFetching.value
   )
   const hasLoadError = computed(() =>
     dashboardQuery.isError.value ||
     searchFunnelQuery.isError.value ||
     searchKeywordInsightsQuery.isError.value ||
     userRetentionQuery.isError.value ||
-    genrePreferenceQuery.isError.value
+    genrePreferenceQuery.isError.value ||
+    userBehaviorSankeyQuery.isError.value
   )
   const lastUpdatedText = computed(() => {
     if (!dashboardQuery.dataUpdatedAt.value) {
@@ -262,7 +284,8 @@ export function useAdminOverview() {
         refetchOrThrow(searchFunnelQuery),
         refetchOrThrow(searchKeywordInsightsQuery),
         refetchOrThrow(userRetentionQuery),
-        refetchOrThrow(genrePreferenceQuery)
+        refetchOrThrow(genrePreferenceQuery),
+        refetchOrThrow(userBehaviorSankeyQuery)
       ])
       message.success('仪表盘已刷新')
     } catch (error) {
@@ -283,6 +306,7 @@ export function useAdminOverview() {
     searchKeywordInsights,
     userRetention,
     genrePreference,
+    userBehaviorSankey,
     loading,
     hasLoadError,
     lastUpdatedText,

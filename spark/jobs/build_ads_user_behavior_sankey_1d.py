@@ -5,11 +5,19 @@ Each output row is one directed link: (source_node, target_node, user_count).
 
 Sankey node layout
 ==================
-                           ┌─> 搜索后浏览 ─┐              ┌─> 看过
-  活跃用户 ─┬─> 搜索用户 ─┤               ├─> 浏览 ─┬─> 评分
-            │              └─> 搜索未转化   │          ├─> 评论
-            └─> 直接浏览 ──────────────────┘          ├─> 收藏
-                                                       └─> 浏览流失
+                           ┌─> 搜索后浏览 ─┬─> 看过
+  活跃用户 ─┬─> 搜索用户 ─┤              ├─> 评分
+            │              │              ├─> 评论
+            │              │              ├─> 收藏
+            │              │              └─> 浏览流失
+            │              └─> 搜索未转化
+            └─> 直接浏览 ───┬─> 看过
+                            ├─> 评分
+                            ├─> 评论
+                            ├─> 收藏
+                            └─> 浏览流失
+
+  搜索后浏览 and 直接浏览 are at the same level, both connect directly to engagement actions.
   看过/评分/评论/收藏 are parallel (non-sequential) engagement actions.
   Drop-off links are emitted for 浏览 and search stages.
 """
@@ -133,24 +141,35 @@ def build_sankey_links(events_df: DataFrame, spark: SparkSession) -> DataFrame:
     if search_no_convert < 0:
         search_no_convert = 0
 
-    # Layer 4: 浏览 → parallel engagement actions (non-sequential)
-    # Each action is independent; a user who viewed may do any combination.
-    view_and_watched = enriched.where(
-        (F.col("did_view") == 1) & (F.col("did_watched") == 1)
+    # Layer 3: 搜索后浏览 → parallel engagement actions (non-sequential)
+    # Users who searched, then viewed, and then engaged
+    stv_df = enriched.where(
+        (F.col("did_search") == 1)
+        & (F.col("did_search_then_view") == 1)
+        & (F.col("did_view") == 1)
+    )
+    stv_watched = stv_df.where(F.col("did_watched") == 1).count()
+    stv_rating = stv_df.where(F.col("did_rating") == 1).count()
+    stv_comment = stv_df.where(F.col("did_comment") == 1).count()
+    stv_favorite = stv_df.where(F.col("did_favorite") == 1).count()
+    stv_no_engage = stv_df.where(
+        (F.col("did_watched") == 0)
+        & (F.col("did_rating") == 0)
+        & (F.col("did_comment") == 0)
+        & (F.col("did_favorite") == 0)
     ).count()
-    view_and_rating = enriched.where(
-        (F.col("did_view") == 1) & (F.col("did_rating") == 1)
-    ).count()
-    view_and_comment = enriched.where(
-        (F.col("did_view") == 1) & (F.col("did_comment") == 1)
-    ).count()
-    view_and_favorite = enriched.where(
-        (F.col("did_view") == 1) & (F.col("did_favorite") == 1)
-    ).count()
-    # Users who viewed but performed none of the four engagement actions
-    view_only = enriched.where(
-        (F.col("did_view") == 1)
-        & (F.col("did_watched") == 0)
+
+    # Layer 3: 直接浏览 → parallel engagement actions (non-sequential)
+    # Users who didn't search but viewed, and then engaged
+    dv_df = enriched.where(
+        (F.col("did_search") == 0) & (F.col("did_view") == 1)
+    )
+    dv_watched = dv_df.where(F.col("did_watched") == 1).count()
+    dv_rating = dv_df.where(F.col("did_rating") == 1).count()
+    dv_comment = dv_df.where(F.col("did_comment") == 1).count()
+    dv_favorite = dv_df.where(F.col("did_favorite") == 1).count()
+    dv_no_engage = dv_df.where(
+        (F.col("did_watched") == 0)
         & (F.col("did_rating") == 0)
         & (F.col("did_comment") == 0)
         & (F.col("did_favorite") == 0)
@@ -174,16 +193,19 @@ def build_sankey_links(events_df: DataFrame, spark: SparkSession) -> DataFrame:
     _add("搜索用户", "搜索后浏览", search_then_view)
     _add("搜索用户", "搜索未转化", search_no_convert)
 
-    # Layer 3: merge into 浏览
-    _add("搜索后浏览", "浏览", search_then_view)
-    _add("直接浏览", "浏览", direct_view_users)
+    # Layer 3: 搜索后浏览 → engagement
+    _add("搜索后浏览", "看过", stv_watched)
+    _add("搜索后浏览", "评分", stv_rating)
+    _add("搜索后浏览", "评论", stv_comment)
+    _add("搜索后浏览", "收藏", stv_favorite)
+    _add("搜索后浏览", "浏览流失", stv_no_engage)
 
-    # Layer 4: parallel engagement branches from 浏览
-    _add("浏览", "看过", view_and_watched)
-    _add("浏览", "评分", view_and_rating)
-    _add("浏览", "评论", view_and_comment)
-    _add("浏览", "收藏", view_and_favorite)
-    _add("浏览", "浏览流失", view_only)
+    # Layer 3: 直接浏览 → engagement
+    _add("直接浏览", "看过", dv_watched)
+    _add("直接浏览", "评分", dv_rating)
+    _add("直接浏览", "评论", dv_comment)
+    _add("直接浏览", "收藏", dv_favorite)
+    _add("直接浏览", "浏览流失", dv_no_engage)
 
     return spark.createDataFrame(
         links, schema="source_node string, target_node string, user_count bigint"

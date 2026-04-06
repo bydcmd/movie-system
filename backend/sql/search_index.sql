@@ -6,9 +6,9 @@ ALTER TABLE movies
                       name,
                       IFNULL(alias, ''),
                       IFNULL(storyline, ''),
-                      JSON_UNQUOTE(JSON_EXTRACT(directors, '$[*].name')),
-                      JSON_UNQUOTE(JSON_EXTRACT(actors, '$[*].name')),
-                      JSON_UNQUOTE(JSON_EXTRACT(writers, '$[*].name')) -- 新增编剧字段
+                      JSON_UNQUOTE(JSON_EXTRACT(directors, '$[*].NAME')),
+                      JSON_UNQUOTE(JSON_EXTRACT(actors, '$[*].NAME')),
+                      JSON_UNQUOTE(JSON_EXTRACT(writers, '$[*].NAME')) -- 新增编剧字段
             )
             ) STORED;
 

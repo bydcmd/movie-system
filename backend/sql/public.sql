@@ -1093,17 +1093,17 @@ DECLARE
 BEGIN
     -- 1. 提取导演名字 (将 JSONB 数组转为以空格分隔的字符串)
     -- COALESCE 防止 NULL 导致整个字符串变 NULL
-    SELECT COALESCE(string_agg(elem->>'name', ' '), '') 
+    SELECT COALESCE(string_agg(elem->>'NAME', ' '), '') 
     INTO v_directors
     FROM jsonb_array_elements(NEW.directors) AS elem;
 
     -- 2. 提取演员名字
-    SELECT COALESCE(string_agg(elem->>'name', ' '), '') 
+    SELECT COALESCE(string_agg(elem->>'NAME', ' '), '') 
     INTO v_actors
     FROM jsonb_array_elements(NEW.actors) AS elem;
 
     -- 3. 提取编剧名字
-    SELECT COALESCE(string_agg(elem->>'name', ' '), '') 
+    SELECT COALESCE(string_agg(elem->>'NAME', ' '), '') 
     INTO v_writers
     FROM jsonb_array_elements(NEW.writers) AS elem;
 
@@ -1504,6 +1504,9 @@ CREATE INDEX "idx_movies_actors_gin" ON "public"."movies" USING gin (
 );
 CREATE INDEX "idx_movies_directors_gin" ON "public"."movies" USING gin (
   "directors" "pg_catalog"."jsonb_path_ops"
+);
+CREATE INDEX "idx_movies_writers_gin" ON "public"."movies" USING gin (
+  "writers" "pg_catalog"."jsonb_path_ops"
 );
 CREATE INDEX "idx_movies_douban_score" ON "public"."movies" USING btree (
   "douban_score" "pg_catalog"."numeric_ops" ASC NULLS LAST

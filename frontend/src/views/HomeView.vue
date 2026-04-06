@@ -78,7 +78,7 @@ const goToTrendingTop = () => {
 
       <TrendingPeriodTabs v-model="selectedPeriod" class="mt-6" />
 
-      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-8">
+      <div class="mt-8 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-8">
         <div v-if="isLoading" class="col-span-full py-10 text-center text-slate-500">
           正在加载热门电影...
         </div>

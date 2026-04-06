@@ -20,7 +20,7 @@ LIMIT 3;
 -- 3. 提取所有不同的导演名字（用于了解实际存储的格式）
 -- 注意：这里只提取第一个导演的名字
 SELECT DISTINCT 
-    JSON_UNQUOTE(JSON_EXTRACT(directors, '$[0].name')) as director_name
+    JSON_UNQUOTE(JSON_EXTRACT(directors, '$[0].NAME')) as director_name
 FROM movies
 WHERE directors IS NOT NULL 
   AND JSON_LENGTH(directors) > 0
@@ -30,9 +30,9 @@ LIMIT 30;
 
 -- 4. 提取所有不同的演员名字（前3个演员）
 SELECT DISTINCT 
-    JSON_UNQUOTE(JSON_EXTRACT(actors, '$[0].name')) as actor_1,
-    JSON_UNQUOTE(JSON_EXTRACT(actors, '$[1].name')) as actor_2,
-    JSON_UNQUOTE(JSON_EXTRACT(actors, '$[2].name')) as actor_3
+    JSON_UNQUOTE(JSON_EXTRACT(actors, '$[0].NAME')) as actor_1,
+    JSON_UNQUOTE(JSON_EXTRACT(actors, '$[1].NAME')) as actor_2,
+    JSON_UNQUOTE(JSON_EXTRACT(actors, '$[2].NAME')) as actor_3
 FROM movies
 WHERE actors IS NOT NULL 
   AND JSON_LENGTH(actors) > 0
@@ -42,8 +42,8 @@ LIMIT 30;
 -- 匹配名字中包含"诺兰"或"Nolan"的导演
 SELECT movie_id, name, directors, douban_score, year
 FROM movies
-WHERE JSON_SEARCH(directors, 'one', '%诺兰%', NULL, '$[*].name') IS NOT NULL
-   OR JSON_SEARCH(directors, 'one', '%Nolan%', NULL, '$[*].name') IS NOT NULL
+WHERE JSON_SEARCH(directors, 'one', '%诺兰%', NULL, '$[*].NAME') IS NOT NULL
+   OR JSON_SEARCH(directors, 'one', '%Nolan%', NULL, '$[*].NAME') IS NOT NULL
    OR directors LIKE '%诺兰%'
    OR directors LIKE '%Nolan%';
 
@@ -51,8 +51,8 @@ WHERE JSON_SEARCH(directors, 'one', '%诺兰%', NULL, '$[*].name') IS NOT NULL
 -- 匹配名字中包含"昂纳多"或"Caprio"的演员
 SELECT movie_id, name, actors, douban_score, year
 FROM movies
-WHERE JSON_SEARCH(actors, 'one', '%昂纳多%', NULL, '$[*].name') IS NOT NULL
-   OR JSON_SEARCH(actors, 'one', '%Caprio%', NULL, '$[*].name') IS NOT NULL
+WHERE JSON_SEARCH(actors, 'one', '%昂纳多%', NULL, '$[*].NAME') IS NOT NULL
+   OR JSON_SEARCH(actors, 'one', '%Caprio%', NULL, '$[*].NAME') IS NOT NULL
    OR actors LIKE '%昂纳多%'
    OR actors LIKE '%Caprio%';
 
@@ -61,8 +61,8 @@ WHERE JSON_SEARCH(actors, 'one', '%昂纳多%', NULL, '$[*].name') IS NOT NULL
 SELECT m.movie_id, m.name, m.douban_score, m.year, m.genres, m.directors
 FROM movies m
 WHERE (
-    JSON_SEARCH(m.directors, 'one', '%诺兰%', NULL, '$[*].name') IS NOT NULL
-    OR JSON_SEARCH(m.directors, 'one', '%Nolan%', NULL, '$[*].name') IS NOT NULL
+    JSON_SEARCH(m.directors, 'one', '%诺兰%', NULL, '$[*].NAME') IS NOT NULL
+    OR JSON_SEARCH(m.directors, 'one', '%Nolan%', NULL, '$[*].NAME') IS NOT NULL
     OR m.directors LIKE '%诺兰%'
 )
   AND m.douban_score >= 8.0
@@ -78,7 +78,7 @@ WHERE (
 SET @director_name = '诺兰';
 SELECT movie_id, name, directors, douban_score, year
 FROM movies
-WHERE JSON_SEARCH(directors, 'one', CONCAT('%', @director_name, '%'), NULL, '$[*].name') IS NOT NULL
+WHERE JSON_SEARCH(directors, 'one', CONCAT('%', @director_name, '%'), NULL, '$[*].NAME') IS NOT NULL
    OR directors LIKE CONCAT('%', @director_name, '%');
 
 -- 9. 统计数据

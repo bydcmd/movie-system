@@ -36,10 +36,6 @@ public class PersonServiceImpl implements PersonService {
 
     @Override
     public List<Movie> getMovies(Long id) {
-        Person person = personMapper.selectById(id);
-        if (person == null) {
-            return new ArrayList<>();
-        }
         return movieMapper.selectByPersonId(String.valueOf(id));
     }
 }

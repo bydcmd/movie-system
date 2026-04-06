@@ -35,57 +35,40 @@
     </select>
 
     <select id="search" resultMap="BaseResultMap">
-        SELECT movie_id, name, cover, douban_score, year, regions, genres
-        FROM movies
+        SELECT m.movie_id, m.name, m.cover, m.douban_score, m.year, m.regions, m.genres
+        <if test="keyword != null and keyword != ''">
+            , trgm.relevance
+        </if>
+        FROM
+        <if test="keyword != null and keyword != ''">
+            (
+                SELECT movie_id,
+                       GREATEST(
+                           similarity(COALESCE(name, ''), #{keyword}),
+                           similarity(COALESCE(alias, ''), #{keyword}),
+                           similarity(COALESCE(full_search_text, ''), #{keyword})
+                       ) AS relevance
+                FROM movies
+                WHERE full_search_text % #{keyword}
+                   OR name % #{keyword}
+                   OR alias % #{keyword}
+                   OR full_search_text LIKE '%' || #{keyword} || '%'
+                   OR name LIKE '%' || #{keyword} || '%'
+                   OR alias LIKE '%' || #{keyword} || '%'
+                LIMIT 5000
+            ) trgm
+            INNER JOIN movies m ON m.movie_id = trgm.movie_id
+        </if>
+        <if test="keyword == null or keyword == ''">
+            movies m
+        </if>
         <where>
-
-            <if test="keyword != null and keyword != ''">
-                AND movie_id IN (
-                    SELECT keyword_pool.movie_id
-                    FROM (
-                        SELECT candidate.movie_id
-                        FROM (
-                            SELECT
-                                m.movie_id,
-                                GREATEST(
-                                    similarity(COALESCE(m.name, ''), #{keyword}),
-                                    similarity(COALESCE(m.alias, ''), #{keyword}),
-                                    similarity(COALESCE(m.full_search_text, ''), #{keyword})
-                                ) AS relevance
-                            FROM movies m
-                            WHERE m.full_search_text % #{keyword}
-                               OR m.name % #{keyword}
-                               OR m.alias % #{keyword}
-                            ORDER BY relevance DESC
-                            LIMIT 5000
-                        ) candidate
-
-                        UNION ALL
-
-                        SELECT fallback.movie_id
-                        FROM (
-                            SELECT m.movie_id
-                            FROM movies m
-                            WHERE NOT EXISTS (
-                                SELECT 1
-                                FROM movies t
-                                WHERE t.full_search_text % #{keyword}
-                                   OR t.name % #{keyword}
-                                   OR t.alias % #{keyword}
-                            )
-                              AND m.full_search_text ILIKE '%' || #{keyword} || '%'
-                            LIMIT 5000
-                        ) fallback
-                    ) keyword_pool
-                )
-            </if>
-
             <if test="genres != null and genres.size() > 0">
                 AND EXISTS (
                 SELECT 1
                 FROM movie_genre_relation mgr
                 INNER JOIN genres g ON mgr.genre_id = g.id
-                WHERE mgr.movie_id = movies.movie_id
+                WHERE mgr.movie_id = m.movie_id
                 AND g.name IN
                 <foreach collection="genres" item="genre" open="(" separator="," close=")">
                     #{genre}
@@ -94,20 +77,20 @@
             </if>
 
             <if test="minScore != null">
-                AND douban_score &gt;= #{minScore}
+                AND m.douban_score &gt;= #{minScore}
             </if>
             <if test="maxScore != null">
-                AND douban_score &lt;= #{maxScore}
+                AND m.douban_score &lt;= #{maxScore}
             </if>
 
             <if test="year != null and year != ''">
-                AND year = #{year}
+                AND m.year = #{year}
             </if>
             <if test="startYear != null">
-                AND year &gt;= #{startYear}
+                AND m.year &gt;= #{startYear}
             </if>
             <if test="endYear != null">
-                AND year &lt;= #{endYear}
+                AND m.year &lt;= #{endYear}
             </if>
 
             <if test="regions != null and regions.size() > 0">
@@ -115,7 +98,7 @@
                 SELECT 1
                 FROM movie_region_relation mrr
                 INNER JOIN regions r ON mrr.region_id = r.id
-                WHERE mrr.movie_id = movies.movie_id
+                WHERE mrr.movie_id = m.movie_id
                 AND r.name IN
                 <foreach collection="regions" item="region" open="(" separator="," close=")">
                     #{region}
@@ -126,7 +109,7 @@
             <if test="directors != null and directors.size() > 0">
                 AND (
                 <foreach collection="directors" item="director" separator=" OR ">
-                    (directors @> jsonb_build_array(jsonb_build_object('name', #{director})))
+                    (m.directors @> jsonb_build_array(jsonb_build_object('NAME', #{director})))
                 </foreach>
                 )
             </if>
@@ -134,7 +117,7 @@
             <if test="actors != null and actors.size() > 0">
                 AND (
                 <foreach collection="actors" item="actor" separator=" OR ">
-                    (actors @> jsonb_build_array(jsonb_build_object('name', #{actor})))
+                    (m.actors @> jsonb_build_array(jsonb_build_object('NAME', #{actor})))
                 </foreach>
                 )
             </if>
@@ -142,26 +125,21 @@
 
         <choose>
             <when test="sortBy == 'score'">
-                ORDER BY douban_score ${sortOrder}
+                ORDER BY m.douban_score ${sortOrder}
             </when>
             <when test="sortBy == 'year'">
-                ORDER BY year ${sortOrder}
+                ORDER BY m.year ${sortOrder}
             </when>
             <when test="sortBy == 'votes'">
-                ORDER BY douban_votes ${sortOrder}
+                ORDER BY m.douban_votes ${sortOrder}
             </when>
             <when test="keyword != null and keyword != '' and (sortBy == null or sortBy == '')">
-                ORDER BY
-                GREATEST(
-                    similarity(COALESCE(name, ''), #{keyword}),
-                    similarity(COALESCE(alias, ''), #{keyword}),
-                    similarity(COALESCE(full_search_text, ''), #{keyword})
-                ) DESC,
-                douban_score DESC,
-                douban_votes DESC
+                ORDER BY trgm.relevance DESC,
+                m.douban_score DESC,
+                m.douban_votes DESC
             </when>
             <otherwise>
-                ORDER BY douban_score DESC </otherwise>
+                ORDER BY m.douban_score DESC </otherwise>
         </choose>
     </select>
 
@@ -363,8 +341,9 @@
     <select id="selectByPersonId" resultMap="BaseResultMap">
         SELECT <include refid="Base_Column_List"/>
         FROM movies
-        WHERE actors @> ('[{"id": "' || #{personId} || '"}]')::jsonb
-           OR directors @> ('[{"id": "' || #{personId} || '"}]')::jsonb
+        WHERE actors @> ('[{"ID": "' || #{personId} || '"}]')::jsonb
+           OR directors @> ('[{"ID": "' || #{personId} || '"}]')::jsonb
+           OR writers @> ('[{"ID": "' || #{personId} || '"}]')::jsonb
         ORDER BY year DESC
     </select>
 

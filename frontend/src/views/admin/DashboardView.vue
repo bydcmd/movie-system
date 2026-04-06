@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { NAlert, NButton, NEmpty, NSpin } from 'naive-ui'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { BarChart, HeatmapChart, PieChart } from 'echarts/charts'
+import { BarChart, HeatmapChart, PieChart, SankeyChart } from 'echarts/charts'
 import {
   GridComponent,
   TooltipComponent,
@@ -20,6 +20,7 @@ use([
   BarChart,
   HeatmapChart,
   PieChart,
+  SankeyChart,
   GridComponent,
   TooltipComponent,
   DataZoomComponent,
@@ -36,6 +37,7 @@ const {
   searchKeywordInsights,
   userRetention,
   genrePreference,
+  userBehaviorSankey,
   loading,
   hasLoadError,
   lastUpdatedText,
@@ -357,6 +359,92 @@ const genrePreferenceChartOption = computed(() => {
     ]
   }
 })
+
+const userBehaviorSankeyChartOption = computed(() => {
+  const links = userBehaviorSankey.value
+
+  if (links.length === 0) {
+    return {}
+  }
+
+  // Extract unique nodes from links
+  const nodeSet = new Set<string>()
+  links.forEach(link => {
+    if (link.sourceNode) nodeSet.add(link.sourceNode)
+    if (link.targetNode) nodeSet.add(link.targetNode)
+  })
+
+  const nodes = Array.from(nodeSet).map(name => ({ name }))
+
+  // Node color mapping based on category
+  const nodeColors: Record<string, string> = {
+    '活跃用户': '#f59e0b',
+    '搜索用户': '#0ea5e9',
+    '搜索后浏览': '#38bdf8',
+    '搜索未转化': '#94a3b8',
+    '直接浏览': '#10b981',
+    '看过': '#ec4899',
+    '评分': '#f43f5e',
+    '评论': '#8b5cf6',
+    '收藏': '#14b8a6',
+    '浏览流失': '#94a3b8',
+    '未行动流失': '#94a3b8'
+  }
+
+  return {
+    tooltip: {
+      trigger: 'item',
+      triggerOn: 'mousemove',
+      formatter: (params: { dataType: string; data: { source: string; target: string; value: number; name?: string }; name?: string }) => {
+        if (params.dataType === 'node') {
+          return `${params.name}`
+        }
+        if (params.dataType === 'edge') {
+          const { source, target, value } = params.data
+          return `${source} → ${target}<br/>用户数: ${formatCount(value)}`
+        }
+        return ''
+      }
+    },
+    series: [
+      {
+        type: 'sankey',
+        left: '3%',
+        right: '8%',
+        top: '5%',
+        bottom: '5%',
+        nodeWidth: 24,
+        nodeGap: 14,
+        layoutIterations: 32,
+        emphasis: {
+          focus: 'adjacency'
+        },
+        lineStyle: {
+          color: 'gradient',
+          curveness: 0.5,
+          opacity: 0.6
+        },
+        label: {
+          position: 'right',
+          color: '#374151',
+          fontSize: 11,
+          fontWeight: 500
+        },
+        data: nodes.map(node => ({
+          name: node.name,
+          itemStyle: {
+            color: nodeColors[node.name] || '#64748b'
+          }
+        })),
+        links: links.map(link => ({
+          source: link.sourceNode,
+          target: link.targetNode,
+          value: link.userCount || 0
+        }))
+      }
+    ]
+  }
+})
 </script>
 
 <template>
@@ -640,6 +728,27 @@ const genrePreferenceChartOption = computed(() => {
         <n-empty
           v-else
           description="暂无类型偏好数据"
+          size="small"
+          class="py-6"
+        />
+      </div>
+
+      <!-- User Behavior Sankey Analytics -->
+      <div class="sankey-section">
+        <h3 class="sankey-section-title">用户行为流转</h3>
+        <p class="sankey-section-desc">桑基图展示用户从活跃状态到各种互动行为的流转路径，线条宽度表示用户数量</p>
+
+        <div v-if="userBehaviorSankey.length > 0" class="sankey-chart-wrapper">
+          <v-chart
+            :option="userBehaviorSankeyChartOption"
+            :autoresize="true"
+            class="sankey-flow-chart"
+          />
+        </div>
+
+        <n-empty
+          v-else
+          description="暂无用户行为桑基图数据"
           size="small"
           class="py-6"
         />
@@ -1153,6 +1262,42 @@ const genrePreferenceChartOption = computed(() => {
 @media (max-width: 768px) {
   .genre-bar-chart {
     height: 280px;
+  }
+}
+
+/* User Behavior Sankey Styles */
+.sankey-section {
+  margin-top: 1.5rem;
+}
+
+.sankey-section-title {
+  margin: 0 0 0.25rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.sankey-section-desc {
+  margin: 0 0 1rem;
+  color: #64748b;
+  font-size: 0.875rem;
+}
+
+.sankey-chart-wrapper {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.94);
+  padding: 1rem;
+}
+
+.sankey-flow-chart {
+  width: 100%;
+  height: 420px;
+}
+
+@media (max-width: 768px) {
+  .sankey-flow-chart {
+    height: 340px;
   }
 }
 

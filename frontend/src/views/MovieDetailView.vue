@@ -572,6 +572,20 @@ const getRole = (person: any): string => {
   return (person?.role || person?.ROLE || '').trim()
 }
 
+const getPersonId = (person: any): number | null => {
+  const raw = person?.id ?? person?.ID ?? person?.personId ?? null
+  if (raw == null) return null
+  const num = Number(raw)
+  return Number.isFinite(num) && num > 0 ? num : null
+}
+
+const navigateToPerson = (person: any) => {
+  const id = getPersonId(person)
+  if (id) {
+    void router.push({ name: 'person-detail', params: { id } })
+  }
+}
+
 const actorsList = computed(() => {
   return (movie.value?.actors || [])
     .map((actor: any) => ({
@@ -1441,47 +1455,67 @@ watch(
                   <p class="text-slate-600 leading-relaxed whitespace-pre-line">{{ movie.storyline }}</p>
                 </section>
 
-                <MovieDetailSimilarMovies
-                  :movies="similarMovies"
-                  :loading="similarMoviesLoading"
-                />
+
 
                 <!-- Cast & Crew -->
                 <section class="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
                   <h2 class="text-xl font-bold text-slate-900 mb-4">演职员</h2>
                   
                   <!-- Directors -->
-                  <div v-if="directorsList.length > 0" class="mb-4">
+                  <div v-if="movie.directors && movie.directors.length > 0" class="mb-4">
                     <h3 class="text-sm font-medium text-slate-500 mb-2">导演</h3>
                     <div class="flex flex-wrap gap-2">
-                      <n-tag v-for="director in directorsList" :key="director" size="medium">
-                        {{ director }}
+                      <n-tag
+                        v-for="(director, idx) in movie.directors"
+                        :key="getName(director) || idx"
+                        size="medium"
+                        :class="{ 'cursor-pointer': getPersonId(director) }"
+                        @click="navigateToPerson(director)"
+                      >
+                        {{ getName(director) }}
                       </n-tag>
                     </div>
                   </div>
 
                   <!-- Writers -->
-                  <div v-if="writersList.length > 0" class="mb-4">
+                  <div v-if="movie.writers && movie.writers.length > 0" class="mb-4">
                     <h3 class="text-sm font-medium text-slate-500 mb-2">编剧</h3>
                     <div class="flex flex-wrap gap-2">
-                      <n-tag v-for="writer in writersList" :key="writer" size="medium">
-                        {{ writer }}
+                      <n-tag
+                        v-for="(writer, idx) in movie.writers"
+                        :key="getName(writer) || idx"
+                        size="medium"
+                        :class="{ 'cursor-pointer': getPersonId(writer) }"
+                        @click="navigateToPerson(writer)"
+                      >
+                        {{ getName(writer) }}
                       </n-tag>
                     </div>
                   </div>
 
                   <!-- Actors -->
-                  <div v-if="actorsList.length > 0">
+                  <div v-if="movie.actors && movie.actors.length > 0">
                     <h3 class="text-sm font-medium text-slate-500 mb-2">主演</h3>
                     <div class="flex flex-wrap gap-2">
-                      <n-tag v-for="actor in actorsList.slice(0, 10)" :key="actor.name" size="medium">
-                        {{ actor.name }}
-                        <span v-if="actor.role" class="text-slate-400 ml-1">饰 {{ actor.role }}</span>
+                      <n-tag
+                        v-for="(actor, idx) in movie.actors.slice(0, 10)"
+                        :key="getName(actor) || idx"
+                        size="medium"
+                        :class="{ 'cursor-pointer': getPersonId(actor) }"
+                        @click="navigateToPerson(actor)"
+                      >
+                        {{ getName(actor) }}
+                        <span v-if="getRole(actor)" class="text-slate-400 ml-1">饰 {{ getRole(actor) }}</span>
                       </n-tag>
                     </div>
                   </div>
                 </section>
+                <MovieDetailSimilarMovies
+                  :movies="similarMovies"
+                  :loading="similarMoviesLoading"
+                />
               </div>
+              
 
               <!-- Right: More Info -->
               <div class="space-y-6">
