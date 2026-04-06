@@ -73,63 +73,6 @@ STORED AS ORC
 LOCATION '/warehouse/movie/ads/itemcf_similar_movies'
 TBLPROPERTIES ('orc.compress'='SNAPPY');
 
-CREATE EXTERNAL TABLE IF NOT EXISTS ads.ads_itemcf_user_recommendations (
-  user_id string,
-  movie_id bigint,
-  rank_no int,
-  recommend_score decimal(18,8),
-  seed_item_cnt bigint,
-  best_similarity decimal(18,8)
-)
-PARTITIONED BY (dt string)
-STORED AS ORC
-LOCATION '/warehouse/movie/ads/itemcf_user_recommendations'
-TBLPROPERTIES ('orc.compress'='SNAPPY');
-
-CREATE EXTERNAL TABLE IF NOT EXISTS ads.ads_reco_user_item_features_1d (
-  user_id string,
-  movie_id bigint,
-  feature_score decimal(18,8),
-  view_cnt bigint,
-  rating_cnt bigint,
-  comment_cnt bigint,
-  favorite_add_cnt bigint,
-  favorite_remove_cnt bigint,
-  watched_cnt bigint,
-  last_event_ts timestamp
-)
-PARTITIONED BY (dt string)
-STORED AS ORC
-LOCATION '/warehouse/movie/ads/reco_user_item_features_1d'
-TBLPROPERTIES ('orc.compress'='SNAPPY');
-
-CREATE EXTERNAL TABLE IF NOT EXISTS ads.ads_hybrid_user_recommendations (
-  user_id string,
-  movie_id bigint,
-  rank_no int,
-  base_rank_no int,
-  rerank_score decimal(18,8),
-  base_recommend_score decimal(18,8),
-  genre_match_score decimal(18,8),
-  popularity_boost decimal(18,8),
-  quality_boost decimal(18,8),
-  recent_interaction_penalty decimal(18,8),
-  seed_item_cnt bigint,
-  best_similarity decimal(18,8),
-  movie_name string,
-  movie_year int,
-  movie_genres string,
-  movie_score decimal(3,1),
-  movie_douban_score decimal(3,1),
-  movie_hot_score decimal(18,4),
-  is_recently_interacted tinyint,
-  last_recent_event_ts timestamp
-)
-PARTITIONED BY (dt string)
-STORED AS ORC
-LOCATION '/warehouse/movie/ads/hybrid_user_recommendations'
-TBLPROPERTIES ('orc.compress'='SNAPPY');
-
 CREATE EXTERNAL TABLE IF NOT EXISTS ads.ads_search_funnel_1d (
   search_user_cnt bigint COMMENT 'Number of unique search users',
   search_cnt bigint COMMENT 'Total search event count',

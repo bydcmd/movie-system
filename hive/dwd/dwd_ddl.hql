@@ -50,7 +50,18 @@ CREATE EXTERNAL TABLE IF NOT EXISTS dwd.dwd_user_event_wide_di (
   is_login tinyint,
   is_favorite_folder_action tinyint,
   event_data string,
-  raw_json string
+  raw_json string,
+  -- Session tracking fields (lightweight, from ODS event table)
+  session_id string,
+  page_url string,
+  sequence_number int,
+  client_timestamp bigint,
+  -- Session context fields (from ODS session table, joined in DWD)
+  entry_url string,
+  referrer string,
+  user_agent string,
+  device_type string,
+  session_start_time bigint
 )
 PARTITIONED BY (dt string)
 STORED AS ORC

@@ -47,6 +47,10 @@ def parse_args() -> argparse.Namespace:
 
 
 def normalize_events(source_df: DataFrame) -> DataFrame:
+    """
+    Normalize Kafka events into event log format.
+    All session fields are stored together in the event table.
+    """
     value_col = F.col("value").cast("string")
     occurred_at_ms = F.get_json_object(value_col, "$.occurredAt").cast("long")
     occurred_at = F.to_timestamp(F.from_unixtime((occurred_at_ms / F.lit(1000)).cast("double")))
@@ -80,16 +84,16 @@ def normalize_events(source_df: DataFrame) -> DataFrame:
             F.current_timestamp().alias("ingest_time"),
             F.date_format(event_ts, "yyyy-MM-dd").alias("dt"),
             F.date_format(event_ts, "HH").alias("hh"),
-            # Session tracking fields
+            # Session fields (all stored in event table)
             F.get_json_object(session_ctx, "$.sessionId").alias("session_id"),
             F.get_json_object(session_ctx, "$.pageUrl").alias("page_url"),
-            F.get_json_object(session_ctx, "$.referrer").alias("referrer"),
-            F.get_json_object(session_ctx, "$.entryUrl").alias("entry_url"),
-            F.get_json_object(session_ctx, "$.sessionStartTime").cast("bigint").alias("session_start_time"),
             F.get_json_object(session_ctx, "$.sequenceNumber").cast("int").alias("sequence_number"),
+            F.get_json_object(session_ctx, "$.clientTimestamp").cast("bigint").alias("client_timestamp"),
+            F.get_json_object(session_ctx, "$.entryUrl").alias("entry_url"),
+            F.get_json_object(session_ctx, "$.referrer").alias("first_referrer"),
+            F.get_json_object(session_ctx, "$.sessionStartTime").cast("bigint").alias("session_start_time"),
             F.get_json_object(session_ctx, "$.deviceType").alias("device_type"),
             F.get_json_object(session_ctx, "$.userAgent").alias("user_agent"),
-            F.get_json_object(session_ctx, "$.clientTimestamp").cast("bigint").alias("client_timestamp"),
         )
         .where(F.col("dt").isNotNull())
     )
@@ -120,23 +124,30 @@ def normalize_hadoop_uri(spark: SparkSession, uri: str, option_name: str) -> str
     )
 
 
-def write_micro_batch(batch_df: DataFrame, batch_id: int, sink_path: str, sink_table: str) -> None:
+def write_micro_batch(
+    batch_df: DataFrame,
+    batch_id: int,
+    sink_path: str,
+    sink_table: str,
+) -> None:
     """
-    Write a micro-batch to Hive ODS table.
+    Write a micro-batch to Hive ODS event log table.
+    
+    All session fields are stored together in the event table.
     
     Uses MSCK REPAIR TABLE for partition discovery which is more memory-efficient
     than manually collecting partition keys to the driver.
     """
     _validate_table_name(sink_table)
     
-    # Write partitioned data
+    # Write event data with all session fields (partitioned by dt, hh)
     batch_df.write.mode("append").format("orc").partitionBy("dt", "hh").save(sink_path)
-    
-    # Use MSCK REPAIR TABLE to discover and register all partitions
-    # This avoids collecting partition metadata to driver memory
     batch_df.sparkSession.sql(f"MSCK REPAIR TABLE {sink_table}")
     
-    print(f"Kafka micro-batch committed. batch_id={batch_id}, sink_table={sink_table}")
+    print(
+        f"Kafka micro-batch committed. batch_id={batch_id}, "
+        f"sink_table={sink_table}, events={batch_df.count()}"
+    )
 
 
 def run() -> None:
@@ -186,6 +197,7 @@ def run() -> None:
             raise ValueError("sink_table is required in kafka config.")
 
         sink_path = normalize_hadoop_uri(spark, kafka_config["sink_path"], "kafka.sink_path")
+        
         checkpoint_root = args.checkpoint_root or spark_config.get("checkpoint_root", "")
         if not checkpoint_root:
             raise ValueError("checkpoint_root is required in args or config.")
@@ -197,7 +209,12 @@ def run() -> None:
         )
 
         def _write_micro_batch(batch_df: DataFrame, batch_id: int) -> None:
-            write_micro_batch(batch_df=batch_df, batch_id=batch_id, sink_path=sink_path, sink_table=sink_table)
+            write_micro_batch(
+                batch_df=batch_df,
+                batch_id=batch_id,
+                sink_path=sink_path,
+                sink_table=sink_table,
+            )
 
         writer = sink_df.writeStream.outputMode("append").option(
             "checkpointLocation", checkpoint_location

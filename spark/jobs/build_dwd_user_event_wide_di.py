@@ -183,6 +183,17 @@ def build_wide_table(
         .alias("is_favorite_folder_action"),
         F.col("e.event_data").alias("event_data"),
         F.col("e.raw_json").alias("raw_json"),
+        # Session tracking fields from event table
+        F.col("e.session_id").alias("session_id"),
+        F.col("e.page_url").alias("page_url"),
+        F.col("e.sequence_number").alias("sequence_number"),
+        F.col("e.client_timestamp").alias("client_timestamp"),
+        # Session context fields from event table
+        F.col("e.entry_url").alias("entry_url"),
+        F.col("e.first_referrer").alias("referrer"),
+        F.col("e.user_agent").alias("user_agent"),
+        F.col("e.device_type").alias("device_type"),
+        F.col("e.session_start_time").alias("session_start_time"),
     )
 
 

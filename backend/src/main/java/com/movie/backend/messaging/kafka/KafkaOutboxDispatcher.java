@@ -34,7 +34,7 @@ public class KafkaOutboxDispatcher {
         }
     }
 
-    @Scheduled(fixedDelayString = "${app.kafka.outbox.cleanup-interval-ms:36000000}")
+    @Scheduled(fixedDelayString = "${app.kafka.outbox.cleanup-interval-ms:3600}")
     public void cleanupSent() {
         Date cutoff = new Date(System.currentTimeMillis() - outboxProperties.getCleanupRetentionMs());
         int deleted = outboxEventMapper.deleteSentBefore(cutoff, outboxProperties.getCleanupBatchSize());

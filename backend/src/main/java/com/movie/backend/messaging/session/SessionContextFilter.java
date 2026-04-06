@@ -8,15 +8,24 @@ import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.util.UUID;
 
 /**
+ * NOTE: This filter uses a custom UUID-based sessionId for analytics tracking,
+ * NOT HttpSession.getId(). The custom ID is for business-level session grouping
+ * in user behavior analytics, while HttpSession.getId() is managed by the servlet
+ * container for session lifecycle management.
+ */
+
+/**
  * Servlet filter that extracts session tracking information from HTTP requests.
  * Populates SessionContextHolder for downstream event enrichment.
  */
+@Slf4j
 @Component
 public class SessionContextFilter implements Filter {
 
@@ -86,6 +95,11 @@ public class SessionContextFilter implements Filter {
                 sequenceNumber = (currentSeq != null) ? currentSeq + 1 : 1;
             }
             session.setAttribute(SESSION_SEQ_ATTR, sequenceNumber);
+        }
+
+        if (log.isDebugEnabled()) {
+            log.debug("SessionContext created - HttpSession ID: {}, Tracking Session ID: {}, Sequence: {}",
+                    session.getId(), sessionId, sequenceNumber);
         }
 
         return SessionContext.builder()

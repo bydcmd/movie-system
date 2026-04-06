@@ -155,7 +155,17 @@ CREATE EXTERNAL TABLE IF NOT EXISTS ods.ods_kafka_event_log_di (
   search_time bigint,
   event_data string,
   raw_json string,
-  ingest_time timestamp
+  ingest_time timestamp,
+  session_id string,
+  page_url string,
+  sequence_number int,
+  client_timestamp bigint,
+  entry_url string,
+  first_referrer string,
+  user_agent string,
+  device_type string,
+  session_start_time bigint,
+  first_client_timestamp bigint
 )
 PARTITIONED BY (dt string, hh string)
 STORED AS ORC
