@@ -118,6 +118,7 @@ public interface CommentMapper {
      * 更新长评（带标题）
      */
     int updateLongComment(
+            @Param("commentId") Long commentId,
             @Param("userId") String userId,
             @Param("movieId") Long movieId,
             @Param("title") String title,

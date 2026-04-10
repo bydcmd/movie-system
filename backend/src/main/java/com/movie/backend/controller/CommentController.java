@@ -6,6 +6,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import com.movie.backend.common.Result;
 import com.movie.backend.dto.BatchIdsDTO;
 import com.movie.backend.dto.CommentVO;
+import com.movie.backend.dto.EditableLongReviewVO;
 import com.movie.backend.dto.LongReviewDTO;
 import com.movie.backend.dto.UpdateCommentContentDTO;
 import com.movie.backend.dto.UpdateCommentWithRatingDTO;
@@ -15,6 +16,7 @@ import com.movie.backend.entity.User;
 import com.movie.backend.service.CommentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;
@@ -87,18 +89,18 @@ public class CommentController {
     @SecurityRequirement(name = "BearerAuth")
     @PreAuthorize("isAuthenticated()")
     @GetMapping("/movies/{movieId}/long-reviews/me")
-    public Result<Comment> getMyMovieLongReview(
+    public Result<EditableLongReviewVO> getMyMovieLongReview(
             @Parameter(description = "电影ID", required = true) @PathVariable @NotNull @Min(1) Long movieId,
             @AuthenticationPrincipal User user) {
         Comment comment = commentService.getUserLongReview(user.getId(), movieId);
-        return Result.success(comment);
+        return Result.success(EditableLongReviewVO.from(comment));
     }
 
     @Operation(operationId = "getMovieLongReviewDetail", summary = "获取长评详情", description = "根据电影ID和评论ID获取公开长评详情，返回正文、作者信息、点赞状态和作者评分。")
     @GetMapping("/movies/{movieId}/long-reviews/{commentId}")
     public Result<CommentVO> getMovieLongReviewDetail(
             @Parameter(description = "电影ID", required = true) @PathVariable @NotNull @Min(1) Long movieId,
-            @Parameter(description = "评论ID", required = true) @PathVariable @NotNull @Min(1) Long commentId,
+            @Parameter(description = "评论ID", required = true, schema = @Schema(type = "string")) @PathVariable @NotNull @Min(1) Long commentId,
             @AuthenticationPrincipal User user) {
         String currentUserId = user != null ? user.getId() : null;
         CommentVO review = commentService.getMovieLongReviewDetail(movieId, commentId, currentUserId);
@@ -157,7 +159,7 @@ public class CommentController {
     @PreAuthorize("isAuthenticated()")
     @PutMapping("/comments/{commentId}/like")
     public Result<Boolean> likeComment(
-            @Parameter(description = "评论ID", required = true) @PathVariable @Min(1) Long commentId,
+            @Parameter(description = "评论ID", required = true, schema = @Schema(type = "string")) @PathVariable @Min(1) Long commentId,
             @AuthenticationPrincipal User user) {
         return Result.success(commentService.likeComment(user.getId(), commentId));
     }
@@ -167,7 +169,7 @@ public class CommentController {
     @PreAuthorize("isAuthenticated()")
     @DeleteMapping("/comments/{commentId}/like")
     public Result<Boolean> unlikeComment(
-            @Parameter(description = "评论ID", required = true) @PathVariable @Min(1) Long commentId,
+            @Parameter(description = "评论ID", required = true, schema = @Schema(type = "string")) @PathVariable @Min(1) Long commentId,
             @AuthenticationPrincipal User user) {
         return Result.success(commentService.unlikeComment(user.getId(), commentId));
     }
@@ -252,7 +254,7 @@ public class CommentController {
     @PreAuthorize("isAuthenticated()")
     @PutMapping("/long-reviews/{commentId}/publish")
     public Result<String> publishDraft(
-            @Parameter(description = "评论ID", required = true) @PathVariable @NotNull @Min(1) Long commentId,
+            @Parameter(description = "评论ID", required = true, schema = @Schema(type = "string")) @PathVariable @NotNull @Min(1) Long commentId,
             @AuthenticationPrincipal User user) {
         commentService.publishDraft(user.getId(), commentId);
         return Result.success("草稿发布成功");
