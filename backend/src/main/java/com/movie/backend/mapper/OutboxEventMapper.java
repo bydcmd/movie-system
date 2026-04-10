@@ -24,4 +24,6 @@ public interface OutboxEventMapper {
     List<OutboxEvent> selectPending(@Param("now") Date now, @Param("limit") int limit);
 
     int deleteSentBefore(@Param("cutoff") Date cutoff, @Param("limit") int limit);
+
+    int markSentBatch(@Param("ids") List<Long> ids);
 }

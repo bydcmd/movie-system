@@ -6,15 +6,15 @@ import lombok.Data;
 import java.util.Date;
 
 @Data
-@Schema(description = "Kafka outbox event")
+@Schema(description = "Outbox event for CDC")
 public class OutboxEvent {
     @Schema(description = "Primary key")
     private Long id;
 
-    @Schema(description = "Kafka topic")
+    @Schema(description = "Event topic")
     private String topic;
 
-    @Schema(description = "Kafka message key")
+    @Schema(description = "Event message key")
     private String messageKey;
 
     @Schema(description = "Event payload JSON")
