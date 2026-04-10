@@ -138,6 +138,13 @@ checkpoints/
 /review/api_review.txt
 /review/controller_review_*.md
 /spark/ssh.txt
+/.playwright-mcp/
+
+# ====================================================
+# Thesis
+# ====================================================
+/thesis/
+/thesis_temp/
 
 # ====================================================
 # Temporary / backup files
