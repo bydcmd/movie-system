@@ -13,7 +13,7 @@ import com.movie.backend.mapper.UserMapper;
 import com.movie.backend.mapper.WatchedMapper;
 import com.movie.backend.messaging.event.UserLoginEvent;
 import com.movie.backend.messaging.event.UserRegisterEvent;
-import com.movie.backend.messaging.kafka.KafkaEventPublisher;
+import com.movie.backend.messaging.outbox.OutboxPublisher;
 import com.movie.backend.service.UserService;
 import com.movie.backend.utils.JwtUtil;
 import com.movie.backend.utils.PasswordUtil;
@@ -36,7 +36,7 @@ public class UserServiceImpl implements UserService {
     private WatchedMapper watchedMapper;
 
     @Autowired
-    private KafkaEventPublisher kafkaEventPublisher;
+    private OutboxPublisher outboxPublisher;
 
     @Override
     public UserVO login(LoginDTO loginDTO) {
@@ -69,7 +69,7 @@ public class UserServiceImpl implements UserService {
         userVO.setRefreshToken(JwtUtil.generateRefreshToken(user.getId(), user.getNickname(), user.getRole(), passwordVersion));
 
         UserLoginEvent event = new UserLoginEvent(user.getId(), null);
-        kafkaEventPublisher.publishUserLoginEvent(event);
+        outboxPublisher.publishUserLoginEvent(event);
 
         return userVO;
     }
@@ -92,8 +92,9 @@ public class UserServiceImpl implements UserService {
         user.setUpdateTime(new Date());
 
         userMapper.insert(user);
+
         UserRegisterEvent event = new UserRegisterEvent(user.getId(), null);
-        kafkaEventPublisher.publishUserRegisterEvent(event);
+        outboxPublisher.publishUserRegisterEvent(event);
     }
 
     @Override

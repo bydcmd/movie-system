@@ -6,7 +6,7 @@ import com.movie.backend.dto.MyRatingVO;
 import com.movie.backend.entity.Rating;
 import com.movie.backend.mapper.RatingMapper;
 import com.movie.backend.messaging.event.RatingEvent;
-import com.movie.backend.messaging.kafka.KafkaEventPublisher;
+import com.movie.backend.messaging.outbox.OutboxPublisher;
 import com.movie.backend.service.RatingService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -28,7 +28,7 @@ public class RatingServiceImpl implements RatingService {
     private RatingMapper ratingMapper;
 
     @Autowired
-    private KafkaEventPublisher kafkaEventPublisher;
+    private OutboxPublisher outboxPublisher;
 
     @Value("${movie.rating.force-update-votes-threshold:50}")
     private Integer forceUpdateVotesThreshold;
@@ -63,7 +63,7 @@ public class RatingServiceImpl implements RatingService {
 
         String eventAction = existingRating == null ? "CREATE" : "UPDATE";
         RatingEvent event = new RatingEvent(userId, movieId, rating, eventAction, ratingTimeStr, null);
-        kafkaEventPublisher.publishRatingEvent(event);
+        outboxPublisher.publishRatingEvent(event);
     }
 
     @Override
@@ -98,7 +98,7 @@ public class RatingServiceImpl implements RatingService {
         refreshMovieRatings(affectedMovieIds);
 
         RatingEvent event = new RatingEvent(userId, null, null, "CLEAR", null, null);
-        kafkaEventPublisher.publishRatingEvent(event);
+        outboxPublisher.publishRatingEvent(event);
     }
 
     @Override
@@ -110,7 +110,7 @@ public class RatingServiceImpl implements RatingService {
             refreshMovieRatings(affectedMovieIds);
             for (Long movieId : affectedMovieIds) {
                 RatingEvent event = new RatingEvent(userId, movieId, null, "DELETE", null, null);
-                kafkaEventPublisher.publishRatingEvent(event);
+                outboxPublisher.publishRatingEvent(event);
             }
         }
     }

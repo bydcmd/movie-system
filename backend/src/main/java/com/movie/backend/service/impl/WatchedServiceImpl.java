@@ -6,7 +6,7 @@ import com.movie.backend.dto.MovieItemVO;
 import com.movie.backend.entity.Watched;
 import com.movie.backend.mapper.WatchedMapper;
 import com.movie.backend.messaging.event.WatchedEvent;
-import com.movie.backend.messaging.kafka.KafkaEventPublisher;
+import com.movie.backend.messaging.outbox.OutboxPublisher;
 import com.movie.backend.service.WatchedService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -26,7 +26,7 @@ public class WatchedServiceImpl implements WatchedService {
     private WatchedMapper watchedMapper;
 
     @Autowired
-    private KafkaEventPublisher kafkaEventPublisher;
+    private OutboxPublisher outboxPublisher;
 
     @Override
     public void addWatched(String userId, Long movieId) {
@@ -40,7 +40,7 @@ public class WatchedServiceImpl implements WatchedService {
         watched.setCreateTime(new Date());
         watchedMapper.insert(watched);
         WatchedEvent event = new WatchedEvent(userId, movieId, watched.getCreateTime().getTime(), null);
-        kafkaEventPublisher.publishWatchedEvent(event);
+        outboxPublisher.publishWatchedEvent(event);
     }
 
     @Override

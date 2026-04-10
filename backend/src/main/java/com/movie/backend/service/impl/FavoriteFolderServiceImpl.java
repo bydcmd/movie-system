@@ -6,7 +6,7 @@ import com.movie.backend.entity.FavoriteFolder;
 import com.movie.backend.mapper.FavoriteMapper;
 import com.movie.backend.mapper.FavoriteFolderMapper;
 import com.movie.backend.messaging.event.FavoriteFolderActionEvent;
-import com.movie.backend.messaging.kafka.KafkaEventPublisher;
+import com.movie.backend.messaging.outbox.OutboxPublisher;
 import com.movie.backend.service.FavoriteFolderService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -25,8 +25,8 @@ public class FavoriteFolderServiceImpl implements FavoriteFolderService {
     private FavoriteMapper favoriteMapper;
 
     @Autowired
-    private KafkaEventPublisher kafkaEventPublisher;
-    
+    private OutboxPublisher outboxPublisher;
+
     @Override
     public FavoriteFolder createFolder(String userId, FavoriteFolderDTO dto) {
         FavoriteFolder folder = new FavoriteFolder();
@@ -39,6 +39,7 @@ public class FavoriteFolderServiceImpl implements FavoriteFolderService {
         folder.setUpdateTime(new Date());
         
         favoriteFolderMapper.insert(folder);
+
         FavoriteFolderActionEvent event = new FavoriteFolderActionEvent(
                 userId,
                 folder.getId(),
@@ -47,16 +48,16 @@ public class FavoriteFolderServiceImpl implements FavoriteFolderService {
                 "CREATE",
                 null
         );
-        kafkaEventPublisher.publishFavoriteFolderActionEvent(event);
+        outboxPublisher.publishFavoriteFolderActionEvent(event);
         return folder;
     }
-    
+
     @Override
     public void updateFolder(String userId, FavoriteFolderDTO dto) {
         if (dto.getId() == null) {
             throw new IllegalArgumentException("收藏夹ID不能为空");
         }
-        
+
         // 检查所有权
         if (!checkFolderOwner(dto.getId(), userId)) {
             throw new IllegalArgumentException("无权修改该收藏夹");
@@ -71,7 +72,7 @@ public class FavoriteFolderServiceImpl implements FavoriteFolderService {
         folder.setName(dto.getName());
         folder.setDescription(dto.getDescription());
         folder.setIsPublic(dto.getIsPublic());
-        
+
         favoriteFolderMapper.update(folder);
 
         String currentName = dto.getName() != null ? dto.getName() : previousName;
@@ -88,9 +89,9 @@ public class FavoriteFolderServiceImpl implements FavoriteFolderService {
                 operation,
                 null
         );
-        kafkaEventPublisher.publishFavoriteFolderActionEvent(event);
+        outboxPublisher.publishFavoriteFolderActionEvent(event);
     }
-    
+
     @Override
     @Transactional
     public void deleteFolder(String userId, Long folderId) {
@@ -103,7 +104,7 @@ public class FavoriteFolderServiceImpl implements FavoriteFolderService {
 
         // 删除收藏夹下的所有收藏记录
         favoriteMapper.deleteByFolderId(folderId);
-        
+
         // 删除收藏夹
         favoriteFolderMapper.deleteById(folderId);
 
@@ -115,7 +116,7 @@ public class FavoriteFolderServiceImpl implements FavoriteFolderService {
                 "DELETE",
                 null
         );
-        kafkaEventPublisher.publishFavoriteFolderActionEvent(event);
+        outboxPublisher.publishFavoriteFolderActionEvent(event);
     }
 
     @Override

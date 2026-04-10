@@ -11,7 +11,7 @@ import com.movie.backend.mapper.GenreMapper;
 import com.movie.backend.mapper.MovieMapper;
 import com.movie.backend.mapper.RegionMapper;
 import com.movie.backend.messaging.event.SearchEvent;
-import com.movie.backend.messaging.kafka.KafkaEventPublisher;
+import com.movie.backend.messaging.outbox.OutboxPublisher;
 import com.movie.backend.service.MovieService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.Cacheable;
@@ -37,7 +37,7 @@ public class MovieServiceImpl implements MovieService {
     private RegionMapper regionMapper;
 
     @Autowired
-    private KafkaEventPublisher kafkaEventPublisher;
+    private OutboxPublisher outboxPublisher;
 
     @Override
     @Cacheable(value = "movieDetail", key = "#id")
@@ -65,6 +65,15 @@ public class MovieServiceImpl implements MovieService {
         PageInfo<Movie> pageInfo = new PageInfo<>(list);
         publishSearchEvent(userId, normalizedDTO, pageInfo);
         return pageInfo;
+    }
+
+    private void publishSearchEvent(String userId, MovieSearchDTO searchDTO, PageInfo<Movie> pageInfo) {
+        SearchEvent event = new SearchEvent();
+        event.setUserId(userId);
+        event.setSearchKeyword(searchDTO != null ? searchDTO.getKeyword() : null);
+        event.setResultCount(pageInfo != null ? pageInfo.getTotal() : 0L);
+        event.setSearchTime(System.currentTimeMillis());
+        outboxPublisher.publishSearchEvent(event);
     }
 
     private MovieSearchDTO normalizeSearchDTO(MovieSearchDTO searchDTO) {
@@ -119,45 +128,6 @@ public class MovieServiceImpl implements MovieService {
         }
 
         return catalogQuery;
-    }
-
-    private void publishSearchEvent(String userId, MovieSearchDTO searchDTO, PageInfo<Movie> pageInfo) {
-        SearchEvent event = new SearchEvent();
-        event.setUserId(userId);
-        event.setSearchKeyword(searchDTO != null ? searchDTO.getKeyword() : null);
-        event.setFilterConditions(buildFilterConditions(searchDTO));
-        event.setResultCount(pageInfo != null ? pageInfo.getTotal() : 0L);
-        event.setSearchTime(System.currentTimeMillis());
-        kafkaEventPublisher.publishSearchEvent(event);
-    }
-
-    private Map<String, Object> buildFilterConditions(MovieSearchDTO searchDTO) {
-        if (searchDTO == null) {
-            return null;
-        }
-        Map<String, Object> filters = new LinkedHashMap<>();
-        putIfNotEmpty(filters, "genres", searchDTO.getGenres());
-        putIfNotEmpty(filters, "minScore", searchDTO.getMinScore());
-        putIfNotEmpty(filters, "maxScore", searchDTO.getMaxScore());
-        putIfNotEmpty(filters, "year", searchDTO.getYear());
-        putIfNotEmpty(filters, "startYear", searchDTO.getStartYear());
-        putIfNotEmpty(filters, "endYear", searchDTO.getEndYear());
-        putIfNotEmpty(filters, "regions", searchDTO.getRegions());
-        putIfNotEmpty(filters, "directors", searchDTO.getDirectors());
-        putIfNotEmpty(filters, "actors", searchDTO.getActors());
-        putIfNotEmpty(filters, "sortBy", searchDTO.getSortBy());
-        putIfNotEmpty(filters, "sortOrder", searchDTO.getSortOrder());
-        return filters.isEmpty() ? null : filters;
-    }
-
-    private void putIfNotEmpty(Map<String, Object> target, String key, Object value) {
-        if (value == null) {
-            return;
-        }
-        if (value instanceof Collection && ((Collection<?>) value).isEmpty()) {
-            return;
-        }
-        target.put(key, value);
     }
 
     private List<String> cleanStringList(List<String> values) {
