@@ -80,6 +80,7 @@ TABLE_ORDER = [
     "public.view_history",
     "public.watched_movies",
     "public.comment_likes",
+    "event_outbox",
 ]
 
 TABLE_COLUMNS: dict[str, list[str]] = {
@@ -147,6 +148,17 @@ TABLE_COLUMNS: dict[str, list[str]] = {
         "user_id",
         "create_time",
     ],
+    "event_outbox": [
+        "topic",
+        "message_key",
+        "payload",
+        "status",
+        "retry_count",
+        "next_retry_time",
+        "created_at",
+        "updated_at",
+        "last_error",
+    ],
 }
 
 TABLE_COLUMN_TYPES: dict[str, dict[str, str]] = {
@@ -175,6 +187,11 @@ TABLE_COLUMN_TYPES: dict[str, dict[str, str]] = {
     },
     "public.comment_likes": {
         "create_time": "timestamp",
+    },
+    "event_outbox": {
+        "next_retry_time": "timestamp",
+        "created_at": "timestamp",
+        "updated_at": "timestamp",
     },
 }
 
@@ -1349,6 +1366,7 @@ def build_table_datasets(
     view_history_rows: list[dict[str, Any]],
     watched_rows: list[dict[str, Any]],
     comment_likes: list[dict[str, Any]],
+    outbox_rows: list[dict[str, Any]],
     args: argparse.Namespace,
 ) -> list[TableDataset]:
     rows_by_table = {
@@ -1360,6 +1378,7 @@ def build_table_datasets(
         "public.view_history": view_history_rows,
         "public.watched_movies": watched_rows,
         "public.comment_likes": comment_likes,
+        "event_outbox": outbox_rows,
     }
     cleanup_by_table = {
         "public.comment_likes": build_delete_in_statements(
@@ -1386,6 +1405,7 @@ def build_table_datasets(
         "public.users": build_delete_in_statements(
             "public.users", "user_id", [row["user_id"] for row in users], type_hint="text"
         ),
+        # event_outbox 不清理，保留历史事件记录供 ODS 消费
     }
 
     table_datasets: list[TableDataset] = []
@@ -1483,7 +1503,10 @@ def generate_dataset(
         args=args,
         enable_event_chains=enable_event_chains,
     )
-    
+
+    # Convert Kafka records to outbox rows (outbox pattern)
+    outbox_rows = publish_outbox_records(spark=None, kafka_records=kafka_records)
+
     # Only insert registered user data into PostgreSQL (existing users already in DB)
     return GeneratedDataset(
         batch_date=batch_date.isoformat(),
@@ -1497,6 +1520,7 @@ def generate_dataset(
             view_history_rows=registered_view_history,
             watched_rows=registered_watched,
             comment_likes=registered_comment_likes,
+            outbox_rows=outbox_rows,
             args=args,
         ),
         kafka_records=kafka_records,
@@ -1539,6 +1563,34 @@ def execute_postgres_statements(spark: SparkSession, pg_config: dict[str, Any], 
             statement.close()
         if connection is not None:
             connection.close()
+
+
+def publish_outbox_records(
+    spark: SparkSession,
+    kafka_records: list[KafkaRecord],
+) -> list[dict[str, Any]]:
+    """
+    Insert Kafka records into the event_outbox table instead of directly publishing to Kafka.
+    Returns the list of outbox row dictionaries for table dataset construction.
+    """
+    if not kafka_records:
+        return []
+
+    outbox_rows: list[dict[str, Any]] = []
+    for record in kafka_records:
+        outbox_rows.append({
+            "topic": record.topic,
+            "message_key": record.key,
+            "payload": record.value,
+            "status": 0,  # pending
+            "retry_count": 0,
+            "next_retry_time": None,
+            "created_at": None,  # will be set by DB
+            "updated_at": None,  # will be set by DB
+            "last_error": None,
+        })
+
+    return outbox_rows
 
 
 def publish_kafka_records(spark: SparkSession, bootstrap_servers: str, records: list[KafkaRecord]) -> None:
@@ -1788,9 +1840,8 @@ def run() -> None:
             fixture_root = export_fixture_files(dataset, args.fixture_dir)
 
         if args.write_mode in {"direct", "both"}:
-            kafka_config: dict[str, Any] = config["kafka"]
-            validate_required_topics(kafka_config)
-
+            # Write PostgreSQL statements (including outbox events)
+            # No longer directly publish to Kafka - outbox pattern handles it
             postgres_statements: list[str] = []
             for table in reversed(dataset.pg_tables):
                 postgres_statements.extend(table.cleanup_statements)
@@ -1799,7 +1850,6 @@ def run() -> None:
                 postgres_statements.extend(table.post_statements)
 
             execute_postgres_statements(spark, pg_config, postgres_statements)
-            publish_kafka_records(spark, kafka_config["bootstrap_servers"], dataset.kafka_records)
 
         print_summary(dataset, args.write_mode, fixture_root)
     finally:
