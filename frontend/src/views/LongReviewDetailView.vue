@@ -19,7 +19,13 @@ const message = useMessage()
 const authStore = useAuthStore()
 
 const movieId = computed(() => Number(route.params.id))
-const commentId = computed(() => Number(route.params.commentId))
+const commentId = computed(() => {
+  const value = route.params.commentId
+  if (Array.isArray(value)) {
+    return value[0] ?? ''
+  }
+  return typeof value === 'string' ? value : ''
+})
 const currentUserId = computed(() => authStore.user?.id ?? null)
 
 const movie = shallowRef<Movie | null>(null)
@@ -135,11 +141,11 @@ async function fetchPage() {
 }
 
 async function handleToggleLike() {
-  if (!review.value?.id || !ensureAuthenticated()) {
+  if (!review.value || !commentId.value || !ensureAuthenticated()) {
     return
   }
 
-  const targetCommentId = review.value.id
+  const targetCommentId = commentId.value
   const previousLiked = Boolean(review.value.isLiked)
   const previousVotes = review.value.votes || 0
   const nextLiked = !previousLiked

@@ -54,21 +54,13 @@ class AnalyticsControllerIntegrationTest {
     }
 
     @Test
-    @DisplayName("兼容相似电影接口支持 ALS 相似类型")
-    void getSimilarMovies_SupportsAlsSimilarityType() throws Exception {
-        Movie movie = new Movie();
-        movie.setId(2L);
-        movie.setName("星际穿越");
-        movie.setReason("ALS 隐语义相似，相似度 0.932");
-
-        when(analyticsService.getSimilarMovies(1L, 3, 5)).thenReturn(List.of(movie));
-
+    @DisplayName("兼容相似电影接口拒绝已移除的相似类型")
+    void getSimilarMovies_RejectsRemovedSimilarityType() throws Exception {
         mockMvc.perform(get("/analytics/movies/1/similar")
                         .param("type", "3")
                         .param("limit", "5"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200))
-                .andExpect(jsonPath("$.data[0].id").value(2))
-                .andExpect(jsonPath("$.data[0].reason").value("ALS 隐语义相似，相似度 0.932"));
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("无效的相似类型，请选择 1 或 2"));
     }
 }

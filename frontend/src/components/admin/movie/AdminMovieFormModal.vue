@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { computed, reactive, watch } from 'vue'
+import { computed, reactive, ref, useTemplateRef, watch } from 'vue'
 import { NButton, NForm, NFormItem, NInput, NModal, useMessage } from 'naive-ui'
+import { useUploadImage } from '@/api/endpoints/file-management/file-management'
+import MoviePlaceholder from '@/components/movie/MoviePlaceholder.vue'
 import type { AdminMovieFormMode, AdminMovieFormValue } from '@/utils/adminMovie'
 import { createEmptyAdminMovieFormValue } from '@/utils/adminMovie'
+import { resolveAssetUrl } from '@/utils/profile'
 
 const show = defineModel<boolean>('show', { required: true })
 
@@ -24,12 +27,22 @@ const emit = defineEmits<{
 
 const message = useMessage()
 const form = reactive<AdminMovieFormValue>(createEmptyAdminMovieFormValue())
+const uploadImageMutation = useUploadImage()
+const coverInputRef = useTemplateRef<HTMLInputElement>('coverInput')
+const coverUploading = ref(false)
+const coverLoadError = ref(false)
+const ACCEPTED_IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp']
+const IMAGE_ACCEPT_ATTRIBUTE = ACCEPTED_IMAGE_EXTENSIONS.join(',')
+const MAX_IMAGE_FILE_SIZE = 5 * 1024 * 1024
 
 const dialogTitle = computed(() => (props.mode === 'edit' ? '编辑电影' : '录入电影'))
 const submitLabel = computed(() => (props.mode === 'edit' ? '保存修改' : '新增电影'))
 const modalStyle = computed(() => ({
   width: 'min(960px, calc(100vw - 1.5rem))'
 }))
+const coverPreview = computed(() => resolveAssetUrl(form.cover))
+const showCoverImage = computed(() => Boolean(coverPreview.value) && !coverLoadError.value)
+const coverActionText = computed(() => (coverUploading.value ? '上传中...' : '上传封面'))
 
 function applyFormState(nextValue?: AdminMovieFormValue | null) {
   const source = nextValue ?? createEmptyAdminMovieFormValue()
@@ -53,6 +66,141 @@ function applyFormState(nextValue?: AdminMovieFormValue | null) {
   form.actorsInput = source.actorsInput
   form.directorsInput = source.directorsInput
   form.writersInput = source.writersInput
+  coverLoadError.value = false
+}
+
+function normalizeUploadResult(value: unknown): string | null {
+  if (typeof value === 'string') {
+    return value
+  }
+
+  if (!value || typeof value !== 'object') {
+    return null
+  }
+
+  const record = value as Record<string, unknown>
+  const nestedData = record.data
+
+  if (typeof nestedData === 'string') {
+    return nestedData
+  }
+
+  if (nestedData && typeof nestedData === 'object') {
+    const nestedRecord = nestedData as Record<string, unknown>
+
+    if (typeof nestedRecord.url === 'string') {
+      return nestedRecord.url
+    }
+
+    if (typeof nestedRecord.path === 'string') {
+      return nestedRecord.path
+    }
+  }
+
+  if (typeof record.url === 'string') {
+    return record.url
+  }
+
+  if (typeof record.path === 'string') {
+    return record.path
+  }
+
+  return null
+}
+
+function resolveRequestErrorMessage(error: unknown): string {
+  if (!error || typeof error !== 'object') {
+    return ''
+  }
+
+  const record = error as {
+    message?: unknown
+    response?: {
+      data?: {
+        message?: unknown
+      } | string
+    }
+  }
+
+  if (typeof record.response?.data === 'string') {
+    return record.response.data
+  }
+
+  const responseMessage = record.response?.data?.message
+  if (typeof responseMessage === 'string') {
+    return responseMessage
+  }
+
+  return typeof record.message === 'string' ? record.message : ''
+}
+
+function triggerCoverPicker() {
+  if (props.saving || coverUploading.value) {
+    return
+  }
+
+  coverInputRef.value?.click()
+}
+
+function clearCover() {
+  if (props.saving || coverUploading.value) {
+    return
+  }
+
+  form.cover = ''
+  coverLoadError.value = false
+}
+
+async function handleCoverChange(event: Event) {
+  const target = event.target as HTMLInputElement | null
+  const file = target?.files?.[0]
+
+  if (!file) {
+    return
+  }
+
+  if (file.size > MAX_IMAGE_FILE_SIZE) {
+    message.error('封面图片不能超过 5MB')
+    if (target) {
+      target.value = ''
+    }
+    return
+  }
+
+  coverUploading.value = true
+
+  try {
+    const result = await uploadImageMutation.mutateAsync({
+      data: {
+        file
+      }
+    })
+    const coverUrl = normalizeUploadResult(result)
+
+    if (!coverUrl) {
+      throw new Error('cover upload did not return a valid url')
+    }
+
+    form.cover = coverUrl
+    coverLoadError.value = false
+    message.success('电影封面上传成功')
+  } catch (error) {
+    console.error('Failed to upload movie cover:', error)
+    message.error(resolveRequestErrorMessage(error) || '电影封面上传失败，请稍后再试')
+  } finally {
+    coverUploading.value = false
+    if (target) {
+      target.value = ''
+    }
+  }
+}
+
+function handleCoverLoad() {
+  coverLoadError.value = false
+}
+
+function handleCoverError() {
+  coverLoadError.value = true
 }
 
 function handleSubmit() {
@@ -140,12 +288,69 @@ watch(
               />
             </n-form-item>
 
-            <n-form-item label="封面地址">
-              <n-input
-                v-model:value="form.cover"
-                placeholder="支持相对路径或完整 URL"
-                maxlength="500"
-              />
+            <n-form-item label="电影封面" class="md:col-span-2">
+              <div class="cover-field">
+                <button
+                  type="button"
+                  class="cover-preview-button"
+                  :disabled="props.saving || coverUploading"
+                  :aria-label="coverActionText"
+                  :aria-busy="coverUploading"
+                  @click="triggerCoverPicker"
+                >
+                  <img
+                    v-if="showCoverImage"
+                    :src="coverPreview || undefined"
+                    :alt="form.name || '电影封面预览'"
+                    class="cover-preview-image"
+                    @load="handleCoverLoad"
+                    @error="handleCoverError"
+                  />
+                  <MoviePlaceholder
+                    v-else
+                    :title="form.name || '电影封面'"
+                    class="cover-preview-placeholder"
+                  />
+                  <span class="cover-preview-overlay">{{ coverActionText }}</span>
+                </button>
+
+                <div class="cover-field-body">
+                  <input
+                    ref="coverInput"
+                    type="file"
+                    :accept="IMAGE_ACCEPT_ATTRIBUTE"
+                    class="cover-file-input"
+                    @change="handleCoverChange"
+                  />
+
+                  <n-input
+                    v-model:value="form.cover"
+                    placeholder="支持相对路径或完整 URL"
+                    maxlength="500"
+                  />
+
+                  <div class="cover-field-actions">
+                    <n-button
+                      secondary
+                      :disabled="props.saving || coverUploading"
+                      @click="triggerCoverPicker"
+                    >
+                      {{ coverActionText }}
+                    </n-button>
+                    <n-button
+                      quaternary
+                      :disabled="props.saving || coverUploading || !form.cover.trim()"
+                      @click="clearCover"
+                    >
+                      清空封面
+                    </n-button>
+                  </div>
+
+                  <p class="cover-field-hint">
+                    支持 JPG、PNG、GIF、WEBP，单张不超过 5MB。上传后会自动填入封面地址。
+                  </p>
+                </div>
+              </div>
             </n-form-item>
 
             <n-form-item label="电影类型">
@@ -353,5 +558,98 @@ watch(
 
 .movie-form :deep(.n-form-item-label) {
   font-weight: 600;
+}
+
+.cover-field {
+  display: grid;
+  gap: 1rem;
+  width: 100%;
+}
+
+.cover-preview-button {
+  position: relative;
+  display: flex;
+  width: min(100%, 11rem);
+  aspect-ratio: 2 / 3;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px dashed rgb(148 163 184);
+  border-radius: 1rem;
+  background:
+    linear-gradient(180deg, rgb(248 250 252) 0%, rgb(226 232 240) 100%);
+  color: rgb(71 85 105);
+  transition:
+    border-color 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.cover-preview-button:hover:not(:disabled),
+.cover-preview-button:focus-visible {
+  border-color: rgb(59 130 246);
+  transform: translateY(-1px);
+  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.12);
+}
+
+.cover-preview-button:focus-visible {
+  outline: 2px solid rgba(59, 130, 246, 0.32);
+  outline-offset: 4px;
+}
+
+.cover-preview-button:disabled {
+  cursor: progress;
+}
+
+.cover-preview-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cover-preview-overlay {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 0.85rem 0.75rem 0.75rem;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0) 0%, rgba(15, 23, 42, 0.76) 100%);
+  color: rgb(255 255 255);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.cover-preview-placeholder {
+  width: 100%;
+  height: 100%;
+}
+
+.cover-file-input {
+  display: none;
+}
+
+.cover-field-body {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.cover-field-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.cover-field-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: rgb(100 116 139);
+}
+
+@media (min-width: 768px) {
+  .cover-field {
+    grid-template-columns: 11rem minmax(0, 1fr);
+    align-items: start;
+  }
 }
 </style>

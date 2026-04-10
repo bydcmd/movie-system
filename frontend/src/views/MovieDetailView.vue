@@ -74,7 +74,6 @@ const message = useMessage()
 const authStore = useAuthStore()
 const GUEST_COMMENT_LIMIT = 20
 const SIMILAR_MOVIES_DISPLAY_LIMIT = 20
-const SIMILAR_MOVIES_FETCH_LIMIT = SIMILAR_MOVIES_DISPLAY_LIMIT * 2
 const movieId = computed(() => Number(route.params.id))
 const currentUserId = computed(() => authStore.user?.id ?? null)
 const isGuestMode = computed(() => !authStore.isAuthenticated)
@@ -149,7 +148,7 @@ const commentQueryParams = computed(() => ({
   type: commentTypeParam.value
 }))
 const similarMoviesQueryParams = computed(() => ({
-  limit: SIMILAR_MOVIES_FETCH_LIMIT
+  limit: SIMILAR_MOVIES_DISPLAY_LIMIT
 }))
 const movieDetailQuery = useGetMovieDetail(movieId, {
   query: {

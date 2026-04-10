@@ -12,7 +12,7 @@ import {
   useSubmitMovieLongReview,
   useUpdateMyMovieLongReview
 } from '@/api/endpoints/comment-management/comment-management'
-import type { CommentVO, UpdateLongReviewDTO } from '@/api/model'
+import type { Comment, UpdateLongReviewDTO } from '@/api/model'
 
 const route = useRoute()
 const router = useRouter()
@@ -22,25 +22,30 @@ const PUBLISHED_STATUS = 2 as const
 
 type LongReviewStatus = typeof DRAFT_STATUS | typeof PUBLISHED_STATUS
 type SaveAction = 'draft' | 'publish' | null
+type EditableLongReview = Omit<Comment, 'id'> & { id?: string }
 
-function parseRouteNumber(value: unknown): number | null {
+function parseRouteId(value: unknown): string | null {
   if (Array.isArray(value)) {
-    return parseRouteNumber(value[0])
+    return parseRouteId(value[0])
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return /^\d+$/.test(trimmed) ? trimmed : null
+  }
+
+  if (typeof value === 'bigint') {
+    return value > 0n ? value.toString() : null
   }
 
   if (typeof value === 'number') {
-    return Number.isFinite(value) && value > 0 ? value : null
+    return Number.isFinite(value) && value > 0 ? Math.trunc(value).toString() : null
   }
 
-  if (typeof value !== 'string' || !value.trim()) {
-    return null
-  }
-
-  const parsed = Number(value)
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+  return null
 }
 
-function extractCreatedCommentId(value: unknown): number | null {
+function extractCreatedCommentId(value: unknown): string | null {
   if (!value || typeof value !== 'object') {
     return null
   }
@@ -52,15 +57,7 @@ function extractCreatedCommentId(value: unknown): number | null {
     }
   }
 
-  if (typeof record.id === 'number' && record.id > 0) {
-    return record.id
-  }
-
-  if (typeof record.data?.id === 'number' && record.data.id > 0) {
-    return record.data.id
-  }
-
-  return null
+  return parseRouteId(record.id) ?? parseRouteId(record.data?.id)
 }
 
 function normalizeLongReviewStatus(value?: number | null): LongReviewStatus {
@@ -69,7 +66,7 @@ function normalizeLongReviewStatus(value?: number | null): LongReviewStatus {
 
 const movieId = computed(() => Number(route.params.movieId))
 const commentId = computed(() => {
-  return parseRouteNumber(route.params.commentId) ?? parseRouteNumber(route.query.commentId)
+  return parseRouteId(route.params.commentId) ?? parseRouteId(route.query.commentId)
 })
 const isEditMode = computed(() => commentId.value !== null)
 
@@ -148,8 +145,8 @@ async function refetchOrThrow<T>(query: { refetch: () => Promise<{ data?: T; err
   return result.data
 }
 
-function getEditableCommentId(): number | null {
-  const loadedCommentId = parseRouteNumber((commentDetail.value as CommentVO | null)?.id)
+function getEditableCommentId(): string | null {
+  const loadedCommentId = parseRouteId((commentDetail.value as EditableLongReview | null)?.id)
   return loadedCommentId ?? commentId.value
 }
 
@@ -160,13 +157,13 @@ watch(
       return
     }
 
-    const detail = nextDetail as CommentVO
+    const detail = nextDetail as EditableLongReview
     longTitle.value = detail.title || ''
     longContent.value = detail.content || createEmptyTiptapDocument()
     longPlainText.value = extractTiptapText(longContent.value)
     longReviewStatus.value = normalizeLongReviewStatus(detail.status)
 
-    const loadedCommentId = parseRouteNumber(detail.id)
+    const loadedCommentId = parseRouteId(detail.id)
     if (
       isEditMode.value &&
       loadedCommentId &&
@@ -258,9 +255,9 @@ function getSuccessMessage(
   return previousStatus === DRAFT_STATUS ? '草稿已发布' : '长评已更新'
 }
 
-async function syncMyLongReview(): Promise<CommentVO | null> {
+async function syncMyLongReview(): Promise<EditableLongReview | null> {
   try {
-    return await refetchOrThrow(myLongReviewQuery) as CommentVO | null
+    return await refetchOrThrow(myLongReviewQuery) as EditableLongReview | null
   } catch (error) {
     console.error('Failed to refetch my long review:', error)
     return null
@@ -270,7 +267,7 @@ async function syncMyLongReview(): Promise<CommentVO | null> {
 async function resolveEditableCommentId(
   result: unknown,
   options: { preferRefetch?: boolean } = {}
-): Promise<number | null> {
+): Promise<string | null> {
   if (!options.preferRefetch) {
     const currentCommentId = getEditableCommentId()
     if (currentCommentId) {
@@ -284,10 +281,10 @@ async function resolveEditableCommentId(
   }
 
   const review = await syncMyLongReview()
-  return parseRouteNumber(review?.id)
+  return parseRouteId(review?.id)
 }
 
-async function replaceEditorRouteIfNeeded(nextCommentId: number | null) {
+async function replaceEditorRouteIfNeeded(nextCommentId: string | null) {
   if (!nextCommentId || commentId.value === nextCommentId) {
     return
   }

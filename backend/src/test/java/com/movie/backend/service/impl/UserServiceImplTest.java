@@ -7,7 +7,6 @@ import com.movie.backend.entity.User;
 import com.movie.backend.mapper.CommentMapper;
 import com.movie.backend.mapper.UserMapper;
 import com.movie.backend.mapper.WatchedMapper;
-import com.movie.backend.messaging.kafka.KafkaEventPublisher;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -31,9 +30,6 @@ public class UserServiceImplTest {
 
     @Mock
     private WatchedMapper watchedMapper;
-
-    @Mock
-    private KafkaEventPublisher kafkaEventPublisher;
 
     @InjectMocks
     private UserServiceImpl userService;
