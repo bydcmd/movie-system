@@ -145,7 +145,8 @@
         SET title = #{title},
             content = #{content},
             comment_time = #{commentTime}
-        WHERE user_id = #{userId}
+        WHERE comment_id = #{commentId}
+          AND user_id = #{userId}
           AND movie_id = #{movieId}
           AND type = 2
           AND status = 2

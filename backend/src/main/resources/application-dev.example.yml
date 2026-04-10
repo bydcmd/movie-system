@@ -36,42 +36,9 @@ spring:
           min-idle: 0
         shutdown-timeout: 100ms
 
-  kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.apache.kafka.common.serialization.StringSerializer
-    consumer:
-      group-id: movie-backend
-      auto-offset-reset: latest
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-
 app:
-  kafka:
-    topics:
-      view-history: movie-view-history
-      rating: movie-rating-events
-      comment: movie-comment-events
-      comment-like: movie-comment-like-events
-      favorite: movie-favorite-events
-      watched: movie-watched-events
-      favorite-folder-action: movie-favorite-folder-action-events
-      search: movie-search-events
-      user-register: movie-user-register-events
-      user-login: movie-user-login-events
-    consumer:
-      view-history-group: movie-backend-view-history
-    outbox:
-      poll-interval-ms: 36000000
-      batch-size: 100
-      max-retries: 10
-      base-delay-ms: 5000
-      max-delay-ms: 120000
-      processing-timeout-ms: 60000
-      cleanup-interval-ms: 36000000
-      cleanup-retention-ms: 604800000
-      cleanup-batch-size: 500
+  outbox:
+    cleanup-interval-ms: 3600000
 
   cache:
     type: redis

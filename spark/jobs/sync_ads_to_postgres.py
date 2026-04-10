@@ -25,7 +25,7 @@ DEFAULT_ADS_HOT_MOVIES_SYNC_CONFIG: dict[str, Any] = {
 DEFAULT_ADS_SIMILAR_MOVIES_SYNC_CONFIG: dict[str, Any] = {
     "source_table": "ads.ads_itemcf_similar_movies",
     "target_table": "public.stats_similar_movies",
-    "supported_similarity_types": [2, 3],
+    "supported_similarity_types": [2],
     "batch_size": 1000,
 }
 

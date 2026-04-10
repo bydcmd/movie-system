@@ -21,6 +21,9 @@
         <if test="similarityType != null">
             AND similarity_type = #{similarityType}
         </if>
+        <if test="similarityType == null">
+            AND similarity_type IN (1, 2)
+        </if>
         ORDER BY similarity_score DESC
         LIMIT #{limit}
     </select>
