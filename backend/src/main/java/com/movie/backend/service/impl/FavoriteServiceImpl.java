@@ -6,8 +6,6 @@ import com.movie.backend.entity.Favorite;
 import com.movie.backend.mapper.FavoriteMapper;
 import com.movie.backend.entity.FavoriteFolder;
 import com.movie.backend.mapper.FavoriteFolderMapper;
-import com.movie.backend.messaging.event.FavoriteEvent;
-import com.movie.backend.messaging.outbox.OutboxPublisher;
 import com.movie.backend.service.FavoriteFolderService;
 import com.movie.backend.service.FavoriteService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,9 +27,6 @@ public class FavoriteServiceImpl implements FavoriteService {
 
     @Autowired
     private FavoriteFolderService favoriteFolderService;
-
-    @Autowired
-    private OutboxPublisher outboxPublisher;
 
     @Override
     public void addFavorite(String userId, Long movieId) {
@@ -55,9 +50,6 @@ public class FavoriteServiceImpl implements FavoriteService {
 
         // 更新默认收藏夹的电影数量
         favoriteFolderMapper.incrementMovieCount(defaultFolderId);
-
-        FavoriteEvent event = new FavoriteEvent(userId, movieId, defaultFolderId, "ADD", null);
-        outboxPublisher.publishFavoriteEvent(event);
     }
 
     @Override
@@ -79,9 +71,6 @@ public class FavoriteServiceImpl implements FavoriteService {
 
         // 更新收藏夹的电影数量
         favoriteFolderMapper.incrementMovieCount(folderId);
-
-        FavoriteEvent event = new FavoriteEvent(userId, movieId, folderId, "ADD", null);
-        outboxPublisher.publishFavoriteEvent(event);
     }
 
     @Override
@@ -100,9 +89,6 @@ public class FavoriteServiceImpl implements FavoriteService {
                 favoriteFolderMapper.decrementMovieCount(folderId);
             }
         }
-
-        FavoriteEvent event = new FavoriteEvent(userId, movieId, null, "REMOVE", null);
-        outboxPublisher.publishFavoriteEvent(event);
     }
 
     @Override
@@ -115,9 +101,6 @@ public class FavoriteServiceImpl implements FavoriteService {
         if (folderId != null) {
             favoriteFolderMapper.decrementMovieCount(folderId);
         }
-
-        FavoriteEvent event = new FavoriteEvent(userId, movieId, folderId, "REMOVE", null);
-        outboxPublisher.publishFavoriteEvent(event);
     }
 
     @Override
@@ -188,18 +171,11 @@ public class FavoriteServiceImpl implements FavoriteService {
             Long count = entry.getValue();
             favoriteFolderMapper.decrementMovieCountBy(folderId, count.intValue());
         }
-
-        for (Long movieId : movieIds) {
-            FavoriteEvent event = new FavoriteEvent(userId, movieId, null, "REMOVE", null);
-            outboxPublisher.publishFavoriteEvent(event);
-        }
     }
 
     @Override
     public void clearUserFavorites(String userId) {
         favoriteMapper.deleteAllByUserId(userId);
-        FavoriteEvent event = new FavoriteEvent(userId, null, null, "REMOVE", null);
-        outboxPublisher.publishFavoriteEvent(event);
     }
 
     @Override

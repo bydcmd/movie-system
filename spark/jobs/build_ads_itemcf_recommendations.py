@@ -269,7 +269,7 @@ def run() -> None:
     target_table = itemcf_config["target_table"]
     sink_path = itemcf_config["sink_path"]
     weights = itemcf_config.get("event_score_weights", {})
-    source_type = str(itemcf_config.get("source_type", "event_wide")).strip().lower()
+    source_type = str(itemcf_config.get("source_type", "user_item_preference")).strip().lower()
     similarity_type = 2
 
     spark = build_spark_session("movie-ads-itemcf-similarity", spark_config)

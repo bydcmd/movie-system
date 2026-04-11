@@ -5,8 +5,6 @@ import com.github.pagehelper.PageInfo;
 import com.movie.backend.dto.MovieItemVO;
 import com.movie.backend.entity.ViewHistory;
 import com.movie.backend.mapper.ViewHistoryMapper;
-import com.movie.backend.messaging.event.ViewHistoryEvent;
-import com.movie.backend.messaging.outbox.OutboxPublisher;
 import com.movie.backend.service.ViewHistoryService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -23,9 +21,6 @@ public class ViewHistoryServiceImpl implements ViewHistoryService {
     @Autowired
     private ViewHistoryMapper viewHistoryMapper;
 
-    @Autowired
-    private OutboxPublisher outboxPublisher;
-
     @Override
     public void recordViewHistory(String userId, Long movieId) {
         if (userId == null || movieId == null) {
@@ -41,8 +36,6 @@ public class ViewHistoryServiceImpl implements ViewHistoryService {
             // 唯一索引冲突，更新浏览时间
             viewHistoryMapper.updateViewTime(userId, movieId);
         }
-        ViewHistoryEvent event = new ViewHistoryEvent(userId, movieId, System.currentTimeMillis(), null);
-        outboxPublisher.publishViewHistory(event);
     }
 
 

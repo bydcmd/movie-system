@@ -10,8 +10,6 @@ import com.movie.backend.entity.Region;
 import com.movie.backend.mapper.GenreMapper;
 import com.movie.backend.mapper.MovieMapper;
 import com.movie.backend.mapper.RegionMapper;
-import com.movie.backend.messaging.event.SearchEvent;
-import com.movie.backend.messaging.outbox.OutboxPublisher;
 import com.movie.backend.service.MovieService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.Cacheable;
@@ -35,9 +33,6 @@ public class MovieServiceImpl implements MovieService {
 
     @Autowired
     private RegionMapper regionMapper;
-
-    @Autowired
-    private OutboxPublisher outboxPublisher;
 
     @Override
     @Cacheable(value = "movieDetail", key = "#id")
@@ -63,17 +58,7 @@ public class MovieServiceImpl implements MovieService {
         
         // Return PageInfo
         PageInfo<Movie> pageInfo = new PageInfo<>(list);
-        publishSearchEvent(userId, normalizedDTO, pageInfo);
         return pageInfo;
-    }
-
-    private void publishSearchEvent(String userId, MovieSearchDTO searchDTO, PageInfo<Movie> pageInfo) {
-        SearchEvent event = new SearchEvent();
-        event.setUserId(userId);
-        event.setSearchKeyword(searchDTO != null ? searchDTO.getKeyword() : null);
-        event.setResultCount(pageInfo != null ? pageInfo.getTotal() : 0L);
-        event.setSearchTime(System.currentTimeMillis());
-        outboxPublisher.publishSearchEvent(event);
     }
 
     private MovieSearchDTO normalizeSearchDTO(MovieSearchDTO searchDTO) {

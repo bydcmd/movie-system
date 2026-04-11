@@ -9,6 +9,9 @@ Usage:
   bash run_dwd_build.sh [config-path]
   bash run_dwd_build.sh --calc-date YYYY-MM-DD --config conf/etl_config.json --snapshot-date YYYY-MM-DD
 
+Description:
+  Build `dwd.dwd_user_event_wide_di` in offline T+1 batch mode from PostgreSQL ODS full tables.
+
 Examples:
   bash run_dwd_build.sh
   bash run_dwd_build.sh 2026-03-25
@@ -17,7 +20,7 @@ Examples:
   bash run_dwd_build.sh 2026-03-25 conf/etl_config.dev.json 2026-03-24
 
 Arguments:
-  calc-date      Calculation date, default: today (YYYY-MM-DD)
+  calc-date      Business date to build, default: today (YYYY-MM-DD)
   config-path    Config file path, default: conf/etl_config.json
   snapshot-date  Optional PostgreSQL snapshot partition date; if omitted, use the latest common ODS dt partition on or before calc-date
 EOF

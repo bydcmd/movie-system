@@ -5,17 +5,11 @@ import {
 } from '@/api/endpoints/admin-dashboard-management/admin-dashboard-management'
 import {
   useGetGenrePreference,
-  useGetSearchFunnel,
-  useGetSearchKeywordInsights,
-  useGetUserBehaviorSankey,
   useGetUserRetention
 } from '@/api/endpoints/analytics/analytics'
 import type {
   AdminDashboardVO,
   GenrePreferenceDTO,
-  SearchFunnelDTO,
-  SearchKeywordInsightDTO,
-  UserBehaviorSankeyDTO,
   UserRetentionDTO
 } from '@/api/model'
 import { formatDateTimeLabel } from '@/utils/profile'
@@ -62,21 +56,6 @@ export function useAdminOverview() {
     }
   })
 
-  const searchFunnelQuery = useGetSearchFunnel<SearchFunnelDTO>({
-    query: {
-      retry: false
-    }
-  })
-
-  const searchKeywordInsightsQuery = useGetSearchKeywordInsights<SearchKeywordInsightDTO[]>(
-    { limit: 10 },
-    {
-      query: {
-        retry: false
-      }
-    }
-  )
-
   const userRetentionQuery = useGetUserRetention<UserRetentionDTO[]>(
     { limit: 100 },
     {
@@ -88,15 +67,6 @@ export function useAdminOverview() {
 
   const genrePreferenceQuery = useGetGenrePreference<GenrePreferenceDTO[]>(
     { limit: 20 },
-    {
-      query: {
-        retry: false
-      }
-    }
-  )
-
-  const userBehaviorSankeyQuery = useGetUserBehaviorSankey<UserBehaviorSankeyDTO[]>(
-    { limit: 200 },
     {
       query: {
         retry: false
@@ -208,19 +178,6 @@ export function useAdminOverview() {
     })
   })
 
-  const searchFunnel = computed<SearchFunnelDTO>(() => {
-    const data = searchFunnelQuery.data.value
-    return isRecord(data) ? data : {}
-  })
-
-  const searchKeywordInsights = computed<SearchKeywordInsightDTO[]>(() => {
-    const data = searchKeywordInsightsQuery.data.value
-    if (Array.isArray(data)) {
-      return data
-    }
-    return []
-  })
-
   const userRetention = computed<UserRetentionDTO[]>(() => {
     const data = userRetentionQuery.data.value
     if (Array.isArray(data)) {
@@ -237,35 +194,18 @@ export function useAdminOverview() {
     return []
   })
 
-  const userBehaviorSankey = computed<UserBehaviorSankeyDTO[]>(() => {
-    const data = userBehaviorSankeyQuery.data.value
-    if (Array.isArray(data)) {
-      return data
-    }
-    return []
-  })
-
   const loading = computed(() =>
     dashboardQuery.isLoading.value ||
     dashboardQuery.isFetching.value ||
-    searchFunnelQuery.isLoading.value ||
-    searchFunnelQuery.isFetching.value ||
-    searchKeywordInsightsQuery.isLoading.value ||
-    searchKeywordInsightsQuery.isFetching.value ||
     userRetentionQuery.isLoading.value ||
     userRetentionQuery.isFetching.value ||
     genrePreferenceQuery.isLoading.value ||
-    genrePreferenceQuery.isFetching.value ||
-    userBehaviorSankeyQuery.isLoading.value ||
-    userBehaviorSankeyQuery.isFetching.value
+    genrePreferenceQuery.isFetching.value
   )
   const hasLoadError = computed(() =>
     dashboardQuery.isError.value ||
-    searchFunnelQuery.isError.value ||
-    searchKeywordInsightsQuery.isError.value ||
     userRetentionQuery.isError.value ||
-    genrePreferenceQuery.isError.value ||
-    userBehaviorSankeyQuery.isError.value
+    genrePreferenceQuery.isError.value
   )
   const lastUpdatedText = computed(() => {
     if (!dashboardQuery.dataUpdatedAt.value) {
@@ -281,11 +221,8 @@ export function useAdminOverview() {
     try {
       await Promise.all([
         refetchOrThrow(dashboardQuery),
-        refetchOrThrow(searchFunnelQuery),
-        refetchOrThrow(searchKeywordInsightsQuery),
         refetchOrThrow(userRetentionQuery),
-        refetchOrThrow(genrePreferenceQuery),
-        refetchOrThrow(userBehaviorSankeyQuery)
+        refetchOrThrow(genrePreferenceQuery)
       ])
       message.success('仪表盘已刷新')
     } catch (error) {
@@ -302,11 +239,8 @@ export function useAdminOverview() {
     overview,
     overviewCards,
     trendPanels,
-    searchFunnel,
-    searchKeywordInsights,
     userRetention,
     genrePreference,
-    userBehaviorSankey,
     loading,
     hasLoadError,
     lastUpdatedText,

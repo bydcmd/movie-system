@@ -9,9 +9,6 @@ import com.movie.backend.entity.CommentLike;
 import com.movie.backend.exception.BusinessException;
 import com.movie.backend.mapper.CommentLikeMapper;
 import com.movie.backend.mapper.CommentMapper;
-import com.movie.backend.messaging.event.CommentEvent;
-import com.movie.backend.messaging.event.CommentLikeEvent;
-import com.movie.backend.messaging.outbox.OutboxPublisher;
 import com.movie.backend.service.CommentService;
 import com.movie.backend.service.RatingService;
 import com.movie.backend.utils.TiptapJsonValidator;
@@ -39,9 +36,6 @@ public class CommentServiceImpl implements CommentService {
     @Autowired
     private RatingService ratingService;
 
-    @Autowired
-    private OutboxPublisher outboxPublisher;
-
     @Override
     public PageInfo<Comment> getCommentsByMovieId(Long movieId, int page, int size) {
         PageHelper.startPage(page, size);
@@ -58,7 +52,6 @@ public class CommentServiceImpl implements CommentService {
         PageHelper.startPage(page, size);
         try {
             List<CommentVO> list = commentMapper.selectWithRatingByMovieId(movieId, currentUserId);
-            // 处理内容摘要
             for (CommentVO vo : list) {
                 enrichCommentContentSummary(vo);
             }
@@ -82,7 +75,6 @@ public class CommentServiceImpl implements CommentService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void submitComment(String userId, Long movieId, String content) {
-        // 参数校验
         if (!StringUtils.hasText(content)) {
             throw new IllegalArgumentException("评论内容不能为空");
         }
@@ -90,8 +82,6 @@ public class CommentServiceImpl implements CommentService {
             throw new IllegalArgumentException("短评内容不能超过500字");
         }
 
-        // 短评逻辑：type = 1
-        // 使用数据库唯一索引保证幂等性，捕获唯一键冲突异常
         try {
             Comment comment = new Comment();
             comment.setUserId(userId);
@@ -99,16 +89,12 @@ public class CommentServiceImpl implements CommentService {
             comment.setContent(content.trim());
             comment.setType(SHORT_COMMENT_TYPE);
             comment.setVotes(0);
-            comment.setVersion(0); // 初始版本号
-            comment.setStatus(STATUS_PUBLISHED); // 发布状态
+            comment.setVersion(0);
+            comment.setStatus(STATUS_PUBLISHED);
             comment.setCommentTime(new java.util.Date());
 
             commentMapper.insert(comment);
-            // 插入后 comment.getId() 会自动填充数据库生成的自增ID
-            CommentEvent event = new CommentEvent(userId, movieId, comment.getId(), SHORT_COMMENT_TYPE, "CREATE", content.length(), null);
-            outboxPublisher.publishCommentEvent(event);
         } catch (org.springframework.dao.DuplicateKeyException e) {
-            // 唯一索引冲突，说明用户已发表过短评
             throw new BusinessException(409, "您已经发表过短评了，无法重复发布");
         }
     }
@@ -123,8 +109,7 @@ public class CommentServiceImpl implements CommentService {
             throw new IllegalArgumentException("标题不能超过100字");
         }
 
-        TiptapJsonValidator.ValidationResult validationResult =
-                TiptapJsonValidator.validate(dto.getContent());
+        TiptapJsonValidator.ValidationResult validationResult = TiptapJsonValidator.validate(dto.getContent());
         if (!validationResult.isValid()) {
             throw new IllegalArgumentException(validationResult.getMessage());
         }
@@ -138,7 +123,7 @@ public class CommentServiceImpl implements CommentService {
             comment.setType(LONG_REVIEW_TYPE);
             comment.setVotes(0);
             comment.setVersion(0);
-            comment.setStatus(STATUS_PUBLISHED); // 发布状态
+            comment.setStatus(STATUS_PUBLISHED);
             comment.setCommentTime(new java.util.Date());
 
             commentMapper.insert(comment);
@@ -147,8 +132,6 @@ public class CommentServiceImpl implements CommentService {
             if (existingDraft != null) {
                 commentMapper.deleteByIdAndUserId(existingDraft.getId(), userId);
             }
-            CommentEvent event = new CommentEvent(userId, dto.getMovieId(), comment.getId(), LONG_REVIEW_TYPE, "CREATE", dto.getContent().length(), null);
-            outboxPublisher.publishCommentEvent(event);
         } catch (org.springframework.dao.DuplicateKeyException e) {
             throw new BusinessException(409, "您已经发表过长评了，如需修改请前往个人中心");
         }
@@ -161,19 +144,16 @@ public class CommentServiceImpl implements CommentService {
 
     @Override
     public Comment getUserLongReview(String userId, Long movieId) {
-        Comment draft = commentMapper.selectByUserAndMovieAndTypeAndStatus(
-                userId, movieId, LONG_REVIEW_TYPE, STATUS_DRAFT);
+        Comment draft = commentMapper.selectByUserAndMovieAndTypeAndStatus(userId, movieId, LONG_REVIEW_TYPE, STATUS_DRAFT);
         if (draft != null) {
             return draft;
         }
-        return commentMapper.selectByUserAndMovieAndTypeAndStatus(
-                userId, movieId, LONG_REVIEW_TYPE, STATUS_PUBLISHED);
+        return commentMapper.selectByUserAndMovieAndTypeAndStatus(userId, movieId, LONG_REVIEW_TYPE, STATUS_PUBLISHED);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateCommentWithRating(String userId, Long movieId, String content, Integer rating) {
-        // 参数校验
         if (rating == null) {
             throw new IllegalArgumentException("评分不能为空");
         }
@@ -186,25 +166,13 @@ public class CommentServiceImpl implements CommentService {
         if (content.length() > 500) {
             throw new IllegalArgumentException("短评内容不能超过500字");
         }
-        
-        // 1. 修改评分
+
         ratingService.updateRating(userId, movieId, rating);
 
-        // 2. 修改评论
-        int rows = commentMapper.updateByUserAndMovieAndType(
-                userId,
-                movieId,
-                SHORT_COMMENT_TYPE,
-                content.trim(),
-                new java.util.Date()
-        );
+        int rows = commentMapper.updateByUserAndMovieAndType(userId, movieId, SHORT_COMMENT_TYPE, content.trim(), new java.util.Date());
         if (rows == 0) {
             throw new BusinessException(404, "修改失败，您尚未对该电影发表短评");
         }
-        Comment comment = commentMapper.selectByUserAndMovieAndType(userId, movieId, SHORT_COMMENT_TYPE);
-        Long commentId = comment != null ? comment.getId() : null;
-        CommentEvent event = new CommentEvent(userId, movieId, commentId, SHORT_COMMENT_TYPE, "UPDATE", content.length(), null);
-        outboxPublisher.publishCommentEvent(event);
     }
 
     @Override
@@ -217,20 +185,10 @@ public class CommentServiceImpl implements CommentService {
             throw new IllegalArgumentException("短评内容不能超过500字");
         }
 
-        int rows = commentMapper.updateByUserAndMovieAndType(
-                userId,
-                movieId,
-                SHORT_COMMENT_TYPE,
-                content.trim(),
-                new java.util.Date()
-        );
+        int rows = commentMapper.updateByUserAndMovieAndType(userId, movieId, SHORT_COMMENT_TYPE, content.trim(), new java.util.Date());
         if (rows == 0) {
             throw new BusinessException(404, "修改失败，您尚未对该电影发表短评");
         }
-        Comment comment = commentMapper.selectByUserAndMovieAndType(userId, movieId, SHORT_COMMENT_TYPE);
-        Long commentId = comment != null ? comment.getId() : null;
-        CommentEvent event = new CommentEvent(userId, movieId, commentId, SHORT_COMMENT_TYPE, "UPDATE", content.length(), null);
-        outboxPublisher.publishCommentEvent(event);
     }
 
     @Override
@@ -243,32 +201,20 @@ public class CommentServiceImpl implements CommentService {
             throw new IllegalArgumentException("标题不能超过100字");
         }
 
-        TiptapJsonValidator.ValidationResult validationResult =
-                TiptapJsonValidator.validate(content);
+        TiptapJsonValidator.ValidationResult validationResult = TiptapJsonValidator.validate(content);
         if (!validationResult.isValid()) {
             throw new IllegalArgumentException(validationResult.getMessage());
         }
 
-        Comment comment = commentMapper.selectByUserAndMovieAndTypeAndStatus(
-                userId, movieId, LONG_REVIEW_TYPE, STATUS_PUBLISHED);
+        Comment comment = commentMapper.selectByUserAndMovieAndTypeAndStatus(userId, movieId, LONG_REVIEW_TYPE, STATUS_PUBLISHED);
         if (comment == null) {
             throw new BusinessException(404, "修改失败，您尚未对该电影发表长评");
         }
 
-        int rows = commentMapper.updateLongComment(
-                comment.getId(),
-                userId,
-                movieId,
-                title.trim(),
-                content.trim(),
-                new java.util.Date()
-        );
+        int rows = commentMapper.updateLongComment(comment.getId(), userId, movieId, title.trim(), content.trim(), new java.util.Date());
         if (rows == 0) {
             throw new BusinessException(404, "修改失败，您尚未对该电影发表长评");
         }
-        Long commentId = comment.getId();
-        CommentEvent event = new CommentEvent(userId, movieId, commentId, LONG_REVIEW_TYPE, "UPDATE", content.length(), null);
-        outboxPublisher.publishCommentEvent(event);
     }
 
     @Override
@@ -286,11 +232,8 @@ public class CommentServiceImpl implements CommentService {
                 throw new BusinessException(404, "评论不存在");
             }
 
-            CommentLikeEvent event = new CommentLikeEvent(userId, commentId, "LIKE", null);
-            outboxPublisher.publishCommentLikeEvent(event);
             return true;
         } catch (org.springframework.dao.DuplicateKeyException e) {
-            // 并发或重复点赞下保持幂等：已点赞
             return true;
         }
     }
@@ -300,7 +243,6 @@ public class CommentServiceImpl implements CommentService {
     public boolean unlikeComment(String userId, Long commentId) {
         int deleted = commentLikeMapper.delete(commentId, userId);
         if (deleted <= 0) {
-            // 并发或重复取消点赞下保持幂等：未点赞
             return false;
         }
 
@@ -309,8 +251,6 @@ public class CommentServiceImpl implements CommentService {
             throw new BusinessException(404, "评论不存在");
         }
 
-        CommentLikeEvent event = new CommentLikeEvent(userId, commentId, "UNLIKE", null);
-        outboxPublisher.publishCommentLikeEvent(event);
         return false;
     }
 
@@ -338,8 +278,6 @@ public class CommentServiceImpl implements CommentService {
             int rows = commentMapper.deleteByIdAndUserId(commentId, userId);
             if (rows > 0) {
                 commentLikeMapper.deleteByCommentId(commentId);
-                CommentEvent event = new CommentEvent(userId, null, commentId, null, "DELETE", null, null);
-                outboxPublisher.publishCommentEvent(event);
                 deletedCount++;
             }
         }
@@ -351,7 +289,6 @@ public class CommentServiceImpl implements CommentService {
         PageHelper.startPage(page, size);
         try {
             List<CommentVO> list = commentMapper.selectWithRatingByMovieIdAndType(movieId, currentUserId, type);
-            // 处理内容摘要
             for (CommentVO vo : list) {
                 enrichCommentContentSummary(vo);
             }
@@ -392,36 +329,24 @@ public class CommentServiceImpl implements CommentService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void saveLongReviewDraft(String userId, Long movieId, String title, String content) {
-        // 校验标题
         if (StringUtils.hasText(title) && title.length() > 100) {
             throw new IllegalArgumentException("标题不能超过100字");
         }
 
-        // 校验内容格式（如果有内容）
         if (StringUtils.hasText(content)) {
-            TiptapJsonValidator.ValidationResult validationResult =
-                    TiptapJsonValidator.validate(content);
+            TiptapJsonValidator.ValidationResult validationResult = TiptapJsonValidator.validate(content);
             if (!validationResult.isValid()) {
                 throw new IllegalArgumentException(validationResult.getMessage());
             }
         }
 
-        // 检查是否已有草稿
-        Comment existingDraft = commentMapper.selectByUserAndMovieAndTypeAndStatus(
-                userId, movieId, LONG_REVIEW_TYPE, STATUS_DRAFT);
+        Comment existingDraft = commentMapper.selectByUserAndMovieAndTypeAndStatus(userId, movieId, LONG_REVIEW_TYPE, STATUS_DRAFT);
 
         if (existingDraft != null) {
-            // 更新现有草稿
-            commentMapper.updateDraftContent(
-                    userId, movieId, LONG_REVIEW_TYPE,
-                    StringUtils.hasText(title) ? title.trim() : null,
-                    content != null ? content.trim() : null,
-                    new java.util.Date()
-            );
+            commentMapper.updateDraftContent(userId, movieId, LONG_REVIEW_TYPE, StringUtils.hasText(title) ? title.trim() : null, content != null ? content.trim() : null, new java.util.Date());
             return;
         }
 
-        // 创建新草稿
         Comment draft = new Comment();
         draft.setUserId(userId);
         draft.setMovieId(movieId);
@@ -439,26 +364,18 @@ public class CommentServiceImpl implements CommentService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateLongReviewDraft(String userId, Long movieId, String title, String content) {
-        // 校验标题
         if (StringUtils.hasText(title) && title.length() > 100) {
             throw new IllegalArgumentException("标题不能超过100字");
         }
 
-        // 校验内容格式（如果有内容）
         if (StringUtils.hasText(content)) {
-            TiptapJsonValidator.ValidationResult validationResult =
-                    TiptapJsonValidator.validate(content);
+            TiptapJsonValidator.ValidationResult validationResult = TiptapJsonValidator.validate(content);
             if (!validationResult.isValid()) {
                 throw new IllegalArgumentException(validationResult.getMessage());
             }
         }
 
-        int rows = commentMapper.updateDraftContent(
-                userId, movieId, LONG_REVIEW_TYPE,
-                StringUtils.hasText(title) ? title.trim() : null,
-                content != null ? content.trim() : null,
-                new java.util.Date()
-        );
+        int rows = commentMapper.updateDraftContent(userId, movieId, LONG_REVIEW_TYPE, StringUtils.hasText(title) ? title.trim() : null, content != null ? content.trim() : null, new java.util.Date());
 
         if (rows == 0) {
             throw new BusinessException(404, "草稿不存在");
@@ -468,14 +385,12 @@ public class CommentServiceImpl implements CommentService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void publishDraft(String userId, Long commentId) {
-        // 获取评论并验证权限
         Comment draft = commentMapper.selectByIdAndUserId(commentId, userId);
 
         if (draft == null) {
             throw new BusinessException(404, "草稿不存在或您无权操作");
         }
 
-        // 验证评论类型和状态
         if (draft.getType() != LONG_REVIEW_TYPE) {
             throw new BusinessException(400, "只能发布长评草稿");
         }
@@ -483,7 +398,6 @@ public class CommentServiceImpl implements CommentService {
             throw new BusinessException(400, "该评论已发布，无需重复操作");
         }
 
-        // 验证草稿内容完整性
         if (!StringUtils.hasText(draft.getTitle())) {
             throw new IllegalArgumentException("发布前请填写长评标题");
         }
@@ -494,18 +408,9 @@ public class CommentServiceImpl implements CommentService {
         String normalizedTitle = draft.getTitle().trim();
         String normalizedContent = draft.getContent().trim();
 
-        // 检查是否已有发布的长评
-        Comment existingPublished = commentMapper.selectByUserAndMovieAndTypeAndStatus(
-                userId, draft.getMovieId(), LONG_REVIEW_TYPE, STATUS_PUBLISHED);
+        Comment existingPublished = commentMapper.selectByUserAndMovieAndTypeAndStatus(userId, draft.getMovieId(), LONG_REVIEW_TYPE, STATUS_PUBLISHED);
         if (existingPublished != null) {
-            int updateRows = commentMapper.updateLongComment(
-                    existingPublished.getId(),
-                    userId,
-                    draft.getMovieId(),
-                    normalizedTitle,
-                    normalizedContent,
-                    new java.util.Date()
-            );
+            int updateRows = commentMapper.updateLongComment(existingPublished.getId(), userId, draft.getMovieId(), normalizedTitle, normalizedContent, new java.util.Date());
             if (updateRows == 0) {
                 throw new BusinessException(500, "发布失败");
             }
@@ -514,21 +419,12 @@ public class CommentServiceImpl implements CommentService {
             if (deleteRows == 0) {
                 throw new BusinessException(500, "发布失败");
             }
-            CommentEvent event = new CommentEvent(
-                    userId, draft.getMovieId(), existingPublished.getId(), LONG_REVIEW_TYPE, "UPDATE",
-                    normalizedContent.length(), null);
-            outboxPublisher.publishCommentEvent(event);
             return;
         }
 
-        // 更新状态为发布
         int rows = commentMapper.updateStatus(commentId, userId, STATUS_PUBLISHED, new java.util.Date());
         if (rows == 0) {
             throw new BusinessException(500, "发布失败");
         }
-        CommentEvent event = new CommentEvent(
-                userId, draft.getMovieId(), commentId, LONG_REVIEW_TYPE, "CREATE",
-                normalizedContent.length(), null);
-        outboxPublisher.publishCommentEvent(event);
     }
 }

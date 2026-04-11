@@ -1,12 +1,9 @@
 {
   "spark": {
     "app_name_batch": "movie-postgres-to-hive-ods",
-    "app_name_streaming": "movie-kafka-to-hive-ods",
     "master": "yarn",
     "warehouse_dir": "hdfs:///warehouse/tablespace/external/hive",
-    "shuffle_partitions": 400,
-    "checkpoint_root": "hdfs:///warehouse/checkpoints/movie-etl",
-    "trigger_processing_time": "30 seconds"
+    "shuffle_partitions": 400
   },
   "postgres": {
     "jdbc_url": "jdbc:postgresql://127.0.0.1:5432/movie",
@@ -66,40 +63,17 @@
       }
     ]
   },
-  "kafka": {
-    "bootstrap_servers": "127.0.0.1:9092",
-    "topics": [
-      "movie-view-history",
-      "movie-rating-events",
-      "movie-comment-events",
-      "movie-comment-like-events",
-      "movie-favorite-events",
-      "movie-watched-events",
-      "movie-favorite-folder-action-events",
-      "movie-search-events",
-      "movie-user-register-events",
-      "movie-user-login-events"
-    ],
-    "starting_offsets": "latest",
-    "fail_on_data_loss": false,
-    "max_offsets_per_trigger": 50000,
-    "sink_table": "ods.ods_event_log_di",
-    "sink_path": "hdfs:///warehouse/movie/ods/event_log"
-  },
-  "outbox": {
-    "source_table": "event_outbox",
-    "sink_table": "ods.ods_event_log_di",
-    "sink_path": "hdfs:///warehouse/movie/ods/event_log",
-    "backend_url": "http://localhost:8080"
-  },
   "dwd": {
     "source_tables": {
-      "events": "ods.ods_event_log_di",
       "users": "ods.ods_pg_users_full",
       "movies": "ods.ods_pg_movies_full",
       "comments": "ods.ods_pg_comments_full",
       "favorite_folders": "ods.ods_pg_favorite_folders_full",
-      "ratings": "ods.ods_pg_ratings_full"
+      "ratings": "ods.ods_pg_ratings_full",
+      "comment_likes": "ods.ods_pg_comment_likes_full",
+      "favorites": "ods.ods_pg_favorites_full",
+      "view_history": "ods.ods_pg_view_history_full",
+      "watched_movies": "ods.ods_pg_watched_movies_full"
     },
     "target_table": "dwd.dwd_user_event_wide_di",
     "sink_path": "hdfs:///warehouse/movie/dwd/user_event_wide_di"
@@ -254,7 +228,7 @@
     "retention_days": [1, 7, 30]
   },
   "ads_genre_preference": {
-    "source_table": "dws.dws_movie_action_1d",
+    "source_table": "dws.dws_movie_engagement_daily_1d",
     "target_table": "ads.ads_genre_preference_1d",
     "sink_path": "hdfs:///warehouse/movie/ads/genre_preference_1d",
     "top_n": 100
@@ -286,27 +260,5 @@
       2
     ],
     "batch_size": 1000
-  },
-  "ads_search_keyword_insights": {
-    "source_table": "dwd.dwd_user_event_wide_di",
-    "target_table": "ads.ads_search_keyword_insights_1d",
-    "sink_path": "hdfs:///warehouse/movie/ads/search_keyword_insights_1d",
-    "top_n": 200,
-    "min_search_cnt": 5
-  },
-  "ads_search_funnel": {
-    "source_table": "dwd.dwd_user_event_wide_di",
-    "target_table": "ads.ads_search_funnel_1d",
-    "sink_path": "hdfs:///warehouse/movie/ads/search_funnel_1d"
-  },
-  "ads_search_funnel_postgres_sync": {
-    "source_table": "ads.ads_search_funnel_1d",
-    "target_table": "public.stats_search_funnel_1d",
-    "batch_size": 1000
-  },
-  "ads_user_behavior_sankey": {
-    "source_table": "dwd.dwd_user_event_wide_di",
-    "target_table": "ads.ads_user_behavior_sankey_1d",
-    "sink_path": "hdfs:///warehouse/movie/ads/user_behavior_sankey_1d"
   }
 }

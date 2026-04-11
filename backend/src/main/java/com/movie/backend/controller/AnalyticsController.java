@@ -3,10 +3,7 @@ package com.movie.backend.controller;
 import com.movie.backend.common.Result;
 import com.movie.backend.common.TrendPeriod;
 import com.movie.backend.dto.GenrePreferenceDTO;
-import com.movie.backend.dto.SearchFunnelDTO;
-import com.movie.backend.dto.SearchKeywordInsightDTO;
 import com.movie.backend.dto.TrendingMovieDTO;
-import com.movie.backend.dto.UserBehaviorSankeyDTO;
 import com.movie.backend.dto.UserRetentionDTO;
 import com.movie.backend.entity.Movie;
 import com.movie.backend.service.AnalyticsService;
@@ -59,26 +56,6 @@ public class AnalyticsController {
         return Result.success(analyticsService.getSimilarMovies(movieId, type, limit));
     }
 
-    @Operation(operationId = "getSearchFunnel", summary = "获取搜索漏斗分析", description = "返回搜索行为的漏斗分析数据，包括搜索次数、转化率等指标。底层基于 Hive/Spark 离线计算。")
-    @GetMapping("/search-funnel")
-    public Result<SearchFunnelDTO> getSearchFunnel() {
-        SearchFunnelDTO result = analyticsService.getSearchFunnel();
-        if (result == null) {
-            return Result.notFound("暂无搜索漏斗数据");
-        }
-        return Result.success(result);
-    }
-
-    @Operation(operationId = "getSearchKeywordInsights", summary = "获取搜索关键词洞察", description = "返回搜索关键词的问题分析，按问题分数降序排列。底层基于 Hive/Spark 离线计算。")
-    @GetMapping("/search-keyword-insights")
-    public Result<List<SearchKeywordInsightDTO>> getSearchKeywordInsights(
-            @Parameter(name = "limit", description = "返回数量，默认50条，最多200条", example = "50")
-            @RequestParam(defaultValue = "50")
-            @Min(value = 1, message = "返回数量至少为1")
-            @Max(value = 200, message = "返回数量最多为200") int limit) {
-        return Result.success(analyticsService.getSearchKeywordInsights(limit));
-    }
-
     @Operation(operationId = "getUserRetention", summary = "获取用户留存分析", description = "返回用户留存数据，按群组日期和留存天数分组。底层基于 Hive/Spark 离线计算。")
     @GetMapping("/user-retention")
     public Result<List<UserRetentionDTO>> getUserRetention(
@@ -97,16 +74,6 @@ public class AnalyticsController {
             @Min(value = 1, message = "返回数量至少为1")
             @Max(value = 200, message = "返回数量最多为200") int limit) {
         return Result.success(analyticsService.getGenrePreference(limit));
-    }
-
-    @Operation(operationId = "getUserBehaviorSankey", summary = "获取用户行为桑基图", description = "返回用户行为桑基图的链接数据，用于可视化用户行为流转路径。底层基于 Hive/Spark 离线计算。")
-    @GetMapping("/user-behavior-sankey")
-    public Result<List<UserBehaviorSankeyDTO>> getUserBehaviorSankey(
-            @Parameter(name = "limit", description = "返回数量，默认100条，最多500条", example = "100")
-            @RequestParam(defaultValue = "100")
-            @Min(value = 1, message = "返回数量至少为1")
-            @Max(value = 500, message = "返回数量最多为500") int limit) {
-        return Result.success(analyticsService.getUserBehaviorSankey(limit));
     }
 }
 

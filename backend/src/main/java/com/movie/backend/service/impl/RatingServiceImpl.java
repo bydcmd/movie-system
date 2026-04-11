@@ -5,8 +5,6 @@ import com.github.pagehelper.PageInfo;
 import com.movie.backend.dto.MyRatingVO;
 import com.movie.backend.entity.Rating;
 import com.movie.backend.mapper.RatingMapper;
-import com.movie.backend.messaging.event.RatingEvent;
-import com.movie.backend.messaging.outbox.OutboxPublisher;
 import com.movie.backend.service.RatingService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -26,9 +24,6 @@ public class RatingServiceImpl implements RatingService {
 
     @Autowired
     private RatingMapper ratingMapper;
-
-    @Autowired
-    private OutboxPublisher outboxPublisher;
 
     @Value("${movie.rating.force-update-votes-threshold:50}")
     private Integer forceUpdateVotesThreshold;
@@ -60,10 +55,6 @@ public class RatingServiceImpl implements RatingService {
         if (ratingChanged) {
             refreshMovieRatingSnapshot(movieId);
         }
-
-        String eventAction = existingRating == null ? "CREATE" : "UPDATE";
-        RatingEvent event = new RatingEvent(userId, movieId, rating, eventAction, ratingTimeStr, null);
-        outboxPublisher.publishRatingEvent(event);
     }
 
     @Override
@@ -96,9 +87,6 @@ public class RatingServiceImpl implements RatingService {
 
         ratingMapper.deleteByUserId(userId);
         refreshMovieRatings(affectedMovieIds);
-
-        RatingEvent event = new RatingEvent(userId, null, null, "CLEAR", null, null);
-        outboxPublisher.publishRatingEvent(event);
     }
 
     @Override
@@ -108,10 +96,6 @@ public class RatingServiceImpl implements RatingService {
             Set<Long> affectedMovieIds = new LinkedHashSet<>(movieIds);
             ratingMapper.deleteBatch(userId, movieIds);
             refreshMovieRatings(affectedMovieIds);
-            for (Long movieId : affectedMovieIds) {
-                RatingEvent event = new RatingEvent(userId, movieId, null, "DELETE", null, null);
-                outboxPublisher.publishRatingEvent(event);
-            }
         }
     }
 

@@ -5,8 +5,6 @@ import com.github.pagehelper.PageInfo;
 import com.movie.backend.dto.MovieItemVO;
 import com.movie.backend.entity.Watched;
 import com.movie.backend.mapper.WatchedMapper;
-import com.movie.backend.messaging.event.WatchedEvent;
-import com.movie.backend.messaging.outbox.OutboxPublisher;
 import com.movie.backend.service.WatchedService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -25,9 +23,6 @@ public class WatchedServiceImpl implements WatchedService {
     @Autowired
     private WatchedMapper watchedMapper;
 
-    @Autowired
-    private OutboxPublisher outboxPublisher;
-
     @Override
     public void addWatched(String userId, Long movieId) {
         Watched existing = watchedMapper.selectByUserAndMovie(userId, movieId);
@@ -39,8 +34,6 @@ public class WatchedServiceImpl implements WatchedService {
         watched.setMovieId(movieId);
         watched.setCreateTime(new Date());
         watchedMapper.insert(watched);
-        WatchedEvent event = new WatchedEvent(userId, movieId, watched.getCreateTime().getTime(), null);
-        outboxPublisher.publishWatchedEvent(event);
     }
 
     @Override

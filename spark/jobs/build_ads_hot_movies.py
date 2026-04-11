@@ -339,7 +339,7 @@ def run() -> None:
     source_table = ads_config["source_table"]
     target_table = ads_config["target_table"]
     sink_path = ads_config["sink_path"]
-    source_type = str(ads_config.get("source_type", "movie_action_daily")).strip().lower()
+    source_type = str(ads_config.get("source_type", "movie_metric_daily")).strip().lower()
     total_source_table = str(
         ads_config.get(
             "total_source_table",

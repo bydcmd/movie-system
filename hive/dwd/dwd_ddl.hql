@@ -7,7 +7,6 @@ CREATE EXTERNAL TABLE IF NOT EXISTS dwd.dwd_user_event_wide_di (
   event_id string,
   event_type string,
   event_ts timestamp,
-  kafka_timestamp timestamp,
   occurred_at timestamp,
   ingest_time timestamp,
   hh string,
@@ -51,12 +50,12 @@ CREATE EXTERNAL TABLE IF NOT EXISTS dwd.dwd_user_event_wide_di (
   is_favorite_folder_action tinyint,
   event_data string,
   raw_json string,
-  -- Session tracking fields (lightweight, from ODS event table)
+  -- Session tracking fields
   session_id string,
   page_url string,
   sequence_number int,
   client_timestamp bigint,
-  -- Session context fields (from ODS session table, joined in DWD)
+  -- Session context fields
   entry_url string,
   referrer string,
   user_agent string,

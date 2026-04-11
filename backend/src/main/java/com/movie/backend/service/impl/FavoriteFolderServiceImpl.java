@@ -5,8 +5,6 @@ import com.movie.backend.dto.FavoriteFolderVO;
 import com.movie.backend.entity.FavoriteFolder;
 import com.movie.backend.mapper.FavoriteMapper;
 import com.movie.backend.mapper.FavoriteFolderMapper;
-import com.movie.backend.messaging.event.FavoriteFolderActionEvent;
-import com.movie.backend.messaging.outbox.OutboxPublisher;
 import com.movie.backend.service.FavoriteFolderService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -24,9 +22,6 @@ public class FavoriteFolderServiceImpl implements FavoriteFolderService {
     @Autowired
     private FavoriteMapper favoriteMapper;
 
-    @Autowired
-    private OutboxPublisher outboxPublisher;
-
     @Override
     public FavoriteFolder createFolder(String userId, FavoriteFolderDTO dto) {
         FavoriteFolder folder = new FavoriteFolder();
@@ -40,15 +35,6 @@ public class FavoriteFolderServiceImpl implements FavoriteFolderService {
         
         favoriteFolderMapper.insert(folder);
 
-        FavoriteFolderActionEvent event = new FavoriteFolderActionEvent(
-                userId,
-                folder.getId(),
-                folder.getName(),
-                folder.getIsPublic(),
-                "CREATE",
-                null
-        );
-        outboxPublisher.publishFavoriteFolderActionEvent(event);
         return folder;
     }
 
@@ -74,22 +60,6 @@ public class FavoriteFolderServiceImpl implements FavoriteFolderService {
         folder.setIsPublic(dto.getIsPublic());
 
         favoriteFolderMapper.update(folder);
-
-        String currentName = dto.getName() != null ? dto.getName() : previousName;
-        Integer currentPublic = dto.getIsPublic() != null ? dto.getIsPublic() : previousPublic;
-        String operation = "UPDATE";
-        if (previousPublic != null && currentPublic != null && previousPublic == 0 && currentPublic == 1) {
-            operation = "SHARE";
-        }
-        FavoriteFolderActionEvent event = new FavoriteFolderActionEvent(
-                userId,
-                dto.getId(),
-                currentName,
-                currentPublic,
-                operation,
-                null
-        );
-        outboxPublisher.publishFavoriteFolderActionEvent(event);
     }
 
     @Override
@@ -107,16 +77,6 @@ public class FavoriteFolderServiceImpl implements FavoriteFolderService {
 
         // 删除收藏夹
         favoriteFolderMapper.deleteById(folderId);
-
-        FavoriteFolderActionEvent event = new FavoriteFolderActionEvent(
-                userId,
-                folderId,
-                existing != null ? existing.getName() : null,
-                existing != null ? existing.getIsPublic() : null,
-                "DELETE",
-                null
-        );
-        outboxPublisher.publishFavoriteFolderActionEvent(event);
     }
 
     @Override

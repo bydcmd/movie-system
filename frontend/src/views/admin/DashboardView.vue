@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { NAlert, NButton, NEmpty, NSpin } from 'naive-ui'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { BarChart, HeatmapChart, PieChart, SankeyChart } from 'echarts/charts'
+import { BarChart, HeatmapChart, PieChart } from 'echarts/charts'
 import {
   GridComponent,
   TooltipComponent,
@@ -20,7 +20,6 @@ use([
   BarChart,
   HeatmapChart,
   PieChart,
-  SankeyChart,
   GridComponent,
   TooltipComponent,
   DataZoomComponent,
@@ -33,11 +32,8 @@ const {
   overview,
   overviewCards,
   trendPanels,
-  searchFunnel,
-  searchKeywordInsights,
   userRetention,
   genrePreference,
-  userBehaviorSankey,
   loading,
   hasLoadError,
   lastUpdatedText,
@@ -127,19 +123,6 @@ function getChartOption(panel: typeof trendPanels.value[0]) {
       }
     ]
   }
-}
-
-
-function formatPercent(value: number | undefined): string {
-  if (value === undefined || value === null) return '-'
-  return `${(value * 100).toFixed(1)}%`
-}
-
-function getProblemScoreLevel(score: number | undefined): { label: string; color: string } {
-  if (score === undefined || score === null) return { label: '-', color: '#64748b' }
-  if (score >= 70) return { label: '高', color: '#ef4444' }
-  if (score >= 40) return { label: '中', color: '#f59e0b' }
-  return { label: '低', color: '#10b981' }
 }
 
 const userRetentionChartOption = computed(() => {
@@ -359,92 +342,6 @@ const genrePreferenceChartOption = computed(() => {
     ]
   }
 })
-
-const userBehaviorSankeyChartOption = computed(() => {
-  const links = userBehaviorSankey.value
-
-  if (links.length === 0) {
-    return {}
-  }
-
-  // Extract unique nodes from links
-  const nodeSet = new Set<string>()
-  links.forEach(link => {
-    if (link.sourceNode) nodeSet.add(link.sourceNode)
-    if (link.targetNode) nodeSet.add(link.targetNode)
-  })
-
-  const nodes = Array.from(nodeSet).map(name => ({ name }))
-
-  // Node color mapping based on category
-  const nodeColors: Record<string, string> = {
-    '活跃用户': '#f59e0b',
-    '搜索用户': '#0ea5e9',
-    '搜索后浏览': '#38bdf8',
-    '搜索未转化': '#94a3b8',
-    '直接浏览': '#10b981',
-    '看过': '#ec4899',
-    '评分': '#f43f5e',
-    '评论': '#8b5cf6',
-    '收藏': '#14b8a6',
-    '浏览流失': '#94a3b8',
-    '未行动流失': '#94a3b8'
-  }
-
-  return {
-    tooltip: {
-      trigger: 'item',
-      triggerOn: 'mousemove',
-      formatter: (params: { dataType: string; data: { source: string; target: string; value: number; name?: string }; name?: string }) => {
-        if (params.dataType === 'node') {
-          return `${params.name}`
-        }
-        if (params.dataType === 'edge') {
-          const { source, target, value } = params.data
-          return `${source} → ${target}<br/>用户数: ${formatCount(value)}`
-        }
-        return ''
-      }
-    },
-    series: [
-      {
-        type: 'sankey',
-        left: '3%',
-        right: '8%',
-        top: '5%',
-        bottom: '5%',
-        nodeWidth: 24,
-        nodeGap: 14,
-        layoutIterations: 32,
-        emphasis: {
-          focus: 'adjacency'
-        },
-        lineStyle: {
-          color: 'gradient',
-          curveness: 0.5,
-          opacity: 0.6
-        },
-        label: {
-          position: 'right',
-          color: '#374151',
-          fontSize: 11,
-          fontWeight: 500
-        },
-        data: nodes.map(node => ({
-          name: node.name,
-          itemStyle: {
-            color: nodeColors[node.name] || '#64748b'
-          }
-        })),
-        links: links.map(link => ({
-          source: link.sourceNode,
-          target: link.targetNode,
-          value: link.userCount || 0
-        }))
-      }
-    ]
-  }
-})
 </script>
 
 <template>
@@ -555,142 +452,6 @@ const userBehaviorSankeyChartOption = computed(() => {
         </article>
       </div>
 
-      <!-- Search Funnel Analytics -->
-      <div class="funnel-section">
-        <h3 class="funnel-section-title">搜索漏斗分析</h3>
-        <div class="funnel-metrics-grid">
-            <article class="funnel-card">
-              <div class="funnel-metric">
-                <span class="funnel-label">搜索次数</span>
-                <strong class="funnel-value">{{ formatCount(searchFunnel.searchCnt) }}</strong>
-              </div>
-              <div class="funnel-metric">
-                <span class="funnel-label">搜索用户数</span>
-                <strong class="funnel-value">{{ formatCount(searchFunnel.searchUserCnt) }}</strong>
-              </div>
-            </article>
-
-            <article class="funnel-card">
-              <div class="funnel-metric">
-                <span class="funnel-label">有结果搜索</span>
-                <strong class="funnel-value">{{ formatCount(searchFunnel.searchWithResultCnt) }}</strong>
-              </div>
-              <div class="funnel-metric">
-                <span class="funnel-label">零结果搜索</span>
-                <strong class="funnel-value">{{ formatCount(searchFunnel.searchZeroResultCnt) }}</strong>
-              </div>
-            </article>
-
-            <article class="funnel-card funnel-card--highlight">
-              <div class="funnel-metric">
-                <span class="funnel-label">搜索后浏览用户</span>
-                <strong class="funnel-value">{{ formatCount(searchFunnel.afterSearchViewUserCnt) }}</strong>
-              </div>
-              <div class="funnel-metric">
-                <span class="funnel-label">搜索→浏览转化率</span>
-                <strong class="funnel-value funnel-value--rate">
-                  {{ ((searchFunnel.searchToViewRate || 0) * 100).toFixed(1) }}%
-                </strong>
-              </div>
-            </article>
-
-            <article class="funnel-card">
-              <div class="funnel-metric">
-                <span class="funnel-label">搜索后评分用户</span>
-                <strong class="funnel-value">{{ formatCount(searchFunnel.afterSearchRatingUserCnt) }}</strong>
-              </div>
-              <div class="funnel-metric">
-                <span class="funnel-label">搜索→评分转化率</span>
-                <strong class="funnel-value funnel-value--rate">
-                  {{ ((searchFunnel.searchToRatingRate || 0) * 100).toFixed(1) }}%
-                </strong>
-              </div>
-            </article>
-
-            <article class="funnel-card">
-              <div class="funnel-metric">
-                <span class="funnel-label">搜索后收藏用户</span>
-                <strong class="funnel-value">{{ formatCount(searchFunnel.afterSearchFavoriteUserCnt) }}</strong>
-              </div>
-              <div class="funnel-metric">
-                <span class="funnel-label">搜索后看过用户</span>
-                <strong class="funnel-value">{{ formatCount(searchFunnel.afterSearchWatchedUserCnt) }}</strong>
-              </div>
-            </article>
-
-            <article class="funnel-card">
-              <div class="funnel-metric">
-                <span class="funnel-label">搜索→看过转化率</span>
-                <strong class="funnel-value funnel-value--rate">
-                  {{ ((searchFunnel.searchToWatchedRate || 0) * 100).toFixed(1) }}%
-                </strong>
-              </div>
-              <div class="funnel-metric">
-                <span class="funnel-label">计算日期</span>
-                <strong class="funnel-value funnel-value--date">{{ searchFunnel.calcDate || '-' }}</strong>
-              </div>
-            </article>
-        </div>
-      </div>
-
-
-      <!-- Search Keyword Insights -->
-      <div class="keyword-section">
-        <h3 class="keyword-section-title">搜索关键词洞察</h3>
-        <p class="keyword-section-desc">按问题分数降序排列，帮助识别需要优化的搜索词</p>
-
-        <div v-if="searchKeywordInsights.length > 0" class="keyword-table-wrapper">
-          <table class="keyword-table">
-            <thead>
-              <tr>
-                <th>排名</th>
-                <th>关键词</th>
-                <th>搜索次数</th>
-                <th>用户数</th>
-                <th>零结果率</th>
-                <th>平均结果</th>
-                <th>浏览转化</th>
-                <th>问题分数</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(item, index) in searchKeywordInsights" :key="item.searchKeyword ?? `keyword-${index}`">
-                <td class="keyword-rank">{{ item.rankNo }}</td>
-                <td class="keyword-text">{{ item.searchKeyword }}</td>
-                <td>{{ formatCount(item.searchCnt) }}</td>
-                <td>{{ formatCount(item.searchUserCnt) }}</td>
-                <td>
-                  <span :class="['keyword-rate', { 'keyword-rate--high': (item.zeroResultRate || 0) >= 0.3 }]">
-                    {{ formatPercent(item.zeroResultRate) }}
-                  </span>
-                </td>
-                <td>{{ item.avgResultCount?.toFixed(1) ?? '-' }}</td>
-                <td>
-                  <span :class="['keyword-rate', { 'keyword-rate--low': (item.searchToViewRate || 0) < 0.2 }]">
-                    {{ formatPercent(item.searchToViewRate) }}
-                  </span>
-                </td>
-                <td>
-                  <span
-                    class="keyword-problem"
-                    :style="{ backgroundColor: getProblemScoreLevel(item.problemScore).color }"
-                  >
-                    {{ item.problemScore?.toFixed(0) ?? '-' }}
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <n-empty
-          v-else
-          description="暂无搜索关键词洞察数据"
-          size="small"
-          class="py-6"
-        />
-      </div>
-
       <!-- User Retention Analytics -->
       <div class="retention-section">
         <h3 class="retention-section-title">用户留存分析</h3>
@@ -733,26 +494,6 @@ const userBehaviorSankeyChartOption = computed(() => {
         />
       </div>
 
-      <!-- User Behavior Sankey Analytics -->
-      <div class="sankey-section">
-        <h3 class="sankey-section-title">用户行为流转</h3>
-        <p class="sankey-section-desc">桑基图展示用户从活跃状态到各种互动行为的流转路径，线条宽度表示用户数量</p>
-
-        <div v-if="userBehaviorSankey.length > 0" class="sankey-chart-wrapper">
-          <v-chart
-            :option="userBehaviorSankeyChartOption"
-            :autoresize="true"
-            class="sankey-flow-chart"
-          />
-        </div>
-
-        <n-empty
-          v-else
-          description="暂无用户行为桑基图数据"
-          size="small"
-          class="py-6"
-        />
-      </div>
     </n-spin>
   </section>
 </template>
@@ -1006,8 +747,7 @@ const userBehaviorSankeyChartOption = computed(() => {
 @media (max-width: 1100px) {
   .dashboard-hero-grid,
   .stat-grid,
-  .trend-grid,
-  .funnel-grid {
+  .trend-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -1015,181 +755,6 @@ const userBehaviorSankeyChartOption = computed(() => {
 @media (max-width: 768px) {
   .dashboard-actions {
     flex-direction: column;
-  }
-}
-
-/* Search Funnel Styles */
-.funnel-section {
-  margin-top: 1.5rem;
-}
-
-.funnel-section-title {
-  margin: 0 0 1rem;
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.funnel-metrics-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1rem;
-}
-
-.funnel-card {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  padding: 1.15rem;
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  border-radius: 1.5rem;
-  background: rgba(255, 255, 255, 0.94);
-}
-
-.funnel-card--highlight {
-  background: linear-gradient(180deg, rgba(254, 243, 199, 0.5), rgba(255, 255, 255, 0.98));
-  border-color: rgba(245, 158, 11, 0.3);
-}
-
-.funnel-metric {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-
-.funnel-label {
-  color: #64748b;
-  font-size: 0.85rem;
-  font-weight: 500;
-}
-
-.funnel-value {
-  font-family: var(--font-display);
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.funnel-value--rate {
-  color: #059669;
-}
-
-.funnel-value--date {
-  font-size: 0.95rem;
-  color: #475569;
-}
-
-
-
-@media (max-width: 768px) {
-  .funnel-metrics-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* Search Keyword Insights Styles */
-.keyword-section {
-  margin-top: 1.5rem;
-}
-
-.keyword-section-title {
-  margin: 0 0 0.25rem;
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.keyword-section-desc {
-  margin: 0 0 1rem;
-  color: #64748b;
-  font-size: 0.875rem;
-}
-
-.keyword-table-wrapper {
-  overflow-x: auto;
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  border-radius: 1rem;
-  background: rgba(255, 255, 255, 0.94);
-}
-
-.keyword-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.875rem;
-}
-
-.keyword-table th {
-  padding: 0.875rem 1rem;
-  text-align: left;
-  font-weight: 600;
-  color: #64748b;
-  background: rgba(248, 250, 252, 0.8);
-  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
-  white-space: nowrap;
-}
-
-.keyword-table td {
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
-  color: #0f172a;
-}
-
-.keyword-table tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.keyword-table tbody tr:hover {
-  background: rgba(248, 250, 252, 0.6);
-}
-
-.keyword-rank {
-  font-weight: 700;
-  color: #64748b;
-  width: 3.5rem;
-}
-
-.keyword-text {
-  font-weight: 600;
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.keyword-rate {
-  font-weight: 500;
-}
-
-.keyword-rate--high {
-  color: #ef4444;
-}
-
-.keyword-rate--low {
-  color: #f59e0b;
-}
-
-.keyword-problem {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 2.5rem;
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.5rem;
-  font-weight: 600;
-  font-size: 0.8rem;
-  color: #fff;
-}
-
-@media (max-width: 768px) {
-  .keyword-table th,
-  .keyword-table td {
-    padding: 0.65rem 0.75rem;
-    font-size: 0.8rem;
-  }
-
-  .keyword-text {
-    max-width: 120px;
   }
 }
 
@@ -1264,51 +829,4 @@ const userBehaviorSankeyChartOption = computed(() => {
     height: 280px;
   }
 }
-
-/* User Behavior Sankey Styles */
-.sankey-section {
-  margin-top: 1.5rem;
-}
-
-.sankey-section-title {
-  margin: 0 0 0.25rem;
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.sankey-section-desc {
-  margin: 0 0 1rem;
-  color: #64748b;
-  font-size: 0.875rem;
-}
-
-.sankey-chart-wrapper {
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  border-radius: 1rem;
-  background: rgba(255, 255, 255, 0.94);
-  padding: 1rem;
-}
-
-.sankey-flow-chart {
-  width: 100%;
-  height: 420px;
-}
-
-@media (max-width: 768px) {
-  .sankey-flow-chart {
-    height: 340px;
-  }
-}
-
-	/* Extra small screens */
-	@media (max-width: 480px) {
-	  .funnel-metrics-grid {
-	    gap: 0.75rem;
-	  }
-
-	  .funnel-card {
-	    padding: 0.9rem;
-	  }
-	}
 </style>

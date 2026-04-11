@@ -2,10 +2,7 @@ package com.movie.backend.service;
 
 import com.movie.backend.common.TrendPeriod;
 import com.movie.backend.dto.GenrePreferenceDTO;
-import com.movie.backend.dto.SearchFunnelDTO;
-import com.movie.backend.dto.SearchKeywordInsightDTO;
 import com.movie.backend.dto.TrendingMovieDTO;
-import com.movie.backend.dto.UserBehaviorSankeyDTO;
 import com.movie.backend.dto.UserRetentionDTO;
 import com.movie.backend.entity.Movie;
 
@@ -36,21 +33,6 @@ public interface AnalyticsService {
     List<Movie> getSimilarMovies(Long movieId, Integer similarityType, int limit);
 
     /**
-     * 获取搜索漏斗分析数据
-     *
-     * @return 搜索漏斗数据，无数据时返回null
-     */
-    SearchFunnelDTO getSearchFunnel();
-
-    /**
-     * 获取搜索关键词洞察数据
-     *
-     * @param limit 返回数量
-     * @return 关键词洞察列表
-     */
-    List<SearchKeywordInsightDTO> getSearchKeywordInsights(int limit);
-
-    /**
      * 获取用户留存分析数据
      *
      * @param limit 返回数量
@@ -65,12 +47,4 @@ public interface AnalyticsService {
      * @return 类型偏好数据列表
      */
     List<GenrePreferenceDTO> getGenrePreference(int limit);
-
-    /**
-     * 获取用户行为桑基图数据
-     *
-     * @param limit 返回数量
-     * @return 桑基图链接数据列表
-     */
-    List<UserBehaviorSankeyDTO> getUserBehaviorSankey(int limit);
 }
