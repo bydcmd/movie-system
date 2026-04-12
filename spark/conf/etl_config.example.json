@@ -78,6 +78,22 @@
     "target_table": "dwd.dwd_user_event_wide_di",
     "sink_path": "hdfs:///warehouse/movie/dwd/user_event_wide_di"
   },
+  "dwd_source_generator": {
+    "movie_limit": 500,
+    "user_target": 300,
+    "new_user_target": 30,
+    "folder_target": 450,
+    "view_target": 8000,
+    "rating_target": 2500,
+    "comment_target": 1500,
+    "comment_like_target": 2500,
+    "favorite_target": 2000,
+    "watched_target": 1800,
+    "sample_ratio": 0.35,
+    "lookback_days": 90,
+    "seed": 20260412,
+    "jdbc_query_limit_cap": 20000
+  },
   "dwd_user_snapshot": {
     "source_table": "ods.ods_pg_users_full",
     "target_table": "dwd.dwd_user_snapshot_di",

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   NButton,
@@ -64,6 +64,7 @@ import {
   useRemoveWatched
 } from '@/api/endpoints/watched-management/watched-management'
 import { useAuthStore } from '@/stores/auth'
+import { useLoginModal } from '@/composables/useLoginModal'
 import { getMovieId } from '@/utils/movie'
 import { isDefaultFavoriteFolder, sortFavoriteFolders } from '@/utils/favorite-folder'
 
@@ -72,6 +73,7 @@ const router = useRouter()
 const dialog = useDialog()
 const message = useMessage()
 const authStore = useAuthStore()
+const { openLoginModal } = useLoginModal()
 const GUEST_COMMENT_LIMIT = 20
 const SIMILAR_MOVIES_DISPLAY_LIMIT = 20
 const movieId = computed(() => Number(route.params.id))
@@ -330,15 +332,18 @@ const isSelectableFavoriteFolder = (
 }
 
 const ensureAuthenticated = () => {
-  if (!authStore.isAuthenticated) {
-    message.warning('请先登录')
-    router.push({
-      name: 'login',
-      query: { redirect: route.fullPath }
-    })
-    return false
+  if (authStore.isAuthenticated) {
+    return true
   }
-  return true
+
+  // 先打开弹窗，等待弹窗动画完成后再显示消息
+  openLoginModal()
+  // 使用 nextTick 确保弹窗 DOM 已经更新
+  nextTick(() => {
+    message.warning('请先登录')
+  })
+
+  return false
 }
 
 const openReviewModal = async () => {

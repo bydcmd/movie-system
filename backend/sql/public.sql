@@ -12,7 +12,7 @@
  Target Server Version : 170007 (170007)
  File Encoding         : 65001
 
- Date: 04/04/2026 22:51:28
+ Date: 12/04/2026 13:41:05
 */
 
 
@@ -44,6 +44,17 @@ CACHE 1;
 -- ----------------------------
 DROP SEQUENCE IF EXISTS "public"."comments_comment_id_seq";
 CREATE SEQUENCE "public"."comments_comment_id_seq" 
+INCREMENT 1
+MINVALUE  1
+MAXVALUE 9223372036854775807
+START 1
+CACHE 1;
+
+-- ----------------------------
+-- Sequence structure for event_outbox_id_seq
+-- ----------------------------
+DROP SEQUENCE IF EXISTS "public"."event_outbox_id_seq";
+CREATE SEQUENCE "public"."event_outbox_id_seq" 
 INCREMENT 1
 MINVALUE  1
 MAXVALUE 9223372036854775807
@@ -161,6 +172,28 @@ START 1
 CACHE 1;
 
 -- ----------------------------
+-- Sequence structure for stats_search_funnel_1d_id_seq
+-- ----------------------------
+DROP SEQUENCE IF EXISTS "public"."stats_search_funnel_1d_id_seq";
+CREATE SEQUENCE "public"."stats_search_funnel_1d_id_seq" 
+INCREMENT 1
+MINVALUE  1
+MAXVALUE 9223372036854775807
+START 1
+CACHE 1;
+
+-- ----------------------------
+-- Sequence structure for stats_search_keyword_insights_1d_id_seq
+-- ----------------------------
+DROP SEQUENCE IF EXISTS "public"."stats_search_keyword_insights_1d_id_seq";
+CREATE SEQUENCE "public"."stats_search_keyword_insights_1d_id_seq" 
+INCREMENT 1
+MINVALUE  1
+MAXVALUE 9223372036854775807
+START 1
+CACHE 1;
+
+-- ----------------------------
 -- Sequence structure for stats_similar_movies_id_seq
 -- ----------------------------
 DROP SEQUENCE IF EXISTS "public"."stats_similar_movies_id_seq";
@@ -172,6 +205,34 @@ START 1
 CACHE 1;
 
 -- ----------------------------
+-- Sequence structure for stats_user_behavior_sankey_1d_id_seq
+-- ----------------------------
+DROP SEQUENCE IF EXISTS "public"."stats_user_behavior_sankey_1d_id_seq";
+CREATE SEQUENCE "public"."stats_user_behavior_sankey_1d_id_seq" 
+INCREMENT 1
+MINVALUE  1
+MAXVALUE 9223372036854775807
+START 1
+CACHE 1;
+
+-- ----------------------------
+-- Sequence structure for stats_user_funnel_1d_id_seq
+-- ----------------------------
+DROP SEQUENCE IF EXISTS "public"."stats_user_funnel_1d_id_seq";
+CREATE SEQUENCE "public"."stats_user_funnel_1d_id_seq" 
+INCREMENT 1
+MINVALUE  1
+MAXVALUE 9223372036854775807
+START 1
+CACHE 1;
+
+-- ----------------------------
+-- Sequence structure for stats_user_recs_id_seq
+-- ----------------------------
+DROP SEQUENCE IF EXISTS "public"."stats_user_recs_id_seq";
+CREATE SEQUENCE "public"."stats_user_recs_id_seq" 
+INCREMENT 1
+MINVALUE  1
 MAXVALUE 9223372036854775807
 START 1
 CACHE 1;
@@ -241,6 +302,24 @@ COMMENT ON COLUMN "public"."comments"."type" IS '评论类型: 1-短评, 2-长�
 COMMENT ON COLUMN "public"."comments"."version" IS '乐观锁版本号';
 COMMENT ON COLUMN "public"."comments"."status" IS '评论状态: 1-草稿, 2-发布';
 COMMENT ON TABLE "public"."comments" IS '评论表';
+
+-- ----------------------------
+-- Table structure for event_outbox
+-- ----------------------------
+DROP TABLE IF EXISTS "public"."event_outbox";
+CREATE TABLE "public"."event_outbox" (
+  "id" int8 NOT NULL DEFAULT nextval('event_outbox_id_seq'::regclass),
+  "topic" varchar(255) COLLATE "pg_catalog"."default" NOT NULL,
+  "message_key" varchar(255) COLLATE "pg_catalog"."default",
+  "payload" text COLLATE "pg_catalog"."default" NOT NULL,
+  "status" int2 NOT NULL DEFAULT 0,
+  "retry_count" int4 NOT NULL DEFAULT 0,
+  "next_retry_time" timestamp(6) NOT NULL,
+  "created_at" timestamp(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updated_at" timestamp(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "last_error" varchar(1000) COLLATE "pg_catalog"."default"
+)
+;
 
 -- ----------------------------
 -- Table structure for favorite_folders
@@ -533,8 +612,6 @@ COMMENT ON COLUMN "public"."stats_hot_movies"."hot_score" IS '热度分值 (加�
 COMMENT ON COLUMN "public"."stats_hot_movies"."calc_date" IS '计算日期 (例如 2023-11-11)';
 COMMENT ON TABLE "public"."stats_hot_movies" IS '电影热度统计表(Spark离线计算结果)';
 
-
-
 -- ----------------------------
 -- Table structure for stats_similar_movies
 -- ----------------------------
@@ -552,7 +629,6 @@ COMMENT ON COLUMN "public"."stats_similar_movies"."similar_movie_id" IS '相似�
 COMMENT ON COLUMN "public"."stats_similar_movies"."similarity_score" IS '相似度分值';
 COMMENT ON COLUMN "public"."stats_similar_movies"."similarity_type" IS '类型: 1-内容相似(标签/演员), 2-协同过滤相似(Item-based)';
 COMMENT ON TABLE "public"."stats_similar_movies" IS '电影相似度关联表(用于详情页推荐)';
-
 
 -- ----------------------------
 -- Table structure for stats_user_retention
@@ -994,14 +1070,19 @@ CREATE FUNCTION "public"."word_similarity_op"(text, text)
 -- ----------------------------
 ALTER SEQUENCE "public"."comment_likes_id_seq"
 OWNED BY "public"."comment_likes"."id";
-SELECT setval('"public"."comment_likes_id_seq"', 1152844557602285249, true);
+SELECT setval('"public"."comment_likes_id_seq"', 1152850210472950329, true);
 
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
 ALTER SEQUENCE "public"."comments_comment_id_seq"
 OWNED BY "public"."comments"."comment_id";
-SELECT setval('"public"."comments_comment_id_seq"', 1152730379458285628, true);
+SELECT setval('"public"."comments_comment_id_seq"', 1152730379458285631, true);
+
+-- ----------------------------
+-- Alter sequences owned by
+-- ----------------------------
+SELECT setval('"public"."event_outbox_id_seq"', 85, true);
 
 -- ----------------------------
 -- Alter sequences owned by
@@ -1062,33 +1143,58 @@ SELECT setval('"public"."regions_id_seq"', 355, true);
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
-SELECT setval('"public"."stats_genre_preference_1d_id_seq"', 83, true);
+SELECT setval('"public"."stats_genre_preference_1d_id_seq"', 218, true);
 
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
 ALTER SEQUENCE "public"."stats_hot_movies_id_seq"
 OWNED BY "public"."stats_hot_movies"."id";
-SELECT setval('"public"."stats_hot_movies_id_seq"', 2722, true);
+SELECT setval('"public"."stats_hot_movies_id_seq"', 4682, true);
+
+-- ----------------------------
+-- Alter sequences owned by
+-- ----------------------------
+SELECT setval('"public"."stats_search_funnel_1d_id_seq"', 8, true);
+
+-- ----------------------------
+-- Alter sequences owned by
+-- ----------------------------
+SELECT setval('"public"."stats_search_keyword_insights_1d_id_seq"', 523, true);
 
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
 ALTER SEQUENCE "public"."stats_similar_movies_id_seq"
 OWNED BY "public"."stats_similar_movies"."id";
-SELECT setval('"public"."stats_similar_movies_id_seq"', 2050411, true);
+SELECT setval('"public"."stats_similar_movies_id_seq"', 2669411, true);
 
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
-SELECT setval('"public"."stats_user_retention_id_seq"', 33, true);
+SELECT setval('"public"."stats_user_behavior_sankey_1d_id_seq"', 31, true);
+
+-- ----------------------------
+-- Alter sequences owned by
+-- ----------------------------
+SELECT setval('"public"."stats_user_funnel_1d_id_seq"', 5, true);
+
+-- ----------------------------
+-- Alter sequences owned by
+-- ----------------------------
+SELECT setval('"public"."stats_user_recs_id_seq"', 1, false);
+
+-- ----------------------------
+-- Alter sequences owned by
+-- ----------------------------
+SELECT setval('"public"."stats_user_retention_id_seq"', 93, true);
 
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
 ALTER SEQUENCE "public"."view_history_history_id_seq"
 OWNED BY "public"."view_history"."history_id";
-SELECT setval('"public"."view_history_history_id_seq"', 1152751459502767551, true);
+SELECT setval('"public"."view_history_history_id_seq"', 1152751459502767562, true);
 
 -- ----------------------------
 -- Indexes structure for table comment_likes
@@ -1145,6 +1251,19 @@ ALTER TABLE "public"."comments" ADD CONSTRAINT "chk_comments_no_short_draft" CHE
 -- Primary Key structure for table comments
 -- ----------------------------
 ALTER TABLE "public"."comments" ADD CONSTRAINT "comments_pkey" PRIMARY KEY ("comment_id");
+
+-- ----------------------------
+-- Indexes structure for table event_outbox
+-- ----------------------------
+CREATE INDEX "idx_event_outbox_status_time" ON "public"."event_outbox" USING btree (
+  "status" "pg_catalog"."int2_ops" ASC NULLS LAST,
+  "next_retry_time" "pg_catalog"."timestamp_ops" ASC NULLS LAST
+);
+
+-- ----------------------------
+-- Primary Key structure for table event_outbox
+-- ----------------------------
+ALTER TABLE "public"."event_outbox" ADD CONSTRAINT "event_outbox_pkey" PRIMARY KEY ("id");
 
 -- ----------------------------
 -- Indexes structure for table favorite_folders
@@ -1272,11 +1391,11 @@ ALTER TABLE "public"."movie_region_relation" ADD CONSTRAINT "movie_region_relati
 CREATE INDEX "idx_movies_actors_gin" ON "public"."movies" USING gin (
   "actors" "pg_catalog"."jsonb_path_ops"
 );
+CREATE INDEX "idx_movies_alias" ON "public"."movies" USING gin (
+  "alias" COLLATE "pg_catalog"."default" "public"."gin_trgm_ops"
+);
 CREATE INDEX "idx_movies_directors_gin" ON "public"."movies" USING gin (
   "directors" "pg_catalog"."jsonb_path_ops"
-);
-CREATE INDEX "idx_movies_writers_gin" ON "public"."movies" USING gin (
-  "writers" "pg_catalog"."jsonb_path_ops"
 );
 CREATE INDEX "idx_movies_douban_score" ON "public"."movies" USING btree (
   "douban_score" "pg_catalog"."numeric_ops" ASC NULLS LAST
@@ -1287,6 +1406,9 @@ CREATE INDEX "idx_movies_douban_votes" ON "public"."movies" USING btree (
 CREATE INDEX "idx_movies_full_search" ON "public"."movies" USING gin (
   "full_search_text" COLLATE "pg_catalog"."default" "public"."gin_trgm_ops"
 );
+CREATE INDEX "idx_movies_name" ON "public"."movies" USING gin (
+  "name" COLLATE "pg_catalog"."default" "public"."gin_trgm_ops"
+);
 CREATE INDEX "idx_movies_score_votes" ON "public"."movies" USING btree (
   "douban_score" "pg_catalog"."numeric_ops" DESC NULLS FIRST,
   "douban_votes" "pg_catalog"."int4_ops" DESC NULLS FIRST
@@ -1294,6 +1416,9 @@ CREATE INDEX "idx_movies_score_votes" ON "public"."movies" USING btree (
 CREATE INDEX "idx_movies_votes_score" ON "public"."movies" USING btree (
   "douban_votes" "pg_catalog"."int4_ops" DESC NULLS FIRST,
   "douban_score" "pg_catalog"."numeric_ops" DESC NULLS FIRST
+);
+CREATE INDEX "idx_movies_writers_gin" ON "public"."movies" USING gin (
+  "writers" "pg_catalog"."jsonb_path_ops"
 );
 CREATE INDEX "idx_movies_year" ON "public"."movies" USING btree (
   "year" "pg_catalog"."int4_ops" ASC NULLS LAST

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { NInput, useMessage } from 'naive-ui'
 import { useAuthStore } from '@/stores/auth'
 import AuthForm from '@/components/auth/AuthForm.vue'
@@ -8,7 +8,6 @@ import { useLogin } from '@/api/endpoints/auth-management/auth-management'
 import type { LoginDTO } from '@/api/model'
 
 const router = useRouter()
-const route = useRoute()
 const authStore = useAuthStore()
 const message = useMessage()
 const loginMutation = useLogin()
@@ -18,7 +17,7 @@ const form = ref({
   password: ''
 })
 
-const loading = computed(() => loginMutation.isPending.value)
+const loading = loginMutation.isPending
 const redirectTarget = computed(() => (typeof route.query.redirect === 'string' ? route.query.redirect : '/'))
 
 const handleLogin = async () => {
@@ -33,33 +32,33 @@ const handleLogin = async () => {
       password: form.value.password
     }
     const payload = await loginMutation.mutateAsync({ data: loginData })
-    
+
     // 登录成功，保存 token 和用户信息
     if (payload?.accessToken) {
+      // 只有 admin 才能从管理员页面登录
+      if (payload.role !== 0) {
+        message.warning('此页面仅限管理员使用，请回到首页登录')
+        router.replace('/')
+        return
+      }
+
       authStore.setAuth(payload)
-      const displayName =
-        payload.nickname ||
-        payload.id ||
-        '用户'
-      message.success(`欢迎回来，${displayName}！`)
-      
-      // 如果有 redirect 参数，登录后跳转到原页面
-      router.replace(redirectTarget.value)
+      message.success(`欢迎回来，${payload.nickname || payload.id}！`)
+      router.replace('/admin')
     } else {
       message.error('登录失败：未获取到令牌')
     }
   } catch (error: any) {
-    // 错误已在 axios 拦截器中处理，这里可以额外处理特定逻辑
     console.error('Login error:', error)
   }
 }
 </script>
 
 <template>
-  <AuthForm 
-    title="欢迎回来" 
-    buttonText="登录" 
-    type="login" 
+  <AuthForm
+    title="管理员登录"
+    buttonText="登录"
+    type="login"
     :loading="loading"
     @submit="handleLogin"
   >
@@ -82,12 +81,12 @@ const handleLogin = async () => {
 
     <template #footer>
       <p>
-        还没有账号？
+        普通用户？
         <a
-          @click="router.push({ path: '/register', query: redirectTarget === '/' ? undefined : { redirect: redirectTarget } })"
+          @click="router.replace('/')"
           class="text-accent cursor-pointer hover:underline font-medium"
         >
-          立即注册
+          回到首页登录
         </a>
       </p>
     </template>

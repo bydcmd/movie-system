@@ -110,6 +110,40 @@ spark-submit \
 
 If `--snapshot-date` is omitted, the job resolves the latest common PostgreSQL ODS snapshot partition with `dt <= calc-date`.
 
+## 4.5) Generate PostgreSQL-aligned ODS test snapshot
+
+When local business data is too sparse for DWD/DWS validation, you can generate one ODS snapshot partition that still matches the current PostgreSQL-driven pipeline:
+
+- `public.movies` is sampled from the business database only and is never synthetically fabricated.
+- User and interaction tables use a mixed strategy: first sample existing PostgreSQL rows, then top up with generated rows that reference the sampled movie set.
+- The job writes directly into the same `ods.ods_pg_*_full` Hive partitions consumed by downstream DWD/DWS jobs.
+
+Example:
+
+```bash
+spark-submit \
+  --master yarn \
+  --deploy-mode client \
+  --packages org.postgresql:postgresql:42.7.3 \
+  jobs/generate_dwd_user_event_source_data.py \
+  --config conf/etl_config.json \
+  --batch-date 2026-02-25
+```
+
+Common overrides:
+
+```bash
+--movie-limit 300 \
+--user-target 200 \
+--new-user-target 40 \
+--view-target 5000 \
+--comment-target 1000 \
+--sample-ratio 0.4 \
+--lookback-days 60
+```
+
+After it finishes, run the normal jobs with `--snapshot-date` equal to the generated `batch-date`.
+
 PostgreSQL-driven DWD snapshot job builds both user and movie snapshots in one run:
 
 ### 5.1 User and Movie snapshots (`dwd.dwd_user_snapshot_di`, `dwd.dwd_movie_snapshot_di`)

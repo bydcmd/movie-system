@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NAvatar, NButton, NDropdown, NInput, type DropdownOption } from 'naive-ui'
 import { useAuthz } from '@/composables/useAuthz'
 import { useAuthStore } from '@/stores/auth'
+import { useLoginModal } from '@/composables/useLoginModal'
 
 const route = useRoute()
 const router = useRouter()
@@ -67,6 +68,9 @@ const handleLogout = async () => {
   await authStore.logout()
   router.push('/login')
 }
+
+// 普通用户登录弹窗
+const { showLoginModal, openLoginModal } = useLoginModal()
 
 const userOptions = computed<DropdownOption[]>(() => {
   const options: DropdownOption[] = []
@@ -152,7 +156,7 @@ const handleUserSelect = async (key: string | number) => {
           </n-dropdown>
         </template>
         <template v-else>
-          <n-button text class="text-slate-600 hover:text-slate-900" @click="handleGuestEntry('/login')">
+          <n-button text class="text-slate-600 hover:text-slate-900" @click="openLoginModal">
             登录
           </n-button>
           <n-button type="primary" class="rounded-full px-6" @click="handleGuestEntry('/register')">
@@ -162,4 +166,6 @@ const handleUserSelect = async (key: string | number) => {
       </div>
     </div>
   </header>
+
+  <LoginModal v-model:show="showLoginModal" />
 </template>
