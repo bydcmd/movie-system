@@ -51,6 +51,7 @@ out/
 /frontend/src/**/*.d.ts
 !/frontend/src/env.d.ts
 /frontend/.pnpm-store/
+/frontend/.claude/
 .pnpm-store/
 *.tsbuildinfo
 npm-debug.log*
