@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NAvatar, NButton, NDropdown, NInput, type DropdownOption } from 'naive-ui'
 import { useAuthz } from '@/composables/useAuthz'
 import { useAuthStore } from '@/stores/auth'
-import { useLoginModal } from '@/composables/useLoginModal'
 
 const route = useRoute()
 const router = useRouter()
@@ -56,21 +55,15 @@ const handleSearch = async () => {
   })
 }
 
-const handleGuestEntry = (path: '/login' | '/register') => {
-  const redirect = route.fullPath
-  router.push({
-    path,
-    query: redirect && redirect !== '/' ? { redirect } : undefined
-  })
-}
-
 const handleLogout = async () => {
   await authStore.logout()
   router.push('/login')
 }
 
-// 普通用户登录弹窗
-const { showLoginModal, openLoginModal } = useLoginModal()
+const redirectQuery = computed(() => {
+  const path = route.fullPath
+  return path && path !== '/' ? { redirect: path } : undefined
+})
 
 const userOptions = computed<DropdownOption[]>(() => {
   const options: DropdownOption[] = []
@@ -156,16 +149,14 @@ const handleUserSelect = async (key: string | number) => {
           </n-dropdown>
         </template>
         <template v-else>
-          <n-button text class="text-slate-600 hover:text-slate-900" @click="openLoginModal">
+          <n-button text class="text-slate-600 hover:text-slate-900" @click="router.push({ path: '/login', query: redirectQuery })">
             登录
           </n-button>
-          <n-button type="primary" class="rounded-full px-6" @click="handleGuestEntry('/register')">
+          <n-button type="primary" class="rounded-full px-6" @click="router.push({ path: '/register', query: redirectQuery })">
             注册
           </n-button>
         </template>
       </div>
     </div>
   </header>
-
-  <LoginModal v-model:show="showLoginModal" />
 </template>

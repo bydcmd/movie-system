@@ -54,62 +54,67 @@ const goToMovies = () => {
   <div class="min-h-screen bg-slate-50 flex flex-col">
     <NavBar />
 
-    <main class="container mx-auto px-4 py-12 flex-1">
-      <section class="relative overflow-hidden rounded-[2rem] bg-slate-900 px-6 py-10 text-white shadow-xl md:px-10">
-        <div class="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(245,158,11,0.3),_transparent_30%),radial-gradient(circle_at_bottom_left,_rgba(59,130,246,0.18),_transparent_32%)]"></div>
-
-        <div class="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+    <main class="container mx-auto px-4 py-8 flex-1">
+      <!-- Page Header -->
+      <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+        <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
           <div>
-            <p class="text-sm font-semibold uppercase tracking-[0.35em] text-amber-300/80">Trending 100</p>
-            <h1 class="mt-4 text-4xl font-display font-bold tracking-tight md:text-5xl">
+            <p class="text-sm font-semibold uppercase tracking-widest text-amber-500">Trending 100</p>
+            <h1 class="mt-2 text-2xl font-display font-bold text-slate-900">
               {{ pageTitle }}
             </h1>
-            <p class="mt-4 max-w-2xl text-slate-300">
-              完整查看当前热榜前 100 名电影，支持日榜、周榜、月榜和总榜切换。
+            <p class="mt-1 text-sm text-slate-500">
+              查看当前热榜前 100 名电影，支持日榜、周榜、月榜和总榜切换
             </p>
           </div>
 
           <div class="flex flex-wrap gap-3">
-            <n-button quaternary class="rounded-full" @click="goHome">返回首页</n-button>
-            <n-button type="primary" class="rounded-full" @click="goToMovies">浏览电影库</n-button>
+            <n-button quaternary size="small" @click="goHome">
+              返回首页
+            </n-button>
+            <n-button type="primary" size="small" @click="goToMovies">
+              浏览电影库
+            </n-button>
           </div>
         </div>
-      </section>
+      </div>
 
-      <section class="mt-8">
+      <!-- Period Tabs -->
+      <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
         <TrendingPeriodTabs :model-value="selectedPeriod" @update:model-value="handlePeriodChange" />
-      </section>
+      </div>
 
-      <section class="mt-8">
+      <!-- Content -->
+      <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
         <div v-if="isLoading" class="flex items-center justify-center py-24">
           <n-spin size="large" />
         </div>
 
         <div
           v-else-if="trendingMoviesQuery.isError.value"
-          class="rounded-3xl border border-dashed border-slate-300 bg-white py-16 text-center text-slate-500"
+          class="rounded-xl border border-dashed border-slate-300 py-16 text-center text-slate-500"
         >
-          热榜加载失败，请稍后重试。
+          热榜加载失败，请稍后重试
         </div>
 
-        <n-empty v-else-if="trendingMovies.length === 0" description="当前周期暂无热榜数据" class="rounded-3xl bg-white py-16" />
+        <n-empty v-else-if="trendingMovies.length === 0" description="当前周期暂无热榜数据" />
 
-        <div v-else class="grid grid-cols-2 gap-8 md:grid-cols-3 xl:grid-cols-5">
+        <div v-else class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-6">
           <div
             v-for="(movie, index) in trendingMovies"
             :key="movie.movieId ?? `${selectedPeriod}-${index}`"
             class="relative"
           >
-            <div class="absolute left-3 top-3 z-10 rounded-full bg-slate-900/90 px-3 py-1 text-xs font-semibold text-white shadow-lg backdrop-blur">
+            <div class="absolute left-2 top-2 z-10 rounded-full bg-accent px-2 py-0.5 text-xs font-semibold text-white shadow-md">
               #{{ movie.rank ?? index + 1 }}
             </div>
             <MovieCard :movie="movie" />
           </div>
         </div>
-      </section>
+      </div>
     </main>
 
-    <footer class="bg-slate-900 py-12 text-center text-slate-400">
+    <footer class="bg-slate-900 text-slate-400 py-12 text-center mt-auto">
       <p>&copy; 2026 MovieReviews. 保留所有权利</p>
     </footer>
   </div>

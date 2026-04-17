@@ -2,8 +2,9 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { AUTH_ROLE, type AuthRole, useAuthStore } from '@/stores/auth'
 
 const HomeView = () => import('@/views/HomeView.vue')
-const LoginView = () => import('@/views/LoginView.vue')
-const RegisterView = () => import('@/views/RegisterView.vue')
+const AuthView = () => import('@/views/AuthView.vue')
+const AdminLoginView = () => import('@/views/AdminLoginView.vue')
+const AdminRegisterView = () => import('@/views/AdminRegisterView.vue')
 const MoviesView = () => import('@/views/MoviesView.vue')
 const TrendingMoviesView = () => import('@/views/TrendingMoviesView.vue')
 const MovieDetailView = () => import('@/views/MovieDetailView.vue')
@@ -52,13 +53,25 @@ const router = createRouter({
     {
       path: '/login',
       name: 'login',
-      component: LoginView,
+      component: AuthView,
       meta: { guestOnly: true }
     },
     {
       path: '/register',
       name: 'register',
-      component: RegisterView,
+      component: AuthView,
+      meta: { guestOnly: true }
+    },
+    {
+      path: '/admin/login',
+      name: 'admin-login',
+      component: AdminLoginView,
+      meta: { guestOnly: true }
+    },
+    {
+      path: '/admin/register',
+      name: 'admin-register',
+      component: AdminRegisterView,
       meta: { guestOnly: true }
     },
     {
