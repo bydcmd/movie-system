@@ -91,7 +91,7 @@ public interface CommentService {
     /**
      * 修改长评
      */
-    void updateLongReview(String userId, Long movieId, String title, String content);
+    void updateLongReview(String userId, Long movieId, String title, String content, Integer version);
 
     /**
      * 保存长评草稿
@@ -101,7 +101,7 @@ public interface CommentService {
     /**
      * 更新长评草稿
      */
-    void updateLongReviewDraft(String userId, Long movieId, String title, String content);
+    void updateLongReviewDraft(String userId, Long movieId, String title, String content, Integer version);
 
     /**
      * 发布草稿

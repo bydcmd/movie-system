@@ -10,6 +10,8 @@ import com.movie.backend.dto.EditableLongReviewVO;
 import com.movie.backend.dto.LongReviewDTO;
 import com.movie.backend.dto.UpdateCommentContentDTO;
 import com.movie.backend.dto.UpdateCommentWithRatingDTO;
+import com.movie.backend.dto.UpdateExistingLongReviewDTO;
+import com.movie.backend.dto.UpdateLongReviewDraftDTO;
 import com.movie.backend.dto.UpdateLongReviewDTO;
 import com.movie.backend.entity.Comment;
 import com.movie.backend.entity.User;
@@ -79,9 +81,9 @@ public class CommentController {
     @PutMapping("/movies/{movieId}/long-reviews/me")
     public Result<String> updateMyMovieLongReview(
             @Parameter(description = "电影ID", required = true) @PathVariable @NotNull @Min(1) Long movieId,
-            @Valid @RequestBody UpdateLongReviewDTO dto,
+            @Valid @RequestBody UpdateExistingLongReviewDTO dto,
             @AuthenticationPrincipal User user) {
-        commentService.updateLongReview(user.getId(), movieId, dto.getTitle(), dto.getContent());
+        commentService.updateLongReview(user.getId(), movieId, dto.getTitle(), dto.getContent(), dto.getVersion());
         return Result.success("长评修改成功");
     }
 
@@ -243,9 +245,9 @@ public class CommentController {
     @PutMapping("/movies/{movieId}/long-reviews/draft")
     public Result<String> updateLongReviewDraft(
             @Parameter(description = "电影ID", required = true) @PathVariable @NotNull @Min(1) Long movieId,
-            @RequestBody UpdateLongReviewDTO dto,
+            @RequestBody UpdateLongReviewDraftDTO dto,
             @AuthenticationPrincipal User user) {
-        commentService.updateLongReviewDraft(user.getId(), movieId, dto.getTitle(), dto.getContent());
+        commentService.updateLongReviewDraft(user.getId(), movieId, dto.getTitle(), dto.getContent(), dto.getVersion());
         return Result.success("草稿更新成功");
     }
 

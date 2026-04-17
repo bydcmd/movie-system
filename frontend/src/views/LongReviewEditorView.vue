@@ -10,9 +10,15 @@ import {
   usePublishDraft,
   useSaveLongReviewDraft,
   useSubmitMovieLongReview,
+  useUpdateLongReviewDraft,
   useUpdateMyMovieLongReview
 } from '@/api/endpoints/comment-management/comment-management'
-import type { Comment, UpdateLongReviewDTO } from '@/api/model'
+import type {
+  Comment,
+  UpdateExistingLongReviewDTO,
+  UpdateLongReviewDraftDTO,
+  UpdateLongReviewDTO
+} from '@/api/model'
 
 const route = useRoute()
 const router = useRouter()
@@ -73,11 +79,13 @@ const isEditMode = computed(() => commentId.value !== null)
 const longTitle = shallowRef('')
 const longContent = shallowRef(createEmptyTiptapDocument())
 const longPlainText = shallowRef('')
+const longReviewVersion = shallowRef<number | null>(null)
 const longReviewStatus = shallowRef<LongReviewStatus>(DRAFT_STATUS)
 const activeSaveAction = shallowRef<SaveAction>(null)
 
 const { mutateAsync: createComment, isPending: isCreating } = useSubmitMovieLongReview()
 const { mutateAsync: updateComment, isPending: isUpdating } = useUpdateMyMovieLongReview()
+const { mutateAsync: updateDraft, isPending: isUpdatingDraft } = useUpdateLongReviewDraft()
 const { mutateAsync: saveDraft, isPending: isSavingDraft } = useSaveLongReviewDraft()
 const { mutateAsync: publishDraft, isPending: isPublishingDraft } = usePublishDraft()
 const myLongReviewQuery = useGetMyMovieLongReview(
@@ -94,6 +102,7 @@ const { data: commentDetail, isLoading: isLoadingDetail } = myLongReviewQuery
 const isSaving = computed(() => (
   isCreating.value ||
   isUpdating.value ||
+  isUpdatingDraft.value ||
   isSavingDraft.value ||
   isPublishingDraft.value
 ))
@@ -161,6 +170,7 @@ watch(
     longTitle.value = detail.title || ''
     longContent.value = detail.content || createEmptyTiptapDocument()
     longPlainText.value = extractTiptapText(longContent.value)
+    longReviewVersion.value = typeof detail.version === 'number' ? detail.version : null
     longReviewStatus.value = normalizeLongReviewStatus(detail.status)
 
     const loadedCommentId = parseRouteId(detail.id)
@@ -191,6 +201,7 @@ watch(
     longTitle.value = ''
     longContent.value = createEmptyTiptapDocument()
     longPlainText.value = ''
+    longReviewVersion.value = null
     longReviewStatus.value = DRAFT_STATUS
   },
   { immediate: true }
@@ -234,6 +245,27 @@ function buildLongReviewPayload(): UpdateLongReviewDTO {
   return {
     title: trimmedTitle.value,
     content: longContent.value
+  }
+}
+
+function getCurrentLongReviewVersion(): number {
+  if (typeof longReviewVersion.value !== 'number') {
+    throw new Error('当前长评版本缺失，请刷新后重试')
+  }
+  return longReviewVersion.value
+}
+
+function buildPublishedLongReviewPayload(): UpdateExistingLongReviewDTO {
+  return {
+    ...buildLongReviewPayload(),
+    version: getCurrentLongReviewVersion()
+  }
+}
+
+function buildDraftUpdatePayload(): UpdateLongReviewDraftDTO {
+  return {
+    ...buildLongReviewPayload(),
+    version: getCurrentLongReviewVersion()
   }
 }
 
@@ -319,10 +351,17 @@ async function persistLongReview(status: LongReviewStatus) {
     let targetCommentId = getEditableCommentId()
 
     if (status === DRAFT_STATUS) {
-      savedResult = await saveDraft({
-        movieId: movieId.value,
-        data: payload
-      })
+      if (wasEditMode && previousStatus === DRAFT_STATUS) {
+        savedResult = await updateDraft({
+          movieId: movieId.value,
+          data: buildDraftUpdatePayload()
+        })
+      } else {
+        savedResult = await saveDraft({
+          movieId: movieId.value,
+          data: payload
+        })
+      }
       targetCommentId = await resolveEditableCommentId(savedResult, { preferRefetch: true })
 
       longReviewStatus.value = DRAFT_STATUS
@@ -332,10 +371,17 @@ async function persistLongReview(status: LongReviewStatus) {
     }
 
     if (previousStatus === DRAFT_STATUS) {
-      savedResult = await saveDraft({
-        movieId: movieId.value,
-        data: payload
-      })
+      if (wasEditMode) {
+        savedResult = await updateDraft({
+          movieId: movieId.value,
+          data: buildDraftUpdatePayload()
+        })
+      } else {
+        savedResult = await saveDraft({
+          movieId: movieId.value,
+          data: payload
+        })
+      }
       targetCommentId = await resolveEditableCommentId(savedResult, { preferRefetch: true })
 
       if (!targetCommentId) {
@@ -350,7 +396,7 @@ async function persistLongReview(status: LongReviewStatus) {
     } else if (wasEditMode && commentId.value) {
       savedResult = await updateComment({
         movieId: movieId.value,
-        data: payload
+        data: buildPublishedLongReviewPayload()
       })
     } else {
       savedResult = await createComment({
@@ -380,7 +426,17 @@ async function persistLongReview(status: LongReviewStatus) {
     }
   } catch (error) {
     console.error('Failed to save long review:', error)
-    message.error('保存失败，请稍后再试')
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'response' in error &&
+      typeof (error as { response?: { status?: unknown } }).response?.status === 'number' &&
+      (error as { response?: { status?: number } }).response?.status === 409
+    ) {
+      message.error('内容已被更新，请刷新后重试')
+    } else {
+      message.error('保存失败，请稍后再试')
+    }
   } finally {
     activeSaveAction.value = null
   }

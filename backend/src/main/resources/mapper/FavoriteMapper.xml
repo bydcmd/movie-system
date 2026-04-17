@@ -148,4 +148,9 @@
             #{movieId}
         </foreach>
     </update>
+
+    <delete id="deleteByMovieId">
+        DELETE FROM favorites
+        WHERE movie_id = #{movieId}
+    </delete>
 </mapper>

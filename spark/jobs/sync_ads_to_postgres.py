@@ -70,8 +70,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--sync-types",
-        default="hot_movies,similar_movies",
-        help="Comma-separated list of sync types. Options: hot_movies, similar_movies, user_retention, genre_preference, all. Default: hot_movies,similar_movies",
+        default="all",
+        help="Comma-separated list of sync types. Options: hot_movies, similar_movies, user_retention, genre_preference, all. Default: all",
     )
     return parser.parse_args()
 

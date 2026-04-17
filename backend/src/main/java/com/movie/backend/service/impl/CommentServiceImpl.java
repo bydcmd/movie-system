@@ -193,12 +193,15 @@ public class CommentServiceImpl implements CommentService {
 
     @Override
     @Transactional
-    public void updateLongReview(String userId, Long movieId, String title, String content) {
+    public void updateLongReview(String userId, Long movieId, String title, String content, Integer version) {
         if (!StringUtils.hasText(title)) {
             throw new IllegalArgumentException("长评标题不能为空");
         }
         if (title.length() > 100) {
             throw new IllegalArgumentException("标题不能超过100字");
+        }
+        if (version == null) {
+            throw new IllegalArgumentException("版本号不能为空");
         }
 
         TiptapJsonValidator.ValidationResult validationResult = TiptapJsonValidator.validate(content);
@@ -211,9 +214,17 @@ public class CommentServiceImpl implements CommentService {
             throw new BusinessException(404, "修改失败，您尚未对该电影发表长评");
         }
 
-        int rows = commentMapper.updateLongComment(comment.getId(), userId, movieId, title.trim(), content.trim(), new java.util.Date());
+        int rows = commentMapper.updateLongComment(
+                comment.getId(),
+                userId,
+                movieId,
+                title.trim(),
+                content.trim(),
+                new java.util.Date(),
+                version
+        );
         if (rows == 0) {
-            throw new BusinessException(404, "修改失败，您尚未对该电影发表长评");
+            throw new BusinessException(409, "长评已被更新，请刷新后重试");
         }
     }
 
@@ -343,7 +354,18 @@ public class CommentServiceImpl implements CommentService {
         Comment existingDraft = commentMapper.selectByUserAndMovieAndTypeAndStatus(userId, movieId, LONG_REVIEW_TYPE, STATUS_DRAFT);
 
         if (existingDraft != null) {
-            commentMapper.updateDraftContent(userId, movieId, LONG_REVIEW_TYPE, StringUtils.hasText(title) ? title.trim() : null, content != null ? content.trim() : null, new java.util.Date());
+            int rows = commentMapper.updateDraftContent(
+                    userId,
+                    movieId,
+                    LONG_REVIEW_TYPE,
+                    StringUtils.hasText(title) ? title.trim() : null,
+                    content != null ? content.trim() : null,
+                    new java.util.Date(),
+                    existingDraft.getVersion()
+            );
+            if (rows == 0) {
+                throw new BusinessException(409, "草稿已被更新，请刷新后重试");
+            }
             return;
         }
 
@@ -363,9 +385,12 @@ public class CommentServiceImpl implements CommentService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void updateLongReviewDraft(String userId, Long movieId, String title, String content) {
+    public void updateLongReviewDraft(String userId, Long movieId, String title, String content, Integer version) {
         if (StringUtils.hasText(title) && title.length() > 100) {
             throw new IllegalArgumentException("标题不能超过100字");
+        }
+        if (version == null) {
+            throw new IllegalArgumentException("版本号不能为空");
         }
 
         if (StringUtils.hasText(content)) {
@@ -375,10 +400,23 @@ public class CommentServiceImpl implements CommentService {
             }
         }
 
-        int rows = commentMapper.updateDraftContent(userId, movieId, LONG_REVIEW_TYPE, StringUtils.hasText(title) ? title.trim() : null, content != null ? content.trim() : null, new java.util.Date());
+        Comment draft = commentMapper.selectByUserAndMovieAndTypeAndStatus(userId, movieId, LONG_REVIEW_TYPE, STATUS_DRAFT);
+        if (draft == null) {
+            throw new BusinessException(404, "草稿不存在");
+        }
+
+        int rows = commentMapper.updateDraftContent(
+                userId,
+                movieId,
+                LONG_REVIEW_TYPE,
+                StringUtils.hasText(title) ? title.trim() : null,
+                content != null ? content.trim() : null,
+                new java.util.Date(),
+                version
+        );
 
         if (rows == 0) {
-            throw new BusinessException(404, "草稿不存在");
+            throw new BusinessException(409, "草稿已被更新，请刷新后重试");
         }
     }
 
@@ -410,9 +448,17 @@ public class CommentServiceImpl implements CommentService {
 
         Comment existingPublished = commentMapper.selectByUserAndMovieAndTypeAndStatus(userId, draft.getMovieId(), LONG_REVIEW_TYPE, STATUS_PUBLISHED);
         if (existingPublished != null) {
-            int updateRows = commentMapper.updateLongComment(existingPublished.getId(), userId, draft.getMovieId(), normalizedTitle, normalizedContent, new java.util.Date());
+            int updateRows = commentMapper.updateLongComment(
+                    existingPublished.getId(),
+                    userId,
+                    draft.getMovieId(),
+                    normalizedTitle,
+                    normalizedContent,
+                    new java.util.Date(),
+                    existingPublished.getVersion()
+            );
             if (updateRows == 0) {
-                throw new BusinessException(500, "发布失败");
+                throw new BusinessException(409, "正式长评已被更新，请刷新后重试");
             }
 
             int deleteRows = commentMapper.deleteByIdAndUserId(commentId, userId);
@@ -422,9 +468,9 @@ public class CommentServiceImpl implements CommentService {
             return;
         }
 
-        int rows = commentMapper.updateStatus(commentId, userId, STATUS_PUBLISHED, new java.util.Date());
+        int rows = commentMapper.updateStatus(commentId, userId, STATUS_PUBLISHED, new java.util.Date(), draft.getVersion());
         if (rows == 0) {
-            throw new BusinessException(500, "发布失败");
+            throw new BusinessException(409, "草稿已被更新，请刷新后重试");
         }
     }
 }

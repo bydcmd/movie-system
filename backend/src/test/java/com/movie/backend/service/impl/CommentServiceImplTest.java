@@ -67,7 +67,39 @@ public class CommentServiceImplTest {
         commentService.updateComment("user123", 1L, "  短评  ");
 
         verify(commentMapper).updateByUserAndMovieAndType(eq("user123"), eq(1L), eq(1), eq("短评"), any());
-        verify(commentMapper, never()).updateLongComment(anyLong(), anyString(), anyLong(), anyString(), anyString(), any());
+        verify(commentMapper, never()).updateLongComment(anyLong(), anyString(), anyLong(), anyString(), anyString(), any(), any());
+    }
+
+    @Test
+    public void updateLongReviewUsesVersionedMapper() {
+        Comment published = new Comment();
+        published.setId(31L);
+
+        when(commentMapper.selectByUserAndMovieAndTypeAndStatus("user123", 1L, 2, 2)).thenReturn(published);
+        when(commentMapper.updateLongComment(eq(31L), eq("user123"), eq(1L), eq("长评标题"), eq(VALID_LONG_REVIEW_CONTENT), any(), eq(3)))
+                .thenReturn(1);
+
+        commentService.updateLongReview("user123", 1L, "  长评标题  ", VALID_LONG_REVIEW_CONTENT, 3);
+
+        verify(commentMapper).updateLongComment(eq(31L), eq("user123"), eq(1L), eq("长评标题"), eq(VALID_LONG_REVIEW_CONTENT), any(), eq(3));
+    }
+
+    @Test
+    public void updateLongReviewThrowsConflictWhenVersionMismatch() {
+        Comment published = new Comment();
+        published.setId(32L);
+
+        when(commentMapper.selectByUserAndMovieAndTypeAndStatus("user123", 1L, 2, 2)).thenReturn(published);
+        when(commentMapper.updateLongComment(eq(32L), eq("user123"), eq(1L), eq("长评标题"), eq(VALID_LONG_REVIEW_CONTENT), any(), eq(4)))
+                .thenReturn(0);
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> commentService.updateLongReview("user123", 1L, "长评标题", VALID_LONG_REVIEW_CONTENT, 4)
+        );
+
+        assertEquals(409, exception.getCode());
+        assertEquals("长评已被更新，请刷新后重试", exception.getMessage());
     }
 
     @Test
@@ -118,6 +150,70 @@ public class CommentServiceImplTest {
         verify(commentMapper).insert(any(Comment.class));
         verify(commentMapper).selectByUserAndMovieAndTypeAndStatus("user123", 1L, 2, 1);
         verify(commentMapper).deleteByIdAndUserId(66L, "user123");
+    }
+
+    @Test
+    public void updateLongReviewDraftThrowsConflictWhenVersionMismatch() {
+        Comment draft = new Comment();
+        draft.setId(41L);
+        draft.setStatus(1);
+
+        when(commentMapper.selectByUserAndMovieAndTypeAndStatus("user123", 1L, 2, 1)).thenReturn(draft);
+        when(commentMapper.updateDraftContent(eq("user123"), eq(1L), eq(2), eq("草稿标题"), eq(VALID_LONG_REVIEW_CONTENT), any(), eq(5)))
+                .thenReturn(0);
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> commentService.updateLongReviewDraft("user123", 1L, "草稿标题", VALID_LONG_REVIEW_CONTENT, 5)
+        );
+
+        assertEquals(409, exception.getCode());
+        assertEquals("草稿已被更新，请刷新后重试", exception.getMessage());
+    }
+
+    @Test
+    public void publishDraftUsesPublishedCommentVersionWhenMerging() {
+        Comment draft = new Comment();
+        draft.setId(90L);
+        draft.setType(2);
+        draft.setStatus(1);
+        draft.setMovieId(1L);
+        draft.setTitle("草稿标题");
+        draft.setContent(VALID_LONG_REVIEW_CONTENT);
+
+        Comment published = new Comment();
+        published.setId(91L);
+        published.setVersion(7);
+
+        when(commentMapper.selectByIdAndUserId(90L, "user123")).thenReturn(draft);
+        when(commentMapper.selectByUserAndMovieAndTypeAndStatus("user123", 1L, 2, 2)).thenReturn(published);
+        when(commentMapper.updateLongComment(eq(91L), eq("user123"), eq(1L), eq("草稿标题"), eq(VALID_LONG_REVIEW_CONTENT), any(), eq(7)))
+                .thenReturn(1);
+        when(commentMapper.deleteByIdAndUserId(90L, "user123")).thenReturn(1);
+
+        commentService.publishDraft("user123", 90L);
+
+        verify(commentMapper).updateLongComment(eq(91L), eq("user123"), eq(1L), eq("草稿标题"), eq(VALID_LONG_REVIEW_CONTENT), any(), eq(7));
+    }
+
+    @Test
+    public void publishDraftUsesDraftVersionWhenPublishingDirectly() {
+        Comment draft = new Comment();
+        draft.setId(92L);
+        draft.setType(2);
+        draft.setStatus(1);
+        draft.setMovieId(1L);
+        draft.setTitle("草稿标题");
+        draft.setContent(VALID_LONG_REVIEW_CONTENT);
+        draft.setVersion(8);
+
+        when(commentMapper.selectByIdAndUserId(92L, "user123")).thenReturn(draft);
+        when(commentMapper.selectByUserAndMovieAndTypeAndStatus("user123", 1L, 2, 2)).thenReturn(null);
+        when(commentMapper.updateStatus(eq(92L), eq("user123"), eq(2), any(), eq(8))).thenReturn(1);
+
+        commentService.publishDraft("user123", 92L);
+
+        verify(commentMapper).updateStatus(eq(92L), eq("user123"), eq(2), any(), eq(8));
     }
 
     @Test

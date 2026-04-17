@@ -27,10 +27,3 @@ jwt:
   secret: TestOnlyJwtSecretKeyForMovieSystemThatIsAtLeast64BytesLongForHS512
   access-token-expiration: 3600000
   refresh-token-expiration: 2592000000
-
-hive:
-  datasource:
-    driver-class-name: org.apache.hive.jdbc.HiveDriver
-    url: jdbc:hive2://127.0.0.1:10000/default
-    username: hive
-    password:

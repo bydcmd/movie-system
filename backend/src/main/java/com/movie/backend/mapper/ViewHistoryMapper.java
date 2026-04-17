@@ -1,21 +1,21 @@
 package com.movie.backend.mapper;
 
-import com.movie.backend.dto.MovieItemVO;
-import com.movie.backend.entity.ViewHistory;
-import org.apache.ibatis.annotations.Mapper;
-import org.apache.ibatis.annotations.Param;
-import java.util.List;
-
-@Mapper
-public interface ViewHistoryMapper {
-    /**
-     * 插入浏览历史记录
-     */
-    int insert(ViewHistory viewHistory);
-
-    /**
-     * 查询用户的浏览历史列表（按时间倒序）
-     */
+import com.movie.backend.dto.MovieItemVO;
+import com.movie.backend.entity.ViewHistory;
+import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+import java.util.List;
+
+@Mapper
+public interface ViewHistoryMapper {
+    /**
+     * 插入浏览历史记录
+     */
+    int insert(ViewHistory viewHistory);
+
+    /**
+     * 查询用户的浏览历史列表（按时间倒序）
+     */
     List<MovieItemVO> selectHistoryByUserId(@Param("userId") String userId);
 
     /**
@@ -47,4 +47,9 @@ public interface ViewHistoryMapper {
      * 更新浏览时间（已存在的记录）
      */
     int updateViewTime(@Param("userId") String userId, @Param("movieId") Long movieId);
+
+    /**
+     * 根据电影ID删除浏览历史
+     */
+    int deleteByMovieId(@Param("movieId") Long movieId);
 }

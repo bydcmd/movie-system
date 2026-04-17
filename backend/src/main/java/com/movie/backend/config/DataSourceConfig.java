@@ -19,7 +19,6 @@ import javax.sql.DataSource;
 @MapperScan(basePackages = "com.movie.backend.mapper", sqlSessionFactoryRef = "postgresqlSqlSessionFactory")
 public class DataSourceConfig {
 
-    // --- Primary PostgreSQL DataSource ---
     @Bean(name = "postgresqlDataSource")
     @Primary
     @ConfigurationProperties(prefix = "spring.datasource")
@@ -39,29 +38,17 @@ public class DataSourceConfig {
         SqlSessionFactoryBean bean = new SqlSessionFactoryBean();
         bean.setDataSource(dataSource);
         bean.setMapperLocations(new PathMatchingResourcePatternResolver().getResources("classpath:mapper/*.xml"));
-        
+
         org.apache.ibatis.session.Configuration mybatisConfig = new org.apache.ibatis.session.Configuration();
         mybatisConfig.setMapUnderscoreToCamelCase(true);
         bean.setConfiguration(mybatisConfig);
-        
+
         return bean.getObject();
     }
 
     @Bean(name = "postgresqlJdbcTemplate")
     @Primary
     public JdbcTemplate postgresqlJdbcTemplate(@Qualifier("postgresqlDataSource") DataSource dataSource) {
-        return new JdbcTemplate(dataSource);
-    }
-
-    // --- Secondary Hive DataSource ---
-    @Bean(name = "hiveDataSource")
-    @ConfigurationProperties(prefix = "hive.datasource")
-    public DataSource hiveDataSource() {
-        return org.springframework.boot.jdbc.DataSourceBuilder.create().build();
-    }
-
-    @Bean(name = "hiveJdbcTemplate")
-    public JdbcTemplate hiveJdbcTemplate(@Qualifier("hiveDataSource") DataSource dataSource) {
         return new JdbcTemplate(dataSource);
     }
 }

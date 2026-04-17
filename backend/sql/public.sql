@@ -12,7 +12,7 @@
  Target Server Version : 170007 (170007)
  File Encoding         : 65001
 
- Date: 12/04/2026 13:41:05
+ Date: 14/04/2026 14:10:59
 */
 
 
@@ -304,24 +304,6 @@ COMMENT ON COLUMN "public"."comments"."status" IS '评论状态: 1-草稿, 2-发
 COMMENT ON TABLE "public"."comments" IS '评论表';
 
 -- ----------------------------
--- Table structure for event_outbox
--- ----------------------------
-DROP TABLE IF EXISTS "public"."event_outbox";
-CREATE TABLE "public"."event_outbox" (
-  "id" int8 NOT NULL DEFAULT nextval('event_outbox_id_seq'::regclass),
-  "topic" varchar(255) COLLATE "pg_catalog"."default" NOT NULL,
-  "message_key" varchar(255) COLLATE "pg_catalog"."default",
-  "payload" text COLLATE "pg_catalog"."default" NOT NULL,
-  "status" int2 NOT NULL DEFAULT 0,
-  "retry_count" int4 NOT NULL DEFAULT 0,
-  "next_retry_time" timestamp(6) NOT NULL,
-  "created_at" timestamp(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updated_at" timestamp(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "last_error" varchar(1000) COLLATE "pg_catalog"."default"
-)
-;
-
--- ----------------------------
 -- Table structure for favorite_folders
 -- ----------------------------
 DROP TABLE IF EXISTS "public"."favorite_folders";
@@ -610,7 +592,7 @@ COMMENT ON COLUMN "public"."stats_hot_movies"."movie_id" IS '电影ID (关联 mo
 COMMENT ON COLUMN "public"."stats_hot_movies"."period_type" IS '统计周期: DAILY(今日), WEEKLY(本周), MONTHLY(本月), TOTAL(总榜)';
 COMMENT ON COLUMN "public"."stats_hot_movies"."hot_score" IS '热度分值 (加权计算后的结果)';
 COMMENT ON COLUMN "public"."stats_hot_movies"."calc_date" IS '计算日期 (例如 2023-11-11)';
-COMMENT ON TABLE "public"."stats_hot_movies" IS '电影热度统计表(Spark离线计算结果)';
+COMMENT ON TABLE "public"."stats_hot_movies" IS '电影热度统计表(离线计算结果)';
 
 -- ----------------------------
 -- Table structure for stats_similar_movies
@@ -851,6 +833,74 @@ CREATE FUNCTION "public"."gtrgm_union"(internal, internal)
   COST 1;
 
 -- ----------------------------
+-- Function structure for refresh_movie_relation_cache
+-- ----------------------------
+DROP FUNCTION IF EXISTS "public"."refresh_movie_relation_cache"("p_movie_id" int8);
+CREATE FUNCTION "public"."refresh_movie_relation_cache"("p_movie_id" int8)
+  RETURNS "pg_catalog"."void" AS $BODY$
+BEGIN
+UPDATE public.movies m
+SET
+    genres = g.genres,
+    languages = l.languages,
+    regions = r.regions
+    FROM
+          (
+              SELECT mgr.movie_id,
+                     string_agg(DISTINCT g.name, ' / ' ORDER BY g.name) AS genres
+              FROM public.movie_genre_relation mgr
+              JOIN public.genres g ON g.id = mgr.genre_id
+              WHERE mgr.movie_id = p_movie_id
+              GROUP BY mgr.movie_id
+          ) g
+          FULL JOIN
+          (
+              SELECT mlr.movie_id,
+                     string_agg(DISTINCT l.name, ' / ' ORDER BY l.name) AS languages
+              FROM public.movie_language_relation mlr
+              JOIN public.languages l ON l.id = mlr.language_id
+              WHERE mlr.movie_id = p_movie_id
+              GROUP BY mlr.movie_id
+          ) l ON l.movie_id = g.movie_id
+    FULL JOIN
+    (
+    SELECT mrr.movie_id,
+    string_agg(DISTINCT r.name, ' / ' ORDER BY r.name) AS regions
+    FROM public.movie_region_relation mrr
+    JOIN public.regions r ON r.id = mrr.region_id
+    WHERE mrr.movie_id = p_movie_id
+    GROUP BY mrr.movie_id
+    ) r ON r.movie_id = COALESCE(g.movie_id, l.movie_id)
+WHERE m.movie_id = p_movie_id;
+
+-- 没有关联记录时清空缓存列
+UPDATE public.movies
+SET
+    genres = (
+        SELECT string_agg(DISTINCT g.name, ' / ' ORDER BY g.name)
+        FROM public.movie_genre_relation mgr
+                 JOIN public.genres g ON g.id = mgr.genre_id
+        WHERE mgr.movie_id = p_movie_id
+    ),
+    languages = (
+        SELECT string_agg(DISTINCT l.name, ' / ' ORDER BY l.name)
+        FROM public.movie_language_relation mlr
+                 JOIN public.languages l ON l.id = mlr.language_id
+        WHERE mlr.movie_id = p_movie_id
+    ),
+    regions = (
+        SELECT string_agg(DISTINCT r.name, ' / ' ORDER BY r.name)
+        FROM public.movie_region_relation mrr
+                 JOIN public.regions r ON r.id = mrr.region_id
+        WHERE mrr.movie_id = p_movie_id
+    )
+WHERE movie_id = p_movie_id;
+END;
+  $BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+
+-- ----------------------------
 -- Function structure for set_limit
 -- ----------------------------
 DROP FUNCTION IF EXISTS "public"."set_limit"(float4);
@@ -948,6 +998,33 @@ CREATE FUNCTION "public"."strict_word_similarity_op"(text, text)
   RETURNS "pg_catalog"."bool" AS '$libdir/pg_trgm', 'strict_word_similarity_op'
   LANGUAGE c STABLE STRICT
   COST 1;
+
+-- ----------------------------
+-- Function structure for trigger_refresh_movie_relation_cache
+-- ----------------------------
+DROP FUNCTION IF EXISTS "public"."trigger_refresh_movie_relation_cache"();
+CREATE FUNCTION "public"."trigger_refresh_movie_relation_cache"()
+  RETURNS "pg_catalog"."trigger" AS $BODY$
+BEGIN
+      IF TG_OP = 'DELETE' THEN
+          PERFORM public.refresh_movie_relation_cache(OLD.movie_id);
+RETURN OLD;
+END IF;
+
+      IF TG_OP = 'UPDATE' THEN
+          IF OLD.movie_id IS DISTINCT FROM NEW.movie_id THEN
+              PERFORM public.refresh_movie_relation_cache(OLD.movie_id);
+END IF;
+          PERFORM public.refresh_movie_relation_cache(NEW.movie_id);
+RETURN NEW;
+END IF;
+
+      PERFORM public.refresh_movie_relation_cache(NEW.movie_id);
+RETURN NEW;
+END;
+  $BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
 
 -- ----------------------------
 -- Function structure for update_favorite_folders_update_time
@@ -1194,7 +1271,7 @@ SELECT setval('"public"."stats_user_retention_id_seq"', 93, true);
 -- ----------------------------
 ALTER SEQUENCE "public"."view_history_history_id_seq"
 OWNED BY "public"."view_history"."history_id";
-SELECT setval('"public"."view_history_history_id_seq"', 1152751459502767562, true);
+SELECT setval('"public"."view_history_history_id_seq"', 1152751459502767564, true);
 
 -- ----------------------------
 -- Indexes structure for table comment_likes
@@ -1251,19 +1328,6 @@ ALTER TABLE "public"."comments" ADD CONSTRAINT "chk_comments_no_short_draft" CHE
 -- Primary Key structure for table comments
 -- ----------------------------
 ALTER TABLE "public"."comments" ADD CONSTRAINT "comments_pkey" PRIMARY KEY ("comment_id");
-
--- ----------------------------
--- Indexes structure for table event_outbox
--- ----------------------------
-CREATE INDEX "idx_event_outbox_status_time" ON "public"."event_outbox" USING btree (
-  "status" "pg_catalog"."int2_ops" ASC NULLS LAST,
-  "next_retry_time" "pg_catalog"."timestamp_ops" ASC NULLS LAST
-);
-
--- ----------------------------
--- Primary Key structure for table event_outbox
--- ----------------------------
-ALTER TABLE "public"."event_outbox" ADD CONSTRAINT "event_outbox_pkey" PRIMARY KEY ("id");
 
 -- ----------------------------
 -- Indexes structure for table favorite_folders
@@ -1336,6 +1400,13 @@ CREATE INDEX "idx_movie_genre_movie_id" ON "public"."movie_genre_relation" USING
 );
 
 -- ----------------------------
+-- Triggers structure for table movie_genre_relation
+-- ----------------------------
+CREATE TRIGGER "trg_movie_genre_cache" AFTER INSERT OR UPDATE OR DELETE ON "public"."movie_genre_relation"
+FOR EACH ROW
+EXECUTE PROCEDURE "public"."trigger_refresh_movie_relation_cache"();
+
+-- ----------------------------
 -- Uniques structure for table movie_genre_relation
 -- ----------------------------
 ALTER TABLE "public"."movie_genre_relation" ADD CONSTRAINT "uk_movie_genre" UNIQUE ("movie_id", "genre_id");
@@ -1356,6 +1427,13 @@ CREATE INDEX "idx_movie_language_movie_id" ON "public"."movie_language_relation"
 );
 
 -- ----------------------------
+-- Triggers structure for table movie_language_relation
+-- ----------------------------
+CREATE TRIGGER "trg_movie_language_cache" AFTER INSERT OR UPDATE OR DELETE ON "public"."movie_language_relation"
+FOR EACH ROW
+EXECUTE PROCEDURE "public"."trigger_refresh_movie_relation_cache"();
+
+-- ----------------------------
 -- Uniques structure for table movie_language_relation
 -- ----------------------------
 ALTER TABLE "public"."movie_language_relation" ADD CONSTRAINT "uk_movie_language" UNIQUE ("movie_id", "language_id");
@@ -1374,6 +1452,13 @@ CREATE INDEX "idx_movie_region_movie_id" ON "public"."movie_region_relation" USI
 CREATE INDEX "idx_movie_region_region_id" ON "public"."movie_region_relation" USING btree (
   "region_id" "pg_catalog"."int4_ops" ASC NULLS LAST
 );
+
+-- ----------------------------
+-- Triggers structure for table movie_region_relation
+-- ----------------------------
+CREATE TRIGGER "trg_movie_region_cache" AFTER INSERT OR UPDATE OR DELETE ON "public"."movie_region_relation"
+FOR EACH ROW
+EXECUTE PROCEDURE "public"."trigger_refresh_movie_relation_cache"();
 
 -- ----------------------------
 -- Uniques structure for table movie_region_relation

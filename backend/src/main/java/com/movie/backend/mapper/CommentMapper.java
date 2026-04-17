@@ -115,6 +115,11 @@ public interface CommentMapper {
     int deleteByIdAndUserId(@Param("id") Long id, @Param("userId") String userId);
 
     /**
+     * 根据电影ID删除评论
+     */
+    int deleteByMovieId(@Param("movieId") Long movieId);
+
+    /**
      * 更新长评（带标题）
      */
     int updateLongComment(
@@ -123,7 +128,8 @@ public interface CommentMapper {
             @Param("movieId") Long movieId,
             @Param("title") String title,
             @Param("content") String content,
-            @Param("commentTime") java.util.Date commentTime
+            @Param("commentTime") java.util.Date commentTime,
+            @Param("version") Integer version
     );
 
     /**
@@ -148,7 +154,8 @@ public interface CommentMapper {
             @Param("id") Long id,
             @Param("userId") String userId,
             @Param("status") Integer status,
-            @Param("commentTime") java.util.Date commentTime
+            @Param("commentTime") java.util.Date commentTime,
+            @Param("version") Integer version
     );
 
     int updateStatusById(
@@ -165,7 +172,8 @@ public interface CommentMapper {
             @Param("type") Integer type,
             @Param("title") String title,
             @Param("content") String content,
-            @Param("commentTime") java.util.Date commentTime
+            @Param("commentTime") java.util.Date commentTime,
+            @Param("version") Integer version
     );
 
     /**

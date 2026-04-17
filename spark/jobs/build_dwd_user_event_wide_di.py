@@ -130,9 +130,12 @@ def union_all(frames: list[DataFrame]) -> DataFrame:
     return result
 
 
-def build_view_history_events(view_history_df: DataFrame, calc_date: str) -> DataFrame:
+def build_view_history_events(view_history_df: DataFrame, movies_df: DataFrame, calc_date: str) -> DataFrame:
+    # Filter view history whose movie_id exists in movies table
+    valid_movie_ids = movies_df.select("movie_id")
     filtered_df = filter_by_calc_date(
-        view_history_df.where(F.col("user_id").isNotNull() & F.col("movie_id").isNotNull() & F.col("view_time").isNotNull()),
+        view_history_df.where(F.col("user_id").isNotNull() & F.col("movie_id").isNotNull() & F.col("view_time").isNotNull())
+        .join(valid_movie_ids, "movie_id", "inner"),
         "view_time",
         calc_date,
     )
@@ -203,14 +206,17 @@ def build_rating_events(ratings_df: DataFrame, calc_date: str) -> DataFrame:
     )
 
 
-def build_comment_events(comments_df: DataFrame, calc_date: str) -> DataFrame:
+def build_comment_events(comments_df: DataFrame, movies_df: DataFrame, calc_date: str) -> DataFrame:
+    # Filter comments whose movie_id exists in movies table
+    valid_movie_ids = movies_df.select("movie_id")
     filtered_df = filter_by_calc_date(
         comments_df.where(
             F.col("comment_id").isNotNull()
             & F.col("user_id").isNotNull()
             & F.col("movie_id").isNotNull()
             & F.col("comment_time").isNotNull()
-        ),
+        )
+        .join(valid_movie_ids, "movie_id", "inner"),
         "comment_time",
         calc_date,
     )
@@ -285,14 +291,17 @@ def build_comment_like_events(comment_likes_df: DataFrame, comments_df: DataFram
     )
 
 
-def build_favorite_events(favorites_df: DataFrame, calc_date: str) -> DataFrame:
+def build_favorite_events(favorites_df: DataFrame, movies_df: DataFrame, calc_date: str) -> DataFrame:
+    # Filter favorites whose movie_id exists in movies table
+    valid_movie_ids = movies_df.select("movie_id")
     filtered_df = filter_by_calc_date(
         favorites_df.where(
             F.col("user_id").isNotNull()
             & F.col("movie_id").isNotNull()
             & F.col("folder_id").isNotNull()
             & F.col("create_time").isNotNull()
-        ),
+        )
+        .join(valid_movie_ids, "movie_id", "inner"),
         "create_time",
         calc_date,
     )
@@ -325,11 +334,14 @@ def build_favorite_events(favorites_df: DataFrame, calc_date: str) -> DataFrame:
     )
 
 
-def build_watched_events(watched_movies_df: DataFrame, calc_date: str) -> DataFrame:
+def build_watched_events(watched_movies_df: DataFrame, movies_df: DataFrame, calc_date: str) -> DataFrame:
+    # Filter watched movies whose movie_id exists in movies table
+    valid_movie_ids = movies_df.select("movie_id")
     filtered_df = filter_by_calc_date(
         watched_movies_df.where(
             F.col("user_id").isNotNull() & F.col("movie_id").isNotNull() & F.col("create_time").isNotNull()
-        ),
+        )
+        .join(valid_movie_ids, "movie_id", "inner"),
         "create_time",
         calc_date,
     )
@@ -458,14 +470,15 @@ def build_postgres_events(
     favorites_df: DataFrame,
     view_history_df: DataFrame,
     watched_movies_df: DataFrame,
+    movies_df: DataFrame,
 ) -> DataFrame:
     event_frames = [
-        build_view_history_events(view_history_df, calc_date),
+        build_view_history_events(view_history_df, movies_df, calc_date),
         build_rating_events(ratings_df, calc_date),
-        build_comment_events(comments_df, calc_date),
+        build_comment_events(comments_df, movies_df, calc_date),
         build_comment_like_events(comment_likes_df, comments_df, calc_date),
-        build_favorite_events(favorites_df, calc_date),
-        build_watched_events(watched_movies_df, calc_date),
+        build_favorite_events(favorites_df, movies_df, calc_date),
+        build_watched_events(watched_movies_df, movies_df, calc_date),
         build_register_events(users_df, calc_date),
         build_favorite_folder_action_events(folders_df, calc_date),
     ]
@@ -624,6 +637,7 @@ def run() -> None:
             favorites_df=favorites_df,
             view_history_df=view_history_df,
             watched_movies_df=watched_movies_df,
+            movies_df=movies_df,
         )
         wide_df = build_wide_table(events_df, users_df, movies_df, comments_df, folders_df, ratings_df)
 

@@ -104,63 +104,6 @@
     "target_table": "dwd.dwd_movie_snapshot_di",
     "sink_path": "hdfs:///warehouse/movie/dwd/movie_snapshot_di"
   },
-  "dws": {
-    "source_table": "dwd.dwd_user_event_wide_di",
-    "target_tables": {
-      "user_action_1d": "dws.dws_user_action_1d",
-      "movie_action_1d": "dws.dws_movie_action_1d",
-      "event_type_1d": "dws.dws_event_type_1d"
-    },
-    "sink_paths": {
-      "user_action_1d": "hdfs:///warehouse/movie/dws/user_action_1d",
-      "movie_action_1d": "hdfs:///warehouse/movie/dws/movie_action_1d",
-      "event_type_1d": "hdfs:///warehouse/movie/dws/event_type_1d"
-    },
-    "hot_score_weights": {
-      "view_pv": 1.0,
-      "view_uv": 1.5,
-      "rating_cnt": 2.0,
-      "comment_cnt": 2.0,
-      "favorite_add_cnt": 1.2,
-      "watched_cnt": 2.5
-    }
-  },
-  "dws_profiles": {
-    "source_tables": {
-      "user_snapshot": "dwd.dwd_user_snapshot_di",
-      "movie_snapshot": "dwd.dwd_movie_snapshot_di",
-      "user_action": "dws.dws_user_action_1d",
-      "movie_action": "dws.dws_movie_action_1d"
-    },
-    "target_tables": {
-      "user_profile_1d": "dws.dws_user_profile_1d",
-      "movie_profile_1d": "dws.dws_movie_profile_1d"
-    },
-    "sink_paths": {
-      "user_profile_1d": "hdfs:///warehouse/movie/dws/user_profile_1d",
-      "movie_profile_1d": "hdfs:///warehouse/movie/dws/movie_profile_1d"
-    },
-    "user_activity_score_weights": {
-      "view_cnt": 1.0,
-      "rating_cnt": 3.0,
-      "comment_cnt": 3.0,
-      "comment_like_cnt": 0.5,
-      "favorite_add_cnt": 2.0,
-      "favorite_remove_cnt": -1.0,
-      "watched_cnt": 3.0,
-      "search_cnt": 1.0,
-      "login_cnt": 0.5,
-      "favorite_folder_action_cnt": 1.5
-    },
-    "user_activity_level_thresholds": {
-      "high": 20.0,
-      "medium": 5.0
-    },
-    "movie_popularity_level_thresholds": {
-      "hot": 1000.0,
-      "warm": 100.0
-    }
-  },
   "dws_postgres_interactions": {
     "source_tables": {
       "movie_snapshot": "dwd.dwd_movie_snapshot_di",
@@ -206,6 +149,15 @@
     "source_type": "movie_metric_daily",
     "target_table": "ads.ads_hot_movies",
     "sink_path": "hdfs:///warehouse/movie/ads/hot_movies",
+    "raw_source_tables": {
+      "movie_snapshot": "dwd.dwd_movie_snapshot_di",
+      "ratings": "ods.ods_pg_ratings_full",
+      "comments": "ods.ods_pg_comments_full",
+      "comment_likes": "ods.ods_pg_comment_likes_full",
+      "favorites": "ods.ods_pg_favorites_full",
+      "view_history": "ods.ods_pg_view_history_full",
+      "watched_movies": "ods.ods_pg_watched_movies_full"
+    },
     "period_days": {
       "DAILY": 1,
       "WEEKLY": 7,
@@ -238,7 +190,6 @@
   },
   "ads_user_retention": {
     "register_source_table": "dwd.dwd_user_event_wide_di",
-    "active_source_table": "dws.dws_user_action_1d",
     "target_table": "ads.ads_user_retention",
     "sink_path": "hdfs:///warehouse/movie/ads/user_retention",
     "retention_days": [1, 7, 30]
@@ -247,6 +198,11 @@
     "source_table": "dws.dws_movie_engagement_daily_1d",
     "target_table": "ads.ads_genre_preference_1d",
     "sink_path": "hdfs:///warehouse/movie/ads/genre_preference_1d",
+    "raw_source_tables": {
+      "movie_snapshot": "dwd.dwd_movie_snapshot_di",
+      "view_history": "ods.ods_pg_view_history_full",
+      "watched_movies": "ods.ods_pg_watched_movies_full"
+    },
     "top_n": 100
   },
   "ads_itemcf": {
@@ -275,6 +231,16 @@
     "supported_similarity_types": [
       2
     ],
+    "batch_size": 1000
+  },
+  "ads_user_retention_postgres_sync": {
+    "source_table": "ads.ads_user_retention",
+    "target_table": "public.stats_user_retention",
+    "batch_size": 1000
+  },
+  "ads_genre_preference_postgres_sync": {
+    "source_table": "ads.ads_genre_preference_1d",
+    "target_table": "public.stats_genre_preference_1d",
     "batch_size": 1000
   }
 }

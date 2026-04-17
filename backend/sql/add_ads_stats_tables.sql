@@ -1,5 +1,5 @@
--- SQL for ADS stats tables synced from Hive to PostgreSQL
--- These tables store analytical results from Spark jobs
+-- SQL for ADS stats tables synced from the offline analytics pipeline to PostgreSQL
+-- These tables store analytical results produced by scheduled batch jobs
 
 -- ----------------------------
 -- Sequences (must be created before tables that reference them)

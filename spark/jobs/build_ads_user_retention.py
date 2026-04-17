@@ -15,7 +15,7 @@ from utils.spark_factory import build_spark_session
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Build ADS user retention metrics from DWD and DWS tables.")
+    parser = argparse.ArgumentParser(description="Build ADS user retention metrics from DWD event wide table.")
     parser.add_argument("--config", required=True, help="Path of ETL json config.")
     parser.add_argument(
         "--calc-date",
@@ -95,7 +95,7 @@ def run() -> None:
 
     calc_date = args.calc_date
     register_source_table = ads_config["register_source_table"]
-    active_source_table = ads_config["active_source_table"]
+    # active users derived directly from register source (all events) — no pre-aggregated DWS table needed
     target_table = ads_config["target_table"]
     sink_path = ads_config["sink_path"]
     retention_days = parse_retention_days(ads_config.get("retention_days"))
@@ -105,14 +105,13 @@ def run() -> None:
         spark.sql("CREATE DATABASE IF NOT EXISTS ads")
 
         register_events_df = spark.table(register_source_table)
-        active_events_df = spark.table(active_source_table)
 
-        result_df = build_retention(register_events_df, active_events_df, calc_date, retention_days)
+        result_df = build_retention(register_events_df, register_events_df, calc_date, retention_days)
         write_partition(result_df, target_table, sink_path, calc_date, spark)
 
         print(
             "ADS user retention build finished. "
-            f"register_source={register_source_table}, active_source={active_source_table}, target={target_table}, dt={calc_date}"
+            f"register_source={register_source_table}, target={target_table}, dt={calc_date}"
         )
     finally:
         spark.stop()

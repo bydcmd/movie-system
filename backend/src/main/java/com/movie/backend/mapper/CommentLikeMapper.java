@@ -22,6 +22,11 @@ public interface CommentLikeMapper {
     int deleteByCommentId(@Param("commentId") Long commentId);
 
     /**
+     * 根据电影ID删除点赞记录（通过关联评论）
+     */
+    int deleteByMovieId(@Param("movieId") Long movieId);
+
+    /**
      * 查询是否已点赞
      */
     CommentLike selectByCommentAndUser(@Param("commentId") Long commentId, @Param("userId") String userId);

@@ -51,9 +51,7 @@ Common wrapper to job mappings:
 - `run_postgres_sync.sh` -> `jobs/postgres_to_hive_ods.py`
 - `run_dwd_build.sh` -> `jobs/build_dwd_user_event_wide_di.py`
 - `run_dwd_snapshots.sh` -> `jobs/build_dwd_snapshots_di.py`
-- `run_dws_build.sh` -> `jobs/build_dws_user_movie_metrics_di.py`
 - `run_dws_postgres_interactions.sh` -> `jobs/build_dws_postgres_interactions_1d.py`
-- `run_dws_profiles.sh` -> `jobs/build_dws_user_movie_profiles_1d.py`
 - `run_ads_hot_movies.sh` -> `jobs/build_ads_hot_movies.py`
 - `run_ads_pg_sync.sh` -> `jobs/sync_ads_to_postgres.py`
 - `run_ads_itemcf.sh` -> `jobs/build_ads_itemcf_recommendations.py`
@@ -178,42 +176,6 @@ Create DWS tables:
 hive -f ../hive/dws/dws_ddl.hql
 ```
 
-Build daily user/movie/event-type aggregates from DWD:
-
-```bash
-spark-submit \
-  --master yarn \
-  --deploy-mode client \
-  jobs/build_dws_user_movie_metrics_di.py \
-  --config conf/etl_config.json \
-  --calc-date 2026-02-25
-```
-
-Build daily user/movie profile tables by combining DWD snapshots with DWS action metrics:
-
-```bash
-spark-submit \
-  --master yarn \
-  --deploy-mode client \
-  jobs/build_dws_user_movie_profiles_1d.py \
-  --config conf/etl_config.json \
-  --calc-date 2026-02-25 \
-  --snapshot-date 2026-02-25
-```
-
-If `--snapshot-date` is omitted, the job resolves the latest common DWD snapshot partition with `dt <= calc-date`.
-
-This job outputs:
-
-- `dws.dws_user_profile_1d`
-- `dws.dws_movie_profile_1d`
-
-Wrapper script:
-
-```bash
-bash run_dws_profiles.sh 2026-02-25 conf/etl_config.json
-```
-
 Build PostgreSQL-driven interaction snapshots for recommendation and hot ranking:
 
 ```bash
@@ -248,13 +210,17 @@ Create ADS table:
 hive -f ../hive/ads/ads_ddl.hql
 ```
 
-Build hot ranking from the configured DWS source.
+Build hot ranking with mixed sources:
 
-Recommended source:
+- `DAILY / WEEKLY / MONTHLY`: replay raw PostgreSQL interaction snapshots and recalculate movie engagement inside each window, so `view_uv` and `active_user_cnt` are deduplicated over the whole 1/7/30 day window instead of summing daily UVs
+- `TOTAL`: read from the configured total source table
 
-- `dws.dws_movie_engagement_daily_1d` with `ads.source_type=movie_metric_daily`
+Recommended configuration:
 
-This source is built from PostgreSQL full snapshot tables but filtered by real event timestamps on each `calc-date`, so `DAILY / WEEKLY / MONTHLY` rankings represent true recent 1/7/30 day windows, while `TOTAL` represents the full history accumulated up to `calc-date`.
+- `ads.source_type=movie_metric_daily`
+- `ads.source_table=dws.dws_movie_engagement_daily_1d`
+
+When `ads.source_type=movie_metric_daily`, bounded periods (`DAILY / WEEKLY / MONTHLY`) are rebuilt from the latest common raw snapshot tables used by `build_dws_postgres_interactions_1d.py`, while `TOTAL` still defaults to `dws.dws_movie_engagement_1d`.
 
 Full snapshot source is still available for lifetime-style ranking snapshots:
 
@@ -277,7 +243,7 @@ Optional override top N result rows per period:
 --top-n 200
 ```
 
-Sync ADS data to PostgreSQL (hot movies and similar movies):
+Sync ADS data to PostgreSQL:
 
 ```bash
 spark-submit \
@@ -287,14 +253,16 @@ spark-submit \
   jobs/sync_ads_to_postgres.py \
   --config conf/etl_config.json \
   --calc-date 2026-02-25 \
-  --sync-types hot_movies,similar_movies
+  --sync-types all
 ```
 
-The sync job supports two sync types:
+The sync job supports four sync types:
 - `hot_movies`: Writes `DAILY`, `WEEKLY`, `MONTHLY`, and `TOTAL` rows from `ads.ads_hot_movies.dt=calc-date` to `public.stats_hot_movies`. It deletes existing rows for the same `calc_date` before appending.
 - `similar_movies`: Writes ItemCF and ALS similar movies from `ads.ads_itemcf_similar_movies.dt=calc-date` to `public.stats_similar_movies`. It deletes existing rows for the configured `similarity_type` values before appending.
+- `user_retention`: Writes `ads.ads_user_retention.dt=calc-date` to `public.stats_user_retention`. It deletes existing rows for the same `calc_date` before appending.
+- `genre_preference`: Writes `ads.ads_genre_preference_1d.dt=calc-date` to `public.stats_genre_preference_1d`. It deletes existing rows for the same `calc_date` before appending.
 
-The `--sync-types` argument controls which data to sync: `hot_movies`, `similar_movies`, or `all` (default: `hot_movies,similar_movies`).
+The `--sync-types` argument controls which data to sync: `hot_movies`, `similar_movies`, `user_retention`, `genre_preference`, or `all` (default: `all`).
 
 Wrapper script:
 
@@ -333,7 +301,7 @@ Retention windows are configurable in `ads_user_retention.retention_days` (defau
 
 ### 8.2 Daily genre preference ranking (`ads.ads_genre_preference_1d`)
 
-Default source is `dws.dws_movie_engagement_daily_1d`, which represents daily non-event movie engagement metrics built from PostgreSQL snapshot interactions.
+Default ranking base is `dws.dws_movie_engagement_daily_1d`, while genre-level deduplicated user metrics (`view_uv` and the internal `watched_rate` tie-breaker) are rebuilt from the latest common raw PostgreSQL snapshot tables for `movie_snapshot`, `view_history`, and `watched_movies`.
 
 ```bash
 spark-submit \
@@ -357,6 +325,7 @@ Generate both outputs in one run.
 Recommended source:
 
 - `dws.dws_user_item_preference_1d` with `ads_itemcf.source_type=user_item_preference`
+- `dwd.dwd_user_event_wide_di` with `ads_itemcf.source_type=event_wide` when you explicitly want a rolling recent-interest training window
 
 Outputs:
 
@@ -379,7 +348,7 @@ Optional overrides:
 
 Main parameters are configurable in `ads_itemcf`:
 
-- `lookback_days`: training window size
+- `lookback_days`: training window size when `source_type=event_wide`; ignored in the default `user_item_preference` snapshot mode
 - `min_user_item_score`: minimum user-item preference score
 - `min_co_users`: minimum common users for item pairs
 - `shrinkage`: similarity shrinkage factor

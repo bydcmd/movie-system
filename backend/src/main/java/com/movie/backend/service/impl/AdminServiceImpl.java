@@ -12,9 +12,12 @@ import com.movie.backend.entity.User;
 import com.movie.backend.mapper.AdminDashboardMapper;
 import com.movie.backend.mapper.CommentLikeMapper;
 import com.movie.backend.mapper.CommentMapper;
+import com.movie.backend.mapper.FavoriteMapper;
 import com.movie.backend.mapper.MovieMapper;
 import com.movie.backend.mapper.PersonMapper;
+import com.movie.backend.mapper.RatingMapper;
 import com.movie.backend.mapper.UserMapper;
+import com.movie.backend.mapper.ViewHistoryMapper;
 import com.movie.backend.service.AdminService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
@@ -46,6 +49,15 @@ public class AdminServiceImpl implements AdminService {
 
     @Autowired
     private CommentLikeMapper commentLikeMapper;
+
+    @Autowired
+    private RatingMapper ratingMapper;
+
+    @Autowired
+    private FavoriteMapper favoriteMapper;
+
+    @Autowired
+    private ViewHistoryMapper viewHistoryMapper;
 
     @Autowired
     private AdminDashboardMapper adminDashboardMapper;
@@ -176,6 +188,7 @@ public class AdminServiceImpl implements AdminService {
     }
 
     @Override
+    @Transactional
     @Caching(evict = {
             @CacheEvict(value = "movieDetail", key = "#id"),
             @CacheEvict(value = "movieMetadata", key = "'allYears'")
@@ -184,6 +197,11 @@ public class AdminServiceImpl implements AdminService {
         if (id == null) {
             throw new IllegalArgumentException("电影ID不能为空");
         }
+        commentLikeMapper.deleteByMovieId(id);
+        commentMapper.deleteByMovieId(id);
+        ratingMapper.deleteByMovieId(id);
+        favoriteMapper.deleteByMovieId(id);
+        viewHistoryMapper.deleteByMovieId(id);
         int affected = movieMapper.deleteById(id);
         if (affected == 0) {
             throw new IllegalArgumentException("电影不存在");

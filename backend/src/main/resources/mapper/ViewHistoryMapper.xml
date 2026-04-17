@@ -77,4 +77,9 @@
         SET view_time = NOW()
         WHERE user_id = #{userId} AND movie_id = #{movieId}
     </update>
+
+    <delete id="deleteByMovieId">
+        DELETE FROM view_history
+        WHERE movie_id = #{movieId}
+    </delete>
 </mapper>

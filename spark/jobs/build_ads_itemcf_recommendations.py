@@ -270,6 +270,8 @@ def run() -> None:
     sink_path = itemcf_config["sink_path"]
     weights = itemcf_config.get("event_score_weights", {})
     source_type = str(itemcf_config.get("source_type", "user_item_preference")).strip().lower()
+    if source_type not in {"user_item_preference", "event_wide"}:
+        raise ValueError(f"Invalid source_type: {source_type}. Supported values: user_item_preference, event_wide")
     similarity_type = 2
 
     spark = build_spark_session("movie-ads-itemcf-similarity", spark_config)
@@ -285,10 +287,12 @@ def run() -> None:
         if source_type == "user_item_preference":
             source_df = spark.table(source_table).where(F.col("dt") == calc_date)
             user_item_df = load_user_item_preference_snapshot(source_df, min_user_item_score).cache()
+            source_scope = f"snapshot_dt={calc_date}"
         else:
             start_date = (dt.date.fromisoformat(calc_date) - dt.timedelta(days=lookback_days - 1)).isoformat()
             source_df = spark.table(source_table).where((F.col("dt") >= start_date) & (F.col("dt") <= calc_date))
             user_item_df = build_user_item_preference(source_df, weights, min_user_item_score).cache()
+            source_scope = f"dt_range=[{start_date}, {calc_date}]"
 
         similarity_df = build_item_similarity(
             user_item_df, min_co_users=min_co_users, shrinkage=shrinkage,
@@ -322,7 +326,7 @@ def run() -> None:
         user_item_df.unpersist()
         print(
             "ADS itemCF build finished. "
-            f"source={source_table}, source_type={source_type}, dt={calc_date}, lookback_days={lookback_days}, "
+            f"source={source_table}, source_type={source_type}, source_scope={source_scope}, dt={calc_date}, "
             f"top_k={top_k}, similar_cnt={similarity_count}"
         )
     finally:

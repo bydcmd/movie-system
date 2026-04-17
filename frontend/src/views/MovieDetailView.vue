@@ -1392,7 +1392,6 @@ watch(
                   <div class="text-sm text-slate-400 mb-2">我的评分</div>
                   <n-rate
                     :value="userRating || 0"
-                    allow-half
                     size="large"
                     :readonly="ratingLoading"
                     @update:value="submitUserRating"

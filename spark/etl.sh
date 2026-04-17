@@ -15,15 +15,13 @@ Usage:
 Full Pipeline Steps:
   1. ODS: PostgreSQL sync (run_postgres_sync.sh)
   2. DWD: Build event wide table (run_dwd_build.sh)
-  4. DWD: Build snapshots (run_dwd_snapshots.sh)
-  5. DWS: Build metrics (run_dws_build.sh)
-  6. DWS: Build profiles (run_dws_profiles.sh)
-  7. DWS: Build interactions (run_dws_postgres_interactions.sh)
-  8. ADS: Build hot movies (run_ads_hot_movies.sh)
-  9. ADS: Build ItemCF recommendations (run_ads_itemcf.sh)
-  12. ADS: Build user retention (run_ads_user_retention.sh)
-  13. ADS: Build genre preference (run_ads_genre_preference.sh)
-  16. ADS: Sync to PostgreSQL (run_ads_pg_sync.sh)
+  3. DWD: Build snapshots (run_dwd_snapshots.sh)
+  4. DWS: Build interactions (run_dws_postgres_interactions.sh)
+  5. ADS: Build hot movies (run_ads_hot_movies.sh)
+  6. ADS: Build ItemCF recommendations (run_ads_itemcf.sh)
+  7. ADS: Build user retention (run_ads_user_retention.sh)
+  8. ADS: Build genre preference (run_ads_genre_preference.sh)
+  9. ADS: Sync to PostgreSQL (run_ads_pg_sync.sh)
 
 Options:
   --skip-ods      Skip ODS layer jobs
@@ -212,12 +210,6 @@ if [[ "${SKIP_DWS}" == "false" ]]; then
   echo "######################################"
   echo "# LAYER 3: DWS - Aggregation Layer"
   echo "######################################"
-
-  # Build user/movie metrics
-  run_job "DWS User Movie Metrics" "run_dws_build.sh"
-
-  # Build profiles
-  run_job "DWS Profiles" "run_dws_profiles.sh"
 
   # Build interactions
   run_job "DWS Interactions" "run_dws_postgres_interactions.sh"

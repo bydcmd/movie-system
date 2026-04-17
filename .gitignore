@@ -119,6 +119,7 @@ checkpoints/
 /spark/conf/etl_config.json
 /spark/.python-version
 /backend/src/main/resources/application-dev.yml
+/docs/
 
 # ====================================================
 # Agent / local tooling state
@@ -139,6 +140,7 @@ checkpoints/
 /review/controller_review_*.md
 /spark/ssh.txt
 /.playwright-mcp/
+/.zread/
 
 # ====================================================
 # Thesis

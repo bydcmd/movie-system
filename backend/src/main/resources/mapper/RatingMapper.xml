@@ -181,4 +181,9 @@
         WHERE m.movie_id = c.movie_id
           AND (m.votes IS DISTINCT FROM c.new_votes OR m.score IS DISTINCT FROM c.target_score)
     </update>
+
+    <delete id="deleteByMovieId">
+        DELETE FROM ratings
+        WHERE movie_id = #{movieId}
+    </delete>
 </mapper>

@@ -10,13 +10,17 @@ import com.movie.backend.entity.User;
 import com.movie.backend.mapper.AdminDashboardMapper;
 import com.movie.backend.mapper.CommentLikeMapper;
 import com.movie.backend.mapper.CommentMapper;
+import com.movie.backend.mapper.FavoriteMapper;
 import com.movie.backend.mapper.MovieMapper;
 import com.movie.backend.mapper.PersonMapper;
+import com.movie.backend.mapper.RatingMapper;
 import com.movie.backend.mapper.UserMapper;
+import com.movie.backend.mapper.ViewHistoryMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -26,6 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
 
@@ -46,6 +51,15 @@ public class AdminServiceImplTest {
 
     @Mock
     private CommentLikeMapper commentLikeMapper;
+
+    @Mock
+    private RatingMapper ratingMapper;
+
+    @Mock
+    private FavoriteMapper favoriteMapper;
+
+    @Mock
+    private ViewHistoryMapper viewHistoryMapper;
 
     @Mock
     private AdminDashboardMapper adminDashboardMapper;
@@ -189,6 +203,22 @@ public class AdminServiceImplTest {
         adminService.restoreComment(100L);
 
         verify(commentMapper).updateStatusById(100L, 2);
+    }
+
+    @Test
+    public void deleteMovieRemovesAssociatedRecordsBeforeDeletingMovie() {
+        Long movieId = 100L;
+        when(movieMapper.deleteById(movieId)).thenReturn(1);
+
+        adminService.deleteMovie(movieId);
+
+        InOrder inOrder = inOrder(commentLikeMapper, commentMapper, ratingMapper, favoriteMapper, viewHistoryMapper, movieMapper);
+        inOrder.verify(commentLikeMapper).deleteByMovieId(movieId);
+        inOrder.verify(commentMapper).deleteByMovieId(movieId);
+        inOrder.verify(ratingMapper).deleteByMovieId(movieId);
+        inOrder.verify(favoriteMapper).deleteByMovieId(movieId);
+        inOrder.verify(viewHistoryMapper).deleteByMovieId(movieId);
+        inOrder.verify(movieMapper).deleteById(movieId);
     }
 
     private AdminTrendPointVO buildTrendPoint(String date, int value) {

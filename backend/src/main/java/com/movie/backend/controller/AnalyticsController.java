@@ -18,7 +18,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import java.util.List;
 
-@Tag(name = "Analytics", description = "基于 Hive/Spark 的数据分析接口")
+@Tag(name = "Analytics", description = "基于离线分析结果的统计接口")
 @RestController
 @RequestMapping("/analytics")
 @Validated
@@ -27,7 +27,7 @@ public class AnalyticsController {
     @Autowired
     private AnalyticsService analyticsService;
 
-    @Operation(operationId = "getTrendingMovies", summary = "获取趋势榜单", description = "获取今日、本周、本月和总榜的热门电影。底层基于 Hive/Spark 计算。")
+    @Operation(operationId = "getTrendingMovies", summary = "获取趋势榜单", description = "获取今日、本周、本月和总榜的热门电影，数据来自离线计算后同步到 PostgreSQL 的统计表。")
     @GetMapping("/trending")
     public Result<List<TrendingMovieDTO>> getTrendingMovies(
             @Parameter(name = "period", description = "周期类型: DAILY, WEEKLY, MONTHLY, TOTAL，默认为 DAILY")
@@ -56,7 +56,7 @@ public class AnalyticsController {
         return Result.success(analyticsService.getSimilarMovies(movieId, type, limit));
     }
 
-    @Operation(operationId = "getUserRetention", summary = "获取用户留存分析", description = "返回用户留存数据，按群组日期和留存天数分组。底层基于 Hive/Spark 离线计算。")
+    @Operation(operationId = "getUserRetention", summary = "获取用户留存分析", description = "返回用户留存数据，按群组日期和留存天数分组，数据来自离线计算后同步到 PostgreSQL 的统计表。")
     @GetMapping("/user-retention")
     public Result<List<UserRetentionDTO>> getUserRetention(
             @Parameter(name = "limit", description = "返回数量，默认100条，最多500条", example = "100")
@@ -66,7 +66,7 @@ public class AnalyticsController {
         return Result.success(analyticsService.getUserRetention(limit));
     }
 
-    @Operation(operationId = "getGenrePreference", summary = "获取类型偏好分析", description = "返回各类型的偏好排名数据，按热度分数降序排列。底层基于 Hive/Spark 离线计算。")
+    @Operation(operationId = "getGenrePreference", summary = "获取类型偏好分析", description = "返回各类型的偏好排名数据，按热度分数降序排列，数据来自离线计算后同步到 PostgreSQL 的统计表。")
     @GetMapping("/genre-preference")
     public Result<List<GenrePreferenceDTO>> getGenrePreference(
             @Parameter(name = "limit", description = "返回数量，默认50条，最多200条", example = "50")

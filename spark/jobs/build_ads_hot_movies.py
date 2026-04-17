@@ -10,15 +10,27 @@ from pyspark.sql.column import Column
 from pyspark.sql import functions as F
 
 import _bootstrap  # noqa: F401
+from build_dws_postgres_interactions_1d import (
+    DEFAULT_DWS_POSTGRES_INTERACTIONS_CONFIG,
+    aggregate_movie_comment_like_metrics,
+    build_movie_comment_like_metrics,
+    build_movie_engagement,
+    build_user_movie_interactions,
+    clean_favorites_by_existing_movies,
+)
 
 from utils.config_loader import load_config
-from utils.hive_utils import assert_non_empty_partition, write_partition
+from utils.hive_utils import assert_non_empty_partition, resolve_common_dt_partition_date, write_partition
 from utils.spark_factory import build_spark_session
 
 DEFAULT_PERIOD_DAYS: dict[str, int] = {"DAILY": 1, "WEEKLY": 7, "MONTHLY": 30}
 TOTAL_PERIOD_TYPE = "TOTAL"
 DEFAULT_TOTAL_SOURCE_TABLE = "dws.dws_movie_engagement_1d"
 SNAPSHOT_SOURCE_TYPE = "movie_metric_snapshot"
+DEFAULT_RAW_SOURCE_TABLES: dict[str, str] = {
+    key: str(value)
+    for key, value in DEFAULT_DWS_POSTGRES_INTERACTIONS_CONFIG["source_tables"].items()
+}
 
 
 def ensure_non_empty_partition(
@@ -89,6 +101,143 @@ def filter_rankable_movies(df: DataFrame) -> DataFrame:
         F.col("movie_id").isNotNull()
         & F.col("movie_name").isNotNull()
         & (F.length(F.trim(F.col("movie_name"))) > 0)
+    )
+
+
+def resolve_raw_source_tables(config: dict[str, Any], ads_config: dict[str, Any]) -> dict[str, str]:
+    resolved = dict(DEFAULT_RAW_SOURCE_TABLES)
+
+    dws_source_tables = config.get("dws_postgres_interactions", {}).get("source_tables", {})
+    for key in resolved:
+        if key in dws_source_tables:
+            resolved[key] = str(dws_source_tables[key]).strip()
+
+    ads_raw_source_tables = ads_config.get("raw_source_tables", {})
+    for key in resolved:
+        if key in ads_raw_source_tables:
+            resolved[key] = str(ads_raw_source_tables[key]).strip()
+
+    return resolved
+
+
+def load_partition(spark, table_name: str, partition_date: str) -> DataFrame:
+    return spark.table(table_name).where(F.col("dt") == partition_date)
+
+
+def filter_events_by_date_range(
+    events_df: DataFrame,
+    timestamp_column: str,
+    start_date: str,
+    end_date: str,
+) -> DataFrame:
+    return events_df.where(
+        (F.to_date(F.col(timestamp_column)) >= F.lit(start_date).cast("date"))
+        & (F.to_date(F.col(timestamp_column)) <= F.lit(end_date).cast("date"))
+    )
+
+
+def load_raw_hot_sources(
+    spark,
+    raw_source_tables: dict[str, str],
+    calc_date: str,
+) -> tuple[str, DataFrame, DataFrame, DataFrame]:
+    snapshot_date = resolve_common_dt_partition_date(
+        [
+            raw_source_tables["movie_snapshot"],
+            raw_source_tables["ratings"],
+            raw_source_tables["comments"],
+            raw_source_tables["comment_likes"],
+            raw_source_tables["favorites"],
+            raw_source_tables["view_history"],
+            raw_source_tables["watched_movies"],
+        ],
+        requested_date="",
+        spark=spark,
+        fallback_max_date=calc_date,
+    )
+
+    movie_snapshot_df = load_partition(spark, raw_source_tables["movie_snapshot"], snapshot_date)
+    ensure_non_empty_partition(movie_snapshot_df, raw_source_tables["movie_snapshot"], {"dt": snapshot_date}, spark=spark)
+
+    ratings_df = load_partition(spark, raw_source_tables["ratings"], snapshot_date)
+    comments_df = load_partition(spark, raw_source_tables["comments"], snapshot_date)
+    comment_likes_df = load_partition(spark, raw_source_tables["comment_likes"], snapshot_date)
+    favorites_df = load_partition(spark, raw_source_tables["favorites"], snapshot_date)
+    view_history_df = load_partition(spark, raw_source_tables["view_history"], snapshot_date)
+    watched_movies_df = load_partition(spark, raw_source_tables["watched_movies"], snapshot_date)
+
+    cleaned_favorites_df = clean_favorites_by_existing_movies(favorites_df, movie_snapshot_df)
+    interactions_df = build_user_movie_interactions(
+        view_history_df=view_history_df,
+        ratings_df=ratings_df,
+        comments_df=comments_df,
+        favorites_df=cleaned_favorites_df,
+        watched_movies_df=watched_movies_df,
+    )
+    comment_like_events_df = build_movie_comment_like_metrics(comment_likes_df, comments_df)
+    return snapshot_date, movie_snapshot_df, interactions_df, comment_like_events_df
+
+
+def build_raw_period_hot_ranking(
+    interactions_df: DataFrame,
+    comment_like_events_df: DataFrame,
+    movie_snapshot_df: DataFrame,
+    calc_date: str,
+    period_type: str,
+    period_days: int,
+    top_n: int,
+    weights: dict[str, Any],
+) -> DataFrame:
+    calc_date_obj = dt.date.fromisoformat(calc_date)
+    start_date = (calc_date_obj - dt.timedelta(days=period_days - 1)).isoformat()
+
+    period_interactions_df = filter_events_by_date_range(interactions_df, "event_ts", start_date, calc_date)
+    period_comment_like_events_df = filter_events_by_date_range(comment_like_events_df, "event_ts", start_date, calc_date)
+    period_movie_comment_likes_df = aggregate_movie_comment_like_metrics(period_comment_like_events_df)
+
+    aggregated_df = (
+        build_movie_engagement(
+            interactions_df=period_interactions_df,
+            movie_snapshot_df=movie_snapshot_df,
+            movie_comment_likes_df=period_movie_comment_likes_df,
+            weights=weights,
+        )
+        .withColumn("period_type", F.lit(period_type))
+        .withColumn("window_start", F.lit(start_date).cast("string"))
+        .withColumn("window_end", F.lit(calc_date).cast("string"))
+    )
+    aggregated_df = filter_rankable_movies(aggregated_df)
+
+    rank_window = Window.partitionBy("period_type").orderBy(
+        F.col("hot_score").desc(),
+        F.col("view_pv").desc(),
+        F.col("movie_id").asc(),
+    )
+
+    ranked_df = aggregated_df.withColumn("rank_no", F.row_number().over(rank_window))
+    return ranked_df.where(F.col("rank_no") <= top_n).select(
+        "movie_id",
+        "movie_name",
+        "movie_year",
+        "movie_genres",
+        "movie_score",
+        "movie_douban_score",
+        "period_type",
+        "rank_no",
+        "hot_score",
+        "view_pv",
+        "view_uv",
+        "rating_cnt",
+        "rating_avg",
+        "comment_cnt",
+        "comment_like_cnt",
+        "favorite_add_cnt",
+        "favorite_remove_cnt",
+        "watched_cnt",
+        "active_user_cnt",
+        "window_start",
+        "window_end",
+        "last_event_ts",
     )
 
 
@@ -377,24 +526,21 @@ def run() -> None:
                 if period_type != TOTAL_PERIOD_TYPE and days is not None
             }
             if bounded_period_days:
-                max_days = max(bounded_period_days.values())
-                min_date = (dt.date.fromisoformat(calc_date) - dt.timedelta(days=max_days - 1)).isoformat()
-                source_df = (
-                    spark.table(source_table)
-                    .where((F.col("dt") >= min_date) & (F.col("dt") <= calc_date))
-                    .withColumn("dt_date", F.to_date(F.col("dt")))
+                raw_source_tables = resolve_raw_source_tables(config, ads_config)
+                _, movie_snapshot_df, interactions_df, comment_like_events_df = load_raw_hot_sources(
+                    spark=spark,
+                    raw_source_tables=raw_source_tables,
+                    calc_date=calc_date,
                 )
-                has_bounded_source = source_df.limit(1).count() > 0
-                if not has_bounded_source and TOTAL_PERIOD_TYPE not in period_days:
-                    raise ValueError(
-                        "No source data found for ADS hot movie build. "
-                        f"source={source_table}, source_type={source_type}, dt_range=[{min_date}, {calc_date}]"
-                    )
-                if has_bounded_source:
+                interactions_df = interactions_df.cache()
+                comment_like_events_df = comment_like_events_df.cache()
+                try:
                     for period_type, days in bounded_period_days.items():
                         period_frames.append(
-                            build_period_hot_ranking(
-                                source_df=source_df,
+                            build_raw_period_hot_ranking(
+                                interactions_df=interactions_df,
+                                comment_like_events_df=comment_like_events_df,
+                                movie_snapshot_df=movie_snapshot_df,
                                 calc_date=calc_date,
                                 period_type=period_type,
                                 period_days=days,
@@ -402,6 +548,9 @@ def run() -> None:
                                 weights=weights,
                             )
                         )
+                finally:
+                    interactions_df.unpersist()
+                    comment_like_events_df.unpersist()
 
             if TOTAL_PERIOD_TYPE in period_days:
                 period_frames.append(

@@ -57,4 +57,9 @@ public interface FavoriteMapper {
     // 批量更新收藏记录的收藏夹
     int updateFolderBatch(@Param("userId") String userId, @Param("fromFolderId") Long fromFolderId,
                           @Param("toFolderId") Long toFolderId, @Param("movieIds") List<Long> movieIds);
+
+    /**
+     * 根据电影ID删除收藏
+     */
+    int deleteByMovieId(@Param("movieId") Long movieId);
 }

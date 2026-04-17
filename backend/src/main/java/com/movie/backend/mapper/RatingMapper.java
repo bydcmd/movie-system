@@ -65,6 +65,11 @@ public interface RatingMapper {
     int deleteBatch(@Param("userId") String userId, @Param("movieIds") List<Long> movieIds);
 
     /**
+     * 根据电影ID删除评分
+     */
+    int deleteByMovieId(@Param("movieId") Long movieId);
+
+    /**
      * 基于用户评分重算电影的本站评分与评分人数
      */
     int refreshMovieScoreAndVotes(@Param("movieId") Long movieId,

@@ -144,12 +144,14 @@
         UPDATE comments
         SET title = #{title},
             content = #{content},
-            comment_time = #{commentTime}
+            comment_time = #{commentTime},
+            version = version + 1
         WHERE comment_id = #{commentId}
           AND user_id = #{userId}
           AND movie_id = #{movieId}
           AND type = 2
           AND status = 2
+          AND version = #{version}
     </update>
     
     <select id="getTotalReceivedLikes" resultType="java.lang.Integer">
@@ -169,6 +171,11 @@
     <delete id="deleteByIdAndUserId">
         DELETE FROM comments
         WHERE comment_id = #{id} AND user_id = #{userId}
+    </delete>
+
+    <delete id="deleteByMovieId">
+        DELETE FROM comments
+        WHERE movie_id = #{movieId}
     </delete>
 
     <select id="selectWithRatingByMovieIdAndType" resultType="com.movie.backend.dto.CommentVO">
@@ -208,8 +215,12 @@
 
     <update id="updateStatus">
         UPDATE comments
-        SET status = #{status}, comment_time = #{commentTime}
-        WHERE comment_id = #{id} AND user_id = #{userId}
+        SET status = #{status},
+            comment_time = #{commentTime},
+            version = version + 1
+        WHERE comment_id = #{id}
+          AND user_id = #{userId}
+          AND version = #{version}
     </update>
 
     <update id="updateStatusById">
@@ -222,11 +233,13 @@
         UPDATE comments
         SET title = #{title},
             content = #{content},
-            comment_time = #{commentTime}
+            comment_time = #{commentTime},
+            version = version + 1
         WHERE user_id = #{userId}
           AND movie_id = #{movieId}
           AND type = #{type}
           AND status = 1
+          AND version = #{version}
     </update>
 
     <select id="selectByIdAndUserId" resultMap="BaseResultMap">

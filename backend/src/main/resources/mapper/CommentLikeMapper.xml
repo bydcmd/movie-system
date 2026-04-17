@@ -17,6 +17,11 @@
         WHERE comment_id = #{commentId}
     </delete>
 
+    <delete id="deleteByMovieId">
+        DELETE FROM comment_likes
+        WHERE comment_id IN (SELECT comment_id FROM comments WHERE movie_id = #{movieId})
+    </delete>
+
     <select id="selectByCommentAndUser" resultType="com.movie.backend.entity.CommentLike">
         SELECT id, comment_id as commentId, user_id as userId, create_time as createTime
         FROM comment_likes
