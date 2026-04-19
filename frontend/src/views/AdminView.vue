@@ -26,10 +26,6 @@ const adminAvatar = computed(() => resolveAssetUrl(user.value?.avatar))
 const adminInitial = computed(() => getNameInitial(user.value?.nickname || user.value?.id))
 const adminDisplayName = computed(() => user.value?.nickname?.trim() || user.value?.id || '未知管理员')
 
-function goHome() {
-  void router.push('/')
-}
-
 async function handleLogout() {
   await authStore.logout()
   void router.push('/login')
@@ -44,8 +40,7 @@ async function handleLogout() {
       <section class="admin-main">
         <header class="admin-topbar">
           <div class="admin-topbar-copy">
-            <span class="admin-topbar-kicker">ADMIN AREA</span>
-            <h1 class="admin-topbar-title">{{ pageTitle }}</h1>
+                        <h1 class="admin-topbar-title">{{ pageTitle }}</h1>
             <p class="admin-topbar-description">{{ pageDescription }}</p>
           </div>
 
@@ -70,9 +65,6 @@ async function handleLogout() {
             </div>
 
             <div class="admin-shortcuts">
-              <n-button quaternary @click="goHome">
-                前台首页
-              </n-button>
               <n-button secondary type="error" @click="handleLogout">
                 退出登录
               </n-button>

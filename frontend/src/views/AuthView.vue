@@ -35,6 +35,15 @@ const registerForm = ref({
 
 const loading = computed(() => loginMutation.isPending.value || registerMutation.isPending.value)
 
+const handleSubmit = async () => {
+  if (isLogin.value) {
+    await handleLogin()
+    return
+  }
+
+  await handleRegister()
+}
+
 const handleLogin = async () => {
   if (!loginForm.value.id || !loginForm.value.password) {
     message.warning('请填写账号和密码')
@@ -130,7 +139,7 @@ const switchToRegister = () => {
     :button-text="isLogin ? '登录' : '创建账号'"
     type="login"
     :loading="loading"
-    @submit="isLogin ? handleLogin : handleRegister"
+    @submit="handleSubmit"
   >
     <div v-if="isLogin" class="space-y-4">
       <n-input

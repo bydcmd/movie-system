@@ -49,6 +49,7 @@ Naming shorthand used in jobs:
 Common wrapper to job mappings:
 
 - `run_postgres_sync.sh` -> `jobs/postgres_to_hive_ods.py`
+- `run_generate_dwd_source_data.sh` -> `jobs/generate_dwd_user_event_source_data.py`
 - `run_dwd_build.sh` -> `jobs/build_dwd_user_event_wide_di.py`
 - `run_dwd_snapshots.sh` -> `jobs/build_dwd_snapshots_di.py`
 - `run_dws_postgres_interactions.sh` -> `jobs/build_dws_postgres_interactions_1d.py`
@@ -108,24 +109,19 @@ spark-submit \
 
 If `--snapshot-date` is omitted, the job resolves the latest common PostgreSQL ODS snapshot partition with `dt <= calc-date`.
 
-## 4.5) Generate PostgreSQL-aligned ODS test snapshot
+## 4.5) Generate synthetic PostgreSQL source data
 
-When local business data is too sparse for DWD/DWS validation, you can generate one ODS snapshot partition that still matches the current PostgreSQL-driven pipeline:
+When local business data is too sparse for DWD/DWS validation, you can generate a batch of synthetic source data and append it directly into the PostgreSQL business tables:
 
 - `public.movies` is sampled from the business database only and is never synthetically fabricated.
-- User and interaction tables use a mixed strategy: first sample existing PostgreSQL rows, then top up with generated rows that reference the sampled movie set.
-- The job writes directly into the same `ods.ods_pg_*_full` Hive partitions consumed by downstream DWD/DWS jobs.
+- User and interaction tables are generated as new rows that reference the sampled movie set.
+- The job writes directly into `public.users`, `public.favorite_folders`, `public.favorites`, `public.ratings`, `public.comments`, `public.comment_likes`, `public.view_history`, and `public.watched_movies`.
+- No Kafka source path is involved in this generator.
 
 Example:
 
 ```bash
-spark-submit \
-  --master yarn \
-  --deploy-mode client \
-  --packages org.postgresql:postgresql:42.7.3 \
-  jobs/generate_dwd_user_event_source_data.py \
-  --config conf/etl_config.json \
-  --batch-date 2026-02-25
+bash run_generate_dwd_source_data.sh 2026-02-25 conf/etl_config.json
 ```
 
 Common overrides:
@@ -136,11 +132,11 @@ Common overrides:
 --new-user-target 40 \
 --view-target 5000 \
 --comment-target 1000 \
---sample-ratio 0.4 \
---lookback-days 60
+--lookback-days 60 \
+--write-batch-size 1000
 ```
 
-After it finishes, run the normal jobs with `--snapshot-date` equal to the generated `batch-date`.
+After it finishes, run `postgres_to_hive_ods.py` for the same `batch-date`, then continue with the normal DWD/DWS jobs.
 
 PostgreSQL-driven DWD snapshot job builds both user and movie snapshots in one run:
 
@@ -212,15 +208,19 @@ hive -f ../hive/ads/ads_ddl.hql
 
 Build hot ranking with mixed sources:
 
-- `DAILY / WEEKLY / MONTHLY`: replay raw PostgreSQL interaction snapshots and recalculate movie engagement inside each window, so `view_uv` and `active_user_cnt` are deduplicated over the whole 1/7/30 day window instead of summing daily UVs
-- `TOTAL`: read from the configured total source table
+- `DAILY / WEEKLY / MONTHLY`: read `dwd.dwd_user_event_wide_di` as the bounded event fact table and join `dwd.dwd_movie_snapshot_di` for movie attributes, so `view_uv` and `active_user_cnt` are deduplicated over the whole 1/7/30 day window instead of summing daily UVs
+- `TOTAL`: read from the configured total source table, which still defaults to `dws.dws_movie_engagement_1d`
 
 Recommended configuration:
 
 - `ads.source_type=movie_metric_daily`
-- `ads.source_table=dws.dws_movie_engagement_daily_1d`
+- `ads.event_source_table=dwd.dwd_user_event_wide_di`
+- `ads.movie_snapshot_table=dwd.dwd_movie_snapshot_di`
+- `ads.total_source_table=dws.dws_movie_engagement_1d`
 
-When `ads.source_type=movie_metric_daily`, bounded periods (`DAILY / WEEKLY / MONTHLY`) are rebuilt from the latest common raw snapshot tables used by `build_dws_postgres_interactions_1d.py`, while `TOTAL` still defaults to `dws.dws_movie_engagement_1d`.
+The legacy `ads.source_table` field can stay in config for compatibility, but bounded-period ranking no longer reads `dws.dws_movie_engagement_daily_1d` directly.
+
+When `ads.source_type=movie_metric_daily`, bounded periods (`DAILY / WEEKLY / MONTHLY`) are rebuilt from DWD event facts plus the latest movie snapshot partition, while `TOTAL` still defaults to `dws.dws_movie_engagement_1d`.
 
 Full snapshot source is still available for lifetime-style ranking snapshots:
 

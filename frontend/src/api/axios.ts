@@ -11,11 +11,34 @@ import { useAuthStore } from "@/stores/auth";
 // 创建独立的消息 API（用于组件外部）
 const { message: messageApi } = createDiscreteApi(["message"]);
 
+const BIGINT_JSON_VALUE_REGEX = /(:\s*)(-?\d{16,})(?=\s*[,}\]])/g;
+
+function parseJsonPreservingLargeIntegers(data: string): unknown {
+  const trimmed = data.trim();
+  if (!trimmed || (!trimmed.startsWith("{") && !trimmed.startsWith("["))) {
+    return data;
+  }
+
+  try {
+    return JSON.parse(trimmed.replace(BIGINT_JSON_VALUE_REGEX, '$1"$2"'));
+  } catch {
+    return data;
+  }
+}
+
 const instance = axios.create({
   // 使用 Vite 环境变量，若无则回退至本地地址
   baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:8080",
   timeout: 10000,
   withCredentials: true,
+  transformResponse: [
+    (data) => {
+      if (typeof data !== "string") {
+        return data;
+      }
+      return parseJsonPreservingLargeIntegers(data);
+    },
+  ],
 });
 
 declare module "axios" {
@@ -113,7 +136,6 @@ function handleAuthEndpointUnauthorized(url: string | undefined, message?: strin
   }
 
   if (url.includes("/auth/token/refresh") || url.includes("/auth/logout")) {
-    console.warn("[Auth Endpoint Unauthorized]", message);
     return;
   }
 
@@ -379,9 +401,15 @@ instance.interceptors.response.use(
           messageApi.error(message || `请求失败 (HTTP ${status})`);
       }
     } else if (error.request) {
-      // 请求已发出但没有收到响应
-      console.error("[Network Error]", "无法连接到服务器，请检查网络");
-      messageApi.error("网络连接失败，请检查网络设置");
+      // 请求已发出但没有收到响应（可能是取消、超时或真正的网络错误）
+      // ERR_CANCELED 表示请求被取消（页面切换时 Vue Query 会取消进行中的请求）
+      if (error.code === 'ERR_CANCELED' || error.message === 'canceled') {
+        console.warn("[Request Canceled]", error.message);
+        // 取消的请求不显示错误提示，静默忽略
+      } else {
+        console.error("[Network Error]", "无法连接到服务器，请检查网络");
+        messageApi.error("网络连接失败，请检查网络设置");
+      }
     } else {
       // 请求配置出错
       console.error("[Request Config Error]", error.message);

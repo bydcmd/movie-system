@@ -191,6 +191,11 @@ export const useAuthStore = defineStore('auth', () => {
     initializePromise = (async () => {
       try {
         if (!token.value) {
+          if (!user.value) {
+            resolved = true
+            return
+          }
+
           const refreshedToken = await refreshAccessToken()
           if (!refreshedToken) {
             resolved = true

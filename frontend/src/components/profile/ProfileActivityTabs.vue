@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { NTabs, NTabPane, NButton } from 'naive-ui'
 import type { Comment, FavoriteFolderVO, MovieItemVO, MyRatingVO } from '@/api/model'
 import { useWatchedManagement } from '@/composables/useWatchedManagement'
+import { normalizeMovieIdList } from '@/utils/movie'
 import ProfileCommentList from './ProfileCommentList.vue'
 import ProfileFolderList from './ProfileFolderList.vue'
 import ProfileHistoryList from './ProfileHistoryList.vue'
@@ -64,9 +65,7 @@ const watchedManagement = useWatchedManagement({
 
 // Computed for watched selection (similar to ProfileCommentList)
 const selectableWatchedIds = computed(() => {
-  return props.watchedMovies
-    .map(item => item.movieId)
-    .filter((id): id is number => typeof id === 'number')
+  return normalizeMovieIdList(props.watchedMovies.map((item) => item.movieId))
 })
 
 const allWatchedSelected = computed(() => {

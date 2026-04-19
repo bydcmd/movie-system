@@ -7,6 +7,7 @@ import {
   estimateReadingMinutes,
   extractTiptapText,
   getCommentPreviewText,
+  normalizeCommentId,
   getCommentTypeLabel,
   isLongReview
 } from '@/utils/comment'
@@ -31,7 +32,7 @@ const props = withDefaults(
 )
 
 const emit = defineEmits<{
-  toggleLike: [commentId: number]
+  toggleLike: [commentId: string]
   delete: [comment: CommentVO]
 }>()
 
@@ -63,7 +64,8 @@ const longReviewMeta = computed(() => {
   return items
 })
 const longReviewRoute = computed(() => {
-  if (!isLong.value || !props.comment.movieId || !props.comment.id) {
+  const commentId = normalizeCommentId(props.comment.id)
+  if (!isLong.value || !props.comment.movieId || !commentId) {
     return null
   }
 
@@ -71,7 +73,7 @@ const longReviewRoute = computed(() => {
     name: 'movie-review-detail',
     params: {
       id: props.comment.movieId,
-      commentId: props.comment.id
+      commentId
     }
   }
 })
@@ -86,11 +88,12 @@ const likeActionLabel = computed(() => {
 })
 
 function handleToggleLike() {
-  if (!props.comment.id) {
+  const commentId = normalizeCommentId(props.comment.id)
+  if (!commentId) {
     return
   }
 
-  emit('toggleLike', props.comment.id)
+  emit('toggleLike', commentId)
 }
 
 function handleDelete() {

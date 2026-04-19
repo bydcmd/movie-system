@@ -5,6 +5,7 @@ import { NEmpty, NPagination, NCheckbox } from 'naive-ui'
 import type { MovieItemVO } from '@/api/model'
 import MoviePlaceholder from '@/components/movie/MoviePlaceholder.vue'
 import { formatDateLabel, resolveAssetUrl, splitCsvLike, truncateText } from '@/utils/profile'
+import { getMovieIdKey, normalizeMovieId, normalizeMovieIdList, type MovieId } from '@/utils/movie'
 
 const props = withDefaults(
   defineProps<{
@@ -18,7 +19,7 @@ const props = withDefaults(
     page?: number
     pageSize?: number
     // Selection props (aligned with ProfileCommentList)
-    selectedIds?: number[]
+    selectedIds?: MovieId[]
     isDeleting?: boolean
     isClearing?: boolean
     showClearAll?: boolean
@@ -38,7 +39,7 @@ const emit = defineEmits<{
   refresh: []
   'update:page': [page: number]
   'update:pageSize': [pageSize: number]
-  'toggle-selection': [movieId: number]
+  'toggle-selection': [movieId: MovieId]
   'toggle-all': [checked: boolean]
   'delete-selected': []
   'clear-all': []
@@ -47,14 +48,15 @@ const emit = defineEmits<{
 const router = useRouter()
 
 // Track which movie posters failed to load
-const failedPosterIds = ref<Set<number>>(new Set())
+const failedPosterIds = ref<Set<string>>(new Set())
 
-function openMovie(movieId?: number) {
-  if (!movieId) {
+function openMovie(movieId?: MovieId) {
+  const movieIdKey = getMovieIdKey(movieId)
+  if (!movieIdKey) {
     return
   }
 
-  void router.push(`/movie/${movieId}`)
+  void router.push(`/movie/${movieIdKey}`)
 }
 
 function getPoster(movie: MovieItemVO): string | null {
@@ -67,14 +69,16 @@ function getGenres(movie: MovieItemVO) {
   return splitCsvLike(movie.genres).slice(0, 3)
 }
 
-function handlePosterError(movieId: number) {
-  if (movieId) {
-    failedPosterIds.value.add(movieId)
+function handlePosterError(movieId?: MovieId) {
+  const movieIdKey = getMovieIdKey(movieId)
+  if (movieIdKey) {
+    failedPosterIds.value.add(movieIdKey)
   }
 }
 
 function shouldShowPlaceholder(movie: MovieItemVO): boolean {
-  return !getPoster(movie) || failedPosterIds.value.has(movie.movieId ?? 0)
+  const movieIdKey = getMovieIdKey(movie.movieId)
+  return !getPoster(movie) || (movieIdKey !== null && failedPosterIds.value.has(movieIdKey))
 }
 
 const showPagination = computed(() => props.total > props.pageSize)
@@ -90,21 +94,21 @@ function handlePageSizeChange(newPageSize: number) {
   emit('refresh')
 }
 
-function isMovieSelected(movieId: number | undefined): boolean {
-  if (!movieId) return false
-  return props.selectedIds?.includes(movieId) ?? false
+function isMovieSelected(movieId?: MovieId): boolean {
+  const movieIdKey = getMovieIdKey(movieId)
+  if (!movieIdKey) return false
+  return props.selectedIds?.some((selectedId) => getMovieIdKey(selectedId) === movieIdKey) ?? false
 }
 
-function handleToggleSelection(movieId: number | undefined) {
-  if (!movieId) return
-  emit('toggle-selection', movieId)
+function handleToggleSelection(movieId?: MovieId) {
+  const normalizedMovieId = normalizeMovieId(movieId)
+  if (!normalizedMovieId) return
+  emit('toggle-selection', normalizedMovieId)
 }
 
 // Computed for toolbar (aligned with ProfileCommentList)
 const selectableMovieIds = computed(() => {
-  return props.items
-    .map(item => item.movieId)
-    .filter((id): id is number => typeof id === 'number')
+  return normalizeMovieIdList(props.items.map((item) => item.movieId))
 })
 
 const selectedCount = computed(() => props.selectedIds?.length ?? 0)
@@ -165,15 +169,6 @@ function handleToggleAll(checked: boolean) {
 
         <span class="profile-movie-selection-count">
           已选 {{ selectedCount }} 部
-        </span>
-
-        <span class="profile-movie-toolbar-hint">
-          <template v-if="isPreviewTruncated">
-            当前展示最近 {{ items.length }} / {{ total }} 部，删除所选仅作用于当前可见记录。
-          </template>
-          <template v-else>
-            删除所选仅影响勾选记录。
-          </template>
         </span>
       </div>
 

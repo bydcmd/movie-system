@@ -9,6 +9,7 @@ import {
 import type { MyRatingVO } from '@/api/model'
 import MoviePlaceholder from '@/components/movie/MoviePlaceholder.vue'
 import { formatDateLabel, resolveAssetUrl, truncateText } from '@/utils/profile'
+import { getMovieIdKey, normalizeMovieId, normalizeMovieIdList, type MovieId } from '@/utils/movie'
 
 const props = withDefaults(defineProps<{
   items: MyRatingVO[]
@@ -31,20 +32,18 @@ const emit = defineEmits<{
 const router = useRouter()
 const dialog = useDialog()
 const message = useMessage()
-const selectedRatingIds = ref<number[]>([])
+const selectedRatingIds = ref<MovieId[]>([])
 const deletingSelected = ref(false)
 const clearingAll = ref(false)
 
 // Track which rating posters failed to load
-const failedPosterIds = ref<Set<number>>(new Set())
+const failedPosterIds = ref<Set<string>>(new Set())
 
 const deleteRatingsBatchMutation = useDeleteRatingsBatch()
 const clearMyRatingsMutation = useClearMyRatings()
 
 const selectableRatingIds = computed(() => {
-  return props.items
-    .map((item) => getRatingId(item))
-    .filter((ratingId): ratingId is number => typeof ratingId === 'number')
+  return normalizeMovieIdList(props.items.map((item) => getRatingId(item)))
 })
 const selectedCount = computed(() => selectedRatingIds.value.length)
 const allVisibleSelected = computed(() => {
@@ -80,8 +79,7 @@ watch(
 )
 
 function getRatingId(item?: MyRatingVO | null) {
-  const candidate = item?.id ?? item?.movieId
-  return typeof candidate === 'number' && candidate > 0 ? candidate : null
+  return normalizeMovieId(item?.id ?? item?.movieId)
 }
 
 function getPosterUrl(item?: MyRatingVO | null): string | null {
@@ -90,14 +88,16 @@ function getPosterUrl(item?: MyRatingVO | null): string | null {
   return url && url.trim() ? url : null
 }
 
-function handlePosterError(movieId: number) {
-  if (movieId) {
-    failedPosterIds.value.add(movieId)
+function handlePosterError(movieId?: MovieId) {
+  const movieIdKey = getMovieIdKey(movieId)
+  if (movieIdKey) {
+    failedPosterIds.value.add(movieIdKey)
   }
 }
 
 function shouldShowPlaceholder(item?: MyRatingVO | null): boolean {
-  return !getPosterUrl(item) || failedPosterIds.value.has(item?.movieId ?? 0)
+  const movieIdKey = getMovieIdKey(item?.movieId)
+  return !getPosterUrl(item) || (movieIdKey !== null && failedPosterIds.value.has(movieIdKey))
 }
 
 function extractErrorMessage(error: unknown): string {
@@ -122,31 +122,38 @@ function extractErrorMessage(error: unknown): string {
   return typeof record.message === 'string' ? record.message : ''
 }
 
-function openMovie(movieId?: number) {
-  if (!movieId) {
+function openMovie(movieId?: MovieId) {
+  const movieIdKey = getMovieIdKey(movieId)
+  if (!movieIdKey) {
     return
   }
 
-  void router.push(`/movie/${movieId}`)
+  void router.push(`/movie/${movieIdKey}`)
 }
 
 function handleToggleAllRatings(checked: boolean) {
   selectedRatingIds.value = checked ? [...selectableRatingIds.value] : []
 }
 
-function handleToggleRating(ratingId: number, checked: boolean) {
+function handleToggleRating(ratingId: MovieId, checked: boolean) {
+  const ratingIdKey = getMovieIdKey(ratingId)
+  const normalizedRatingId = normalizeMovieId(ratingId)
+  if (!ratingIdKey || !normalizedRatingId) {
+    return
+  }
+
   if (checked) {
-    if (!selectedRatingIds.value.includes(ratingId)) {
-      selectedRatingIds.value = [...selectedRatingIds.value, ratingId]
+    if (!selectedRatingIds.value.some((id) => getMovieIdKey(id) === ratingIdKey)) {
+      selectedRatingIds.value = [...selectedRatingIds.value, normalizedRatingId]
     }
     return
   }
 
-  selectedRatingIds.value = selectedRatingIds.value.filter((id) => id !== ratingId)
+  selectedRatingIds.value = selectedRatingIds.value.filter((id) => getMovieIdKey(id) !== ratingIdKey)
 }
 
-async function deleteRatings(ratingIds: number[]) {
-  const uniqueIds = Array.from(new Set(ratingIds))
+async function deleteRatings(ratingIds: MovieId[]) {
+  const uniqueIds = normalizeMovieIdList(ratingIds)
   if (!uniqueIds.length) {
     return
   }
@@ -156,10 +163,11 @@ async function deleteRatings(ratingIds: number[]) {
   try {
     await deleteRatingsBatchMutation.mutateAsync({
       data: {
-        ids: uniqueIds
+        ids: uniqueIds as unknown as number[]
       }
     })
-    selectedRatingIds.value = selectedRatingIds.value.filter((ratingId) => !uniqueIds.includes(ratingId))
+    const uniqueIdKeys = new Set(uniqueIds.map((id) => String(id)))
+    selectedRatingIds.value = selectedRatingIds.value.filter((ratingId) => !uniqueIdKeys.has(String(ratingId)))
     message.success(uniqueIds.length > 1 ? `已删除 ${uniqueIds.length} 条评分记录` : '评分记录已删除')
     emit('refresh')
   } catch (error) {
@@ -248,15 +256,6 @@ function confirmClearRatings() {
 
         <span class="profile-rating-selection-count">
           已选 {{ selectedCount }} 条
-        </span>
-
-        <span class="profile-rating-toolbar-hint">
-          <template v-if="isPreviewTruncated">
-            当前展示最近 {{ items.length }} / {{ total }} 条，删除所选仅作用于当前可见记录。
-          </template>
-          <template v-else>
-            删除所选仅影响勾选记录，清空会删除全部评分。
-          </template>
         </span>
       </div>
 

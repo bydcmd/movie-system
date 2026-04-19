@@ -111,18 +111,19 @@ const handleUserSelect = async (key: string | number) => {
         </n-button>
       </div>
 
-      <div class="mx-8 hidden max-w-md flex-1 md:flex">
+      <div class="mx-8 hidden items-center gap-2 md:flex md:max-w-md md:flex-1">
         <n-input
           v-model:value="searchValue"
           placeholder="搜索电影、演员、导演..."
-          class="rounded-full border-none bg-slate-100"
+          class="flex-1 rounded-full border-none bg-slate-100"
           :input-props="{ id: 'global-search', name: 'search', autocomplete: 'off' }"
           @keyup.enter="handleSearch"
-        >
-          <template #prefix>
-            <span class="text-slate-400">🔍</span>
+        />
+        <n-button type="primary" circle @click="handleSearch">
+          <template #icon>
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
           </template>
-        </n-input>
+        </n-button>
       </div>
 
       <div class="flex items-center gap-4">

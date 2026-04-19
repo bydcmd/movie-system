@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { NButton } from 'naive-ui'
-import { getMovieId, type MovieIdLike } from '@/utils/movie'
+import { getMovieId, getMovieIdKey, type MovieIdLike } from '@/utils/movie'
 import MoviePlaceholder from './MoviePlaceholder.vue'
 
 type MovieCardMovie = MovieIdLike & {
@@ -57,10 +57,11 @@ const handleImageError = () => {
 // 跳转到详情页
 const goToDetail = () => {
   const id = getMovieId(props.movie)
-  if (id && id > 0) {
+  const routeId = getMovieIdKey(id)
+  if (routeId) {
     void router.push({
       name: 'movie-detail',
-      params: { id: String(id) }
+      params: { id: routeId }
     })
   }
 }

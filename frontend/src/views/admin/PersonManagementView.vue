@@ -16,6 +16,7 @@ import {
 } from 'naive-ui'
 import { useAdminPersons } from '@/composables/admin/useAdminPersons'
 import { resolveAssetUrl } from '@/utils/profile'
+import type { MovieId } from '@/utils/movie'
 
 const {
   state,
@@ -42,7 +43,7 @@ const {
   isDeletingPerson
 } = useAdminPersons()
 
-function getPersonInitial(person: { name?: string; id?: number }): string {
+function getPersonInitial(person: { name?: string; id?: MovieId }): string {
   const name = person.name?.trim()
   if (!name) {
     return person.id ? String(person.id).slice(0, 1).toUpperCase() : '?'

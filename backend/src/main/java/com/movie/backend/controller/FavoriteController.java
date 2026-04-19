@@ -20,6 +20,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @Tag(name = "Favorite Management", description = "电影收藏夹相关接口")
 @SecurityRequirement(name = "BearerAuth")
 @RestController
@@ -119,9 +121,13 @@ public class FavoriteController {
 
     @Operation(operationId = "getMovieFolderIds", summary = "查询电影所在收藏夹列表", description = "查询当前用户的指定电影在哪些收藏夹中，返回收藏夹ID列表")
     @GetMapping("/movies/{movieId}/folders")
-    public Result<java.util.List<Long>> getMovieFolderIds(
+    public Result<List<String>> getMovieFolderIds(
             @Parameter(description = "电影ID", required = true) @PathVariable @Min(1) Long movieId,
             @AuthenticationPrincipal User user) {
-        return Result.success(favoriteService.getMovieFolderIds(user.getId(), movieId));
+        return Result.success(
+                favoriteService.getMovieFolderIds(user.getId(), movieId).stream()
+                        .map(String::valueOf)
+                        .toList()
+        );
     }
 }

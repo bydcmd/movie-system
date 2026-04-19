@@ -2,15 +2,22 @@
 import { computed, watch } from 'vue'
 import { NButton, NCheckbox, NEmpty, NModal, NSpin, NTag } from 'naive-ui'
 import type { FavoriteFolderVO } from '@/api/model'
-import { isDefaultFavoriteFolder, sortFavoriteFolders } from '@/utils/favorite-folder'
+import {
+  getFavoriteFolderIdKey,
+  hasFavoriteFolderId,
+  isDefaultFavoriteFolder,
+  normalizeFavoriteFolderId,
+  sortFavoriteFolders,
+  type FavoriteFolderId
+} from '@/utils/favorite-folder'
 
 const show = defineModel<boolean>('show', { required: true })
-const selectedFolderIds = defineModel<number[]>('selectedFolderIds', { required: true })
+const selectedFolderIds = defineModel<FavoriteFolderId[]>('selectedFolderIds', { required: true })
 
 const props = withDefaults(
   defineProps<{
     folders: FavoriteFolderVO[]
-    initialFolderIds?: number[]
+    initialFolderIds?: FavoriteFolderId[]
     loading?: boolean
     submitting?: boolean
   }>(),
@@ -22,7 +29,7 @@ const props = withDefaults(
 )
 
 const emit = defineEmits<{
-  submit: [folderIds: number[]]
+  submit: [folderIds: FavoriteFolderId[]]
   createFolder: []
 }>()
 
@@ -31,10 +38,7 @@ const modalStyle = computed(() => ({
 }))
 
 const selectableFolders = computed(() => {
-  return sortFavoriteFolders(props.folders).filter(
-    (folder): folder is FavoriteFolderVO & { id: number } =>
-      typeof folder.id === 'number' && folder.id > 0
-  )
+  return sortFavoriteFolders(props.folders).filter(hasFavoriteFolderId)
 })
 const hasFolders = computed(() => selectableFolders.value.length > 0)
 const hasPendingSubmission = computed(() => props.submitting)
@@ -42,21 +46,21 @@ const selectedCount = computed(() => selectedFolderIds.value.length)
 const initialSelectedFolderIds = computed(() => {
   return Array.from(
     new Set(
-      (props.initialFolderIds ?? []).filter(
-        (folderId): folderId is number => typeof folderId === 'number' && folderId > 0
-      )
+      (props.initialFolderIds ?? [])
+        .map((folderId) => normalizeFavoriteFolderId(folderId))
+        .filter((folderId): folderId is FavoriteFolderId => folderId !== null)
     )
   )
 })
-const initialFolderIdSet = computed(() => new Set(initialSelectedFolderIds.value))
+const initialFolderIdSet = computed(() => new Set(initialSelectedFolderIds.value.map((folderId) => String(folderId))))
 const initialSelectedCount = computed(() => initialSelectedFolderIds.value.length)
 const hasChanges = computed(() => {
   if (selectedFolderIds.value.length !== initialSelectedFolderIds.value.length) {
     return true
   }
 
-  const selectedFolderIdSet = new Set(selectedFolderIds.value)
-  return initialSelectedFolderIds.value.some((folderId) => !selectedFolderIdSet.has(folderId))
+  const selectedFolderIdSet = new Set(selectedFolderIds.value.map((folderId) => String(folderId)))
+  return initialSelectedFolderIds.value.some((folderId) => !selectedFolderIdSet.has(String(folderId)))
 })
 const canSubmit = computed(() => hasChanges.value && !hasPendingSubmission.value)
 
@@ -73,35 +77,37 @@ function getMovieCountLabel(folder: FavoriteFolderVO) {
   return `${count} 部电影`
 }
 
-function isSelected(folderId: number) {
-  return selectedFolderIds.value.includes(folderId)
+function isSelected(folderId: FavoriteFolderId) {
+  const folderIdKey = String(folderId)
+  return selectedFolderIds.value.some((selectedFolderId) => String(selectedFolderId) === folderIdKey)
 }
 
-function isInitiallySelected(folderId: number) {
-  return initialFolderIdSet.value.has(folderId)
+function isInitiallySelected(folderId: FavoriteFolderId) {
+  return initialFolderIdSet.value.has(String(folderId))
 }
 
-function willAdd(folderId: number) {
+function willAdd(folderId: FavoriteFolderId) {
   return isSelected(folderId) && !isInitiallySelected(folderId)
 }
 
-function willRemove(folderId: number) {
+function willRemove(folderId: FavoriteFolderId) {
   return !isSelected(folderId) && isInitiallySelected(folderId)
 }
 
-function handleFolderSelection(folderId: number, checked: boolean) {
+function handleFolderSelection(folderId: FavoriteFolderId, checked: boolean) {
   if (hasPendingSubmission.value) {
     return
   }
 
   if (checked) {
-    if (!selectedFolderIds.value.includes(folderId)) {
+    if (!isSelected(folderId)) {
       selectedFolderIds.value = [...selectedFolderIds.value, folderId]
     }
     return
   }
 
-  selectedFolderIds.value = selectedFolderIds.value.filter((id) => id !== folderId)
+  const folderIdKey = String(folderId)
+  selectedFolderIds.value = selectedFolderIds.value.filter((id) => String(id) !== folderIdKey)
 }
 
 function handleSubmit() {
@@ -115,8 +121,12 @@ function handleSubmit() {
 watch(
   selectableFolders,
   (nextFolders) => {
-    const validFolderIds = new Set(nextFolders.map((folder) => folder.id))
-    selectedFolderIds.value = selectedFolderIds.value.filter((folderId) => validFolderIds.has(folderId))
+    const validFolderIds = new Set(
+      nextFolders
+        .map((folder) => getFavoriteFolderIdKey(folder.id))
+        .filter((folderId): folderId is string => Boolean(folderId))
+    )
+    selectedFolderIds.value = selectedFolderIds.value.filter((folderId) => validFolderIds.has(String(folderId)))
   },
   { immediate: true }
 )
@@ -141,13 +151,6 @@ watch(
   >
     <div class="picker-layout">
       <section class="picker-intro">
-        <div>
-          <h3 class="picker-title">勾选想保留这部电影的收藏夹</h3>
-          <p class="picker-description">
-            当前已在 {{ initialSelectedCount }} 个收藏夹中。勾选表示提交后保留在该收藏夹，取消勾选会移除电影，包括默认收藏夹。
-          </p>
-        </div>
-
         <n-button
           tertiary
           class="rounded-full px-5"
@@ -246,21 +249,6 @@ watch(
   padding: 1rem 1.1rem;
   border-radius: 1.25rem;
   background: linear-gradient(135deg, rgba(248, 250, 252, 0.96), rgba(241, 245, 249, 0.92));
-}
-
-.picker-title {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.picker-description {
-  margin: 0.45rem 0 0;
-  max-width: 34rem;
-  font-size: 0.92rem;
-  line-height: 1.7;
-  color: #64748b;
 }
 
 .picker-loading,

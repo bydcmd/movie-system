@@ -1,6 +1,7 @@
 package com.movie.backend.entity;
 
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import com.movie.backend.config.ImagePathSerializer;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
@@ -8,7 +9,8 @@ import lombok.Data;
 @Data
 @Schema(description = "影人 (演员/导演/编剧) 详细信息")
 public class Person {
-    @Schema(description = "影人ID", example = "1054521")
+    @JsonSerialize(using = ToStringSerializer.class)
+    @Schema(description = "影人ID", example = "1054521", type = "string")
     private Long id;
 
     @Schema(description = "中文名", example = "蒂姆·罗宾斯")

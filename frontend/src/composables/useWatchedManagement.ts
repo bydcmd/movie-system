@@ -5,6 +5,7 @@ import {
   useClearWatched
 } from '@/api/endpoints/watched-management/watched-management'
 import type { MovieItemVO } from '@/api/model'
+import { getMovieIdKey, normalizeMovieId, normalizeMovieIdList, type MovieId } from '@/utils/movie'
 
 export interface UseWatchedManagementOptions {
   onSuccess?: () => void
@@ -16,7 +17,7 @@ export function useWatchedManagement(options: UseWatchedManagementOptions = {}) 
   const { onSuccess } = options
 
   // Selection state - using ref for array (similar to ProfileCommentList)
-  const selectedIds = ref<number[]>([])
+  const selectedIds = ref<MovieId[]>([])
 
   // Mutations
   const deleteBatchMutation = useDeleteWatchedBatch()
@@ -32,12 +33,20 @@ export function useWatchedManagement(options: UseWatchedManagementOptions = {}) 
   /**
    * Toggle selection of a single movie
    */
-  function toggleSelection(movieId: number) {
-    const index = selectedIds.value.indexOf(movieId)
-    if (index > -1) {
-      selectedIds.value = selectedIds.value.filter(id => id !== movieId)
+  function toggleSelection(movieId: MovieId) {
+    const movieIdKey = getMovieIdKey(movieId)
+    if (!movieIdKey) {
+      return
+    }
+
+    const existingIndex = selectedIds.value.findIndex((id) => getMovieIdKey(id) === movieIdKey)
+    if (existingIndex > -1) {
+      selectedIds.value = selectedIds.value.filter((id) => getMovieIdKey(id) !== movieIdKey)
     } else {
-      selectedIds.value = [...selectedIds.value, movieId]
+      const normalizedMovieId = normalizeMovieId(movieId)
+      if (normalizedMovieId) {
+        selectedIds.value = [...selectedIds.value, normalizedMovieId]
+      }
     }
   }
 
@@ -45,10 +54,7 @@ export function useWatchedManagement(options: UseWatchedManagementOptions = {}) 
    * Select all movies in the list
    */
   function selectAll(movies: MovieItemVO[]) {
-    const allIds = movies
-      .map(m => m.movieId)
-      .filter((id): id is number => id !== undefined && id !== null)
-    selectedIds.value = allIds
+    selectedIds.value = normalizeMovieIdList(movies.map((movie) => movie.movieId))
   }
 
   /**
@@ -61,8 +67,9 @@ export function useWatchedManagement(options: UseWatchedManagementOptions = {}) 
   /**
    * Check if a movie is selected
    */
-  function isSelected(movieId: number): boolean {
-    return selectedIds.value.includes(movieId)
+  function isSelected(movieId: MovieId): boolean {
+    const movieIdKey = getMovieIdKey(movieId)
+    return Boolean(movieIdKey && selectedIds.value.some((id) => getMovieIdKey(id) === movieIdKey))
   }
 
   /**
@@ -79,7 +86,7 @@ export function useWatchedManagement(options: UseWatchedManagementOptions = {}) 
     try {
       await deleteBatchMutation.mutateAsync({
         data: { ids }
-      })
+      } as { data: { ids: number[] } })
       message.success(`已成功删除 ${ids.length} 部影片`)
       selectedIds.value = []
       onSuccess?.()

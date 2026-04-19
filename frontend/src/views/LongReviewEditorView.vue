@@ -532,11 +532,9 @@ function handleKeydown(event: KeyboardEvent) {
               placeholder="写下你的观影感受..."
               :min-height="620"
               autofocus
+              class="content-editor"
               @update:plain-text="handlePlainTextUpdate"
             />
-            <div class="input-meta-row">
-              <span class="input-meta">正文 {{ longWordCount }} 字</span>
-            </div>
           </n-form-item>
         </n-form>
       </section>
@@ -677,7 +675,13 @@ function handleKeydown(event: KeyboardEvent) {
 .title-input :deep(.n-input-wrapper) {
   padding-top: 0.25rem;
   padding-bottom: 0.25rem;
-  border-radius: 14px;
+  border-radius: 3px;
+}
+
+.content-editor {
+  width: 100%;
+  border-radius: 3px;
+  border: 1px solid rgb(224, 224, 230);
 }
 
 .input-meta-row {

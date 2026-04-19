@@ -16,8 +16,8 @@ public class EditableLongReviewVO {
     @Schema(description = "用户ID", example = "movie_fan_01")
     private String userId;
 
-    @Schema(description = "电影ID", example = "1292052")
-    private Long movieId;
+    @Schema(description = "电影ID", example = "1292052", type = "string")
+    private String movieId;
 
     @Schema(description = "评论标题 (长评专用)", example = "《肖申克的救赎》：由于恐惧而受其所累")
     private String title;
@@ -48,7 +48,7 @@ public class EditableLongReviewVO {
         EditableLongReviewVO vo = new EditableLongReviewVO();
         vo.setId(comment.getId() != null ? String.valueOf(comment.getId()) : null);
         vo.setUserId(comment.getUserId());
-        vo.setMovieId(comment.getMovieId());
+        vo.setMovieId(comment.getMovieId() != null ? String.valueOf(comment.getMovieId()) : null);
         vo.setTitle(comment.getTitle());
         vo.setType(comment.getType());
         vo.setContent(comment.getContent());

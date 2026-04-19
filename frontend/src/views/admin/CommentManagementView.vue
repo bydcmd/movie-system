@@ -11,6 +11,7 @@ import {
 } from 'naive-ui'
 import { useAdminComments } from '@/composables/admin/useAdminComments'
 import { formatDateTimeLabel } from '@/utils/profile'
+import type { MovieId } from '@/utils/movie'
 
 const router = useRouter()
 const {
@@ -32,7 +33,7 @@ const {
   isDeletingComment
 } = useAdminComments()
 
-function openMovieDetail(movieId?: number) {
+function openMovieDetail(movieId?: MovieId) {
   if (!movieId) {
     return
   }

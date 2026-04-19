@@ -25,6 +25,7 @@ import {
   createEmptyAdminMovieFormValue,
   toAdminMovieFormValue
 } from '@/utils/adminMovie'
+import type { MovieId } from '@/utils/movie'
 
 type AdminMovieListState = {
   keywordInput: string
@@ -36,11 +37,11 @@ type AdminMovieListState = {
 export function useAdminMovies() {
   const dialog = useDialog()
   const message = useMessage()
-  const pendingDeletedMovieId = shallowRef<number | null>(null)
+  const pendingDeletedMovieId = shallowRef<MovieId | null>(null)
   const movieFormVisible = shallowRef(false)
   const movieFormMode = shallowRef<AdminMovieFormMode>('create')
   const movieFormInitialValue = shallowRef<AdminMovieFormValue>(createEmptyAdminMovieFormValue())
-  const editingMovieId = shallowRef<number | null>(null)
+  const editingMovieId = shallowRef<MovieId | null>(null)
   const submittingMovie = shallowRef(false)
 
   const state = reactive<AdminMovieListState>({
@@ -119,7 +120,7 @@ export function useAdminMovies() {
     movieFormVisible.value = true
   }
 
-  function isDeletingMovie(movieId?: number | null): boolean {
+  function isDeletingMovie(movieId?: MovieId | null): boolean {
     return Boolean(movieId && pendingDeletedMovieId.value === movieId)
   }
 
@@ -145,7 +146,7 @@ export function useAdminMovies() {
         }
 
         await updateMovieMutation.mutateAsync({
-          id: movieId,
+          id: movieId as unknown as number,
           data: payload
         })
       } else {
@@ -178,7 +179,7 @@ export function useAdminMovies() {
     try {
       const shouldFallbackToPreviousPage = movies.value.length === 1 && state.page > 1
 
-      await deleteMovieMutation.mutateAsync({ id: movieId })
+      await deleteMovieMutation.mutateAsync({ id: movieId as unknown as number })
 
       if (shouldFallbackToPreviousPage) {
         state.page -= 1

@@ -1,6 +1,7 @@
 package com.movie.backend.dto;
 
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import com.movie.backend.config.ImagePathSerializer;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
@@ -12,7 +13,8 @@ import java.util.Map;
 @Schema(description = "我的电影条目 (包含电影信息和记录时间)")
 public class MovieItemVO {
 
-    @Schema(description = "电影ID", example = "1292052")
+    @JsonSerialize(using = ToStringSerializer.class)
+    @Schema(description = "电影ID", example = "1292052", type = "string")
     private Long movieId;
 
     @Schema(description = "电影名称", example = "肖申克的救赎")

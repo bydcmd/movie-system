@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { NButton, NEmpty, NPagination, NSpin } from 'naive-ui'
 import type { CommentVO } from '@/api/model'
 import CommentCard from '@/components/comment/CommentCard.vue'
-import type { CommentFilter } from '@/utils/comment'
+import { normalizeCommentId, type CommentFilter } from '@/utils/comment'
 
 const page = defineModel<number>('page', { required: true })
 const filter = defineModel<CommentFilter>('filter', { default: 'short' })
@@ -16,8 +16,8 @@ const props = withDefaults(
     loading?: boolean
     currentUserId?: string | null
     isAuthenticated?: boolean
-    pendingLikeIds?: number[]
-    pendingDeleteIds?: number[]
+    pendingLikeIds?: string[]
+    pendingDeleteIds?: string[]
   }>(),
   {
     loading: false,
@@ -29,7 +29,7 @@ const props = withDefaults(
 )
 
 const emit = defineEmits<{
-  toggleLike: [commentId: number]
+  toggleLike: [commentId: string]
   delete: [comment: CommentVO]
 }>()
 
@@ -50,20 +50,22 @@ const pageCount = computed(() => {
   return Math.max(1, Math.ceil(props.total / props.pageSize))
 })
 
-function isLikePending(commentId?: number): boolean {
-  if (!commentId) {
+function isLikePending(commentId?: unknown): boolean {
+  const normalizedCommentId = normalizeCommentId(commentId)
+  if (!normalizedCommentId) {
     return false
   }
 
-  return props.pendingLikeIds.includes(commentId)
+  return props.pendingLikeIds.includes(normalizedCommentId)
 }
 
-function isDeletePending(commentId?: number): boolean {
-  if (!commentId) {
+function isDeletePending(commentId?: unknown): boolean {
+  const normalizedCommentId = normalizeCommentId(commentId)
+  if (!normalizedCommentId) {
     return false
   }
 
-  return props.pendingDeleteIds.includes(commentId)
+  return props.pendingDeleteIds.includes(normalizedCommentId)
 }
 </script>
 

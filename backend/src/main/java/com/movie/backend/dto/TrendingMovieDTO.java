@@ -1,12 +1,15 @@
 package com.movie.backend.dto;
 
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
 @Data
 @Schema(description = "趋势榜单返回项")
 public class TrendingMovieDTO {
-    @Schema(description = "电影ID")
+    @JsonSerialize(using = ToStringSerializer.class)
+    @Schema(description = "电影ID", type = "string")
     private Long movieId;
 
     @Schema(description = "电影名称")

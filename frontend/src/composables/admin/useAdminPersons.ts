@@ -14,6 +14,7 @@ import {
   formatAdminCount,
   refetchOrThrow
 } from '@/utils/admin'
+import type { MovieId } from '@/utils/movie'
 
 type AdminPersonState = {
   keywordInput: string
@@ -92,7 +93,7 @@ function formDataToAdminPersonDTO(formData: PersonFormData): AdminPersonDTO {
 export function useAdminPersons() {
   const dialog = useDialog()
   const message = useMessage()
-  const pendingDeletedPersonId = shallowRef<number | null>(null)
+  const pendingDeletedPersonId = shallowRef<MovieId | null>(null)
 
   const state = reactive<AdminPersonState>({
     keywordInput: '',
@@ -247,7 +248,7 @@ export function useAdminPersons() {
 
     try {
       await updatePersonMutation.mutateAsync({
-        id: state.editingPerson.id,
+        id: state.editingPerson.id as unknown as number,
         data: formDataToAdminPersonDTO(state.formData)
       })
       await refetchOrThrow(personQuery)
@@ -261,7 +262,7 @@ export function useAdminPersons() {
     }
   }
 
-  function isDeletingPerson(personId?: number | null): boolean {
+  function isDeletingPerson(personId?: MovieId | null): boolean {
     return Boolean(personId && pendingDeletedPersonId.value === personId)
   }
 
@@ -274,7 +275,7 @@ export function useAdminPersons() {
     pendingDeletedPersonId.value = person.id
 
     try {
-      await deletePersonMutation.mutateAsync({ id: person.id })
+      await deletePersonMutation.mutateAsync({ id: person.id as unknown as number })
       await refetchOrThrow(personQuery)
       message.success('影人已删除')
     } catch (error) {

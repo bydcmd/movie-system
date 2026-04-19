@@ -6,6 +6,7 @@ import {
   NCheckbox,
   NEmpty,
   NModal,
+  NPagination,
   NSpin,
   NTag,
   useDialog,
@@ -23,7 +24,16 @@ import {
 } from '@/api/endpoints/favorite-management/favorite-management'
 import type { FavoriteFolderDTO, FavoriteFolderVO, MovieItemVO, PageInfoMovieItemVO } from '@/api/model'
 import MoviePlaceholder from '@/components/movie/MoviePlaceholder.vue'
-import { isDefaultFavoriteFolder, sortFavoriteFolders } from '@/utils/favorite-folder'
+import {
+  favoriteFolderIdEquals,
+  getFavoriteFolderIdKey,
+  hasFavoriteFolderId,
+  isDefaultFavoriteFolder,
+  normalizeFavoriteFolderId,
+  sortFavoriteFolders,
+  type FavoriteFolderId,
+  type FavoriteFolderWithId
+} from '@/utils/favorite-folder'
 import ProfileFavoriteFolderFormModal from './ProfileFavoriteFolderFormModal.vue'
 import {
   formatDateLabel,
@@ -32,9 +42,15 @@ import {
   splitCsvLike,
   truncateText
 } from '@/utils/profile'
+import {
+  getMovieIdKey,
+  normalizeMovieId,
+  normalizeMovieIdList,
+  type MovieId
+} from '@/utils/movie'
 
 type FolderFormMode = 'create' | 'edit' | 'move'
-type IdentifiedFavoriteFolder = FavoriteFolderVO & { id: number }
+type IdentifiedFavoriteFolder = FavoriteFolderWithId
 
 type PageResult<T> = {
   list: T[]
@@ -61,24 +77,44 @@ const dialog = useDialog()
 const message = useMessage()
 const formMode = ref<FolderFormMode>('create')
 const editingFolder = ref<FavoriteFolderVO | null>(null)
-const activeFolderId = ref<number | null>(null)
+const activeFolderId = ref<FavoriteFolderId | null>(null)
 const showFormModal = ref(false)
 const showDetailModal = ref(false)
 const savingFolder = ref(false)
 const movingFavorites = ref(false)
-const deletingFolderIds = ref<number[]>([])
-const selectedFolderIds = ref<number[]>([])
-const selectedMovieIds = ref<number[]>([])
-const movingMovieIds = ref<number[]>([])
-const removingMovieIds = ref<number[]>([])
+const deletingFolderIds = ref<string[]>([])
+const selectedFolderIds = ref<string[]>([])
+const selectedMovieIds = ref<MovieId[]>([])
+const movingMovieIds = ref<MovieId[]>([])
+const removingMovieIds = ref<MovieId[]>([])
 const bulkRemoving = ref(false)
-const pendingMoveMovieIds = ref<number[]>([])
+const pendingMoveMovieIds = ref<MovieId[]>([])
 const pendingMoveMovieLabel = ref('')
 const posterLoadErrors = reactive<Record<string, boolean>>({})
+const folderMoviesPage = ref(1)
+const folderMoviesPageSize = ref(10)
+
+function handleFolderMoviesPageChange(page: number) {
+  folderMoviesPage.value = page
+  void refetchFolderMovies()
+}
+
+function handleFolderMoviesPageSizeChange(pageSize: number) {
+  folderMoviesPageSize.value = pageSize
+  folderMoviesPage.value = 1
+  void refetchFolderMovies()
+}
+
+async function refetchFolderMovies() {
+  if (!activeFolderId.value) {
+    return
+  }
+  await folderMoviesQuery.refetch()
+}
 
 const folderMoviesQuery = useGetFolderMovies<PageInfoMovieItemVO>(
-  computed(() => activeFolderId.value ?? 0),
-  { page: 1, size: 100 },
+  computed(() => (activeFolderId.value ?? 0) as unknown as number),
+  computed(() => ({ page: folderMoviesPage.value, size: folderMoviesPageSize.value })),
   {
     query: {
       enabled: false,
@@ -93,13 +129,16 @@ const moveFavoritesMutation = useMoveFavorites()
 const removeFavoriteMutation = useRemoveFavorite()
 
 const activeFolder = computed(() => {
-  return props.folders.find((folder) => folder.id === activeFolderId.value) ?? null
+  return props.folders.find((folder) => favoriteFolderIdEquals(folder.id, activeFolderId.value)) ?? null
 })
 const sortedFolders = computed(() => sortFavoriteFolders(props.folders))
+const manageableFolders = computed(() => {
+  return props.folders.filter((folder): folder is IdentifiedFavoriteFolder => canDeleteFolder(folder))
+})
 const manageableFolderIds = computed(() => {
-  return props.folders
-    .filter((folder): folder is IdentifiedFavoriteFolder => canDeleteFolder(folder))
-    .map((folder) => folder.id)
+  return manageableFolders.value
+    .map((folder) => getFavoriteFolderIdKey(folder.id))
+    .filter((folderId): folderId is string => Boolean(folderId))
 })
 const selectedFolderCount = computed(() => selectedFolderIds.value.length)
 const allManageableSelected = computed(() => {
@@ -118,25 +157,22 @@ const selectedFoldersForDeletion = computed(() => {
   const selectedFolderIdSet = new Set(selectedFolderIds.value)
 
   return sortedFolders.value.filter(
-    (folder): folder is IdentifiedFavoriteFolder => canDeleteFolder(folder) && selectedFolderIdSet.has(folder.id)
+    (folder): folder is IdentifiedFavoriteFolder =>
+      canDeleteFolder(folder) && selectedFolderIdSet.has(getFavoriteFolderIdKey(folder.id) || '')
   )
 })
 
-const folderMoviesPage = computed<PageResult<MovieItemVO>>(() => {
+const folderMoviesResult = computed<PageResult<MovieItemVO>>(() => {
   return normalizePage(folderMoviesQuery.data.value)
 })
 
-const folderMovies = computed(() => folderMoviesPage.value.list)
-const folderMoviesTotal = computed(() => folderMoviesPage.value.total)
+const folderMovies = computed(() => folderMoviesResult.value.list)
+const folderMoviesTotal = computed(() => folderMoviesResult.value.total)
 const folderMoviesLoading = computed(() => {
   return folderMoviesQuery.isLoading.value || folderMoviesQuery.isFetching.value
 })
 const selectedMovieCount = computed(() => selectedMovieIds.value.length)
-const allVisibleMovieIds = computed(() => {
-  return folderMovies.value
-    .map((movie) => movie.movieId)
-    .filter((movieId): movieId is number => typeof movieId === 'number')
-})
+const allVisibleMovieIds = computed(() => normalizeMovieIdList(folderMovies.value.map((movie) => movie.movieId)))
 const allVisibleSelected = computed(() => {
   return allVisibleMovieIds.value.length > 0 && selectedMovieCount.value === allVisibleMovieIds.value.length
 })
@@ -151,7 +187,7 @@ const canDeleteActiveFolder = computed(() => canDeleteFolder(activeFolder.value)
 const canEditActiveFolder = computed(() => canEditFolder(activeFolder.value))
 const movableTargetFolders = computed(() => {
   return sortedFolders.value.filter((folder): folder is IdentifiedFavoriteFolder => {
-    return typeof folder.id === 'number' && folder.id > 0 && folder.id !== activeFolderId.value
+    return hasFavoriteFolderId(folder) && !favoriteFolderIdEquals(folder.id, activeFolderId.value)
   })
 })
 const formModalFolder = computed(() => {
@@ -163,25 +199,23 @@ const formModalSaving = computed(() => {
 const pendingMoveMovieCount = computed(() => pendingMoveMovieIds.value.length)
 
 function canManageFolder(folder?: FavoriteFolderVO | null): folder is IdentifiedFavoriteFolder {
-  return Boolean(folder && typeof folder.id === 'number' && folder.id > 0)
+  return Boolean(folder && hasFavoriteFolderId(folder))
 }
 
 function canDeleteFolder(folder?: FavoriteFolderVO | null): folder is IdentifiedFavoriteFolder {
-  return Boolean(folder && !isDefaultFavoriteFolder(folder) && typeof folder.id === 'number' && folder.id > 0)
+  return Boolean(folder && !isDefaultFavoriteFolder(folder) && hasFavoriteFolderId(folder))
 }
 
 function canEditFolder(folder?: FavoriteFolderVO | null): folder is IdentifiedFavoriteFolder {
-  return Boolean(folder && typeof folder.id === 'number' && folder.id > 0)
+  return Boolean(folder && hasFavoriteFolderId(folder))
 }
 
 function canViewFolderDetail(folder?: FavoriteFolderVO | null): folder is IdentifiedFavoriteFolder {
-  return Boolean(folder && typeof folder.id === 'number' && folder.id > 0)
+  return Boolean(folder && hasFavoriteFolderId(folder))
 }
 
-function normalizeMovieIds(movieIds: number[]) {
-  return Array.from(
-    new Set(movieIds.filter((movieId): movieId is number => Number.isInteger(movieId) && movieId > 0))
-  )
+function normalizeMovieIds(movieIds: MovieId[]) {
+  return normalizeMovieIdList(movieIds)
 }
 
 function normalizePage(value: unknown): PageResult<MovieItemVO> {
@@ -232,10 +266,7 @@ function getPoster(movie: MovieItemVO) {
 
 function getPosterStateKey(movie: MovieItemVO) {
   const posterUrl = getPoster(movie) || 'empty'
-  const identity =
-    movie.movieId && movie.movieId > 0
-      ? String(movie.movieId)
-      : `${movie.movieName || 'unknown'}-${movie.year ?? 'unknown'}`
+  const identity = getMovieIdKey(movie.movieId) ?? `${movie.movieName || 'unknown'}-${movie.year ?? 'unknown'}`
 
   return `${identity}::${posterUrl}`
 }
@@ -252,12 +283,13 @@ function getGenres(movie: MovieItemVO) {
   return splitCsvLike(movie.genres).slice(0, 3)
 }
 
-function openMovie(movieId?: number) {
-  if (!movieId) {
+function openMovie(movieId?: MovieId) {
+  const movieIdKey = getMovieIdKey(movieId)
+  if (!movieIdKey) {
     return
   }
 
-  void router.push(`/movie/${movieId}`)
+  void router.push(`/movie/${movieIdKey}`)
 }
 
 function openCreateFolder() {
@@ -298,13 +330,13 @@ async function handleFolderSubmit(payload: FavoriteFolderDTO) {
       message.success('收藏夹已创建')
     } else {
       const folderId = editingFolder.value?.id
-      if (!folderId || folderId <= 0) {
+      if (!folderId) {
         message.error('当前收藏夹不可编辑')
         return
       }
 
       await updateFavoriteFolderMutation.mutateAsync({
-        folderId,
+        folderId: folderId as unknown as number,
         data: nextPayload
       })
       message.success('收藏夹信息已更新')
@@ -321,7 +353,7 @@ async function handleFolderSubmit(payload: FavoriteFolderDTO) {
 }
 
 async function loadActiveFolderMovies() {
-  if (!activeFolderId.value || activeFolderId.value <= 0) {
+  if (!activeFolderId.value) {
     return
   }
 
@@ -354,63 +386,81 @@ function closeDetailModal() {
   pendingMoveMovieLabel.value = ''
 }
 
-function isDeletingFolder(folderId?: number | null) {
-  return Boolean(folderId && deletingFolderIds.value.includes(folderId))
+function isDeletingFolder(folderId?: FavoriteFolderId | null) {
+  const folderIdKey = getFavoriteFolderIdKey(folderId)
+  return Boolean(folderIdKey && deletingFolderIds.value.includes(folderIdKey))
 }
 
-function isFolderSelected(folderId?: number | null) {
-  return Boolean(folderId && selectedFolderIds.value.includes(folderId))
+function isFolderSelected(folderId?: FavoriteFolderId | null) {
+  const folderIdKey = getFavoriteFolderIdKey(folderId)
+  return Boolean(folderIdKey && selectedFolderIds.value.includes(folderIdKey))
 }
 
 function handleToggleAllFolders(checked: boolean) {
   selectedFolderIds.value = checked ? [...manageableFolderIds.value] : []
 }
 
-function handleToggleFolder(folderId: number, checked: boolean) {
+function handleToggleFolder(folderId: FavoriteFolderId, checked: boolean) {
+  const folderIdKey = getFavoriteFolderIdKey(folderId)
+  if (!folderIdKey) {
+    return
+  }
+
   if (checked) {
-    if (!selectedFolderIds.value.includes(folderId)) {
-      selectedFolderIds.value = [...selectedFolderIds.value, folderId]
+    if (!selectedFolderIds.value.includes(folderIdKey)) {
+      selectedFolderIds.value = [...selectedFolderIds.value, folderIdKey]
     }
     return
   }
 
-  selectedFolderIds.value = selectedFolderIds.value.filter((id) => id !== folderId)
+  selectedFolderIds.value = selectedFolderIds.value.filter((id) => id !== folderIdKey)
 }
 
-async function handleDeleteFolders(folderIds: number[]) {
+async function handleDeleteFolders(folderIds: FavoriteFolderId[]) {
   const uniqueFolderIds = Array.from(
-    new Set(folderIds.filter((folderId) => Number.isInteger(folderId) && folderId > 0))
+    new Set(
+      folderIds
+        .map((folderId) => normalizeFavoriteFolderId(folderId))
+        .filter((folderId): folderId is FavoriteFolderId => folderId !== null)
+    )
   )
   if (!uniqueFolderIds.length) {
     return
   }
 
-  deletingFolderIds.value = Array.from(new Set([...deletingFolderIds.value, ...uniqueFolderIds]))
+  const uniqueFolderIdKeys = uniqueFolderIds.map((folderId) => String(folderId))
+  deletingFolderIds.value = Array.from(new Set([...deletingFolderIds.value, ...uniqueFolderIdKeys]))
 
   try {
     await deleteFavoriteFoldersMutation.mutateAsync({
       data: {
-        ids: uniqueFolderIds
+        ids: uniqueFolderIds as unknown as number[]
       }
     })
     message.success(uniqueFolderIds.length > 1 ? `已删除 ${uniqueFolderIds.length} 个收藏夹` : '收藏夹已删除')
 
-    if (activeFolderId.value && uniqueFolderIds.includes(activeFolderId.value)) {
+    if (
+      activeFolderId.value &&
+      uniqueFolderIds.some((folderId) => favoriteFolderIdEquals(folderId, activeFolderId.value))
+    ) {
       closeDetailModal()
     }
 
-    if (editingFolder.value?.id && uniqueFolderIds.includes(editingFolder.value.id)) {
+    if (
+      editingFolder.value?.id &&
+      uniqueFolderIds.some((folderId) => favoriteFolderIdEquals(folderId, editingFolder.value?.id))
+    ) {
       showFormModal.value = false
       editingFolder.value = null
     }
 
-    selectedFolderIds.value = selectedFolderIds.value.filter((folderId) => !uniqueFolderIds.includes(folderId))
+    selectedFolderIds.value = selectedFolderIds.value.filter((folderId) => !uniqueFolderIdKeys.includes(folderId))
     emit('refresh')
   } catch (error) {
     console.error('Failed to delete favorite folder:', error)
     message.error(extractErrorMessage(error) || '删除收藏夹失败，请稍后再试')
   } finally {
-    deletingFolderIds.value = deletingFolderIds.value.filter((folderId) => !uniqueFolderIds.includes(folderId))
+    deletingFolderIds.value = deletingFolderIds.value.filter((folderId) => !uniqueFolderIdKeys.includes(folderId))
   }
 }
 
@@ -462,30 +512,43 @@ function handleToggleAllMovies(checked: boolean) {
   selectedMovieIds.value = checked ? [...allVisibleMovieIds.value] : []
 }
 
-function handleToggleMovie(movieId: number, checked: boolean) {
+function handleToggleMovie(movieId: MovieId, checked: boolean) {
+  const movieIdKey = getMovieIdKey(movieId)
+  const normalizedMovieId = normalizeMovieId(movieId)
+  if (!movieIdKey || !normalizedMovieId) {
+    return
+  }
+
   if (checked) {
-    if (!selectedMovieIds.value.includes(movieId)) {
-      selectedMovieIds.value = [...selectedMovieIds.value, movieId]
+    if (!selectedMovieIds.value.some((id) => getMovieIdKey(id) === movieIdKey)) {
+      selectedMovieIds.value = [...selectedMovieIds.value, normalizedMovieId]
     }
     return
   }
 
-  selectedMovieIds.value = selectedMovieIds.value.filter((id) => id !== movieId)
+  selectedMovieIds.value = selectedMovieIds.value.filter((id) => getMovieIdKey(id) !== movieIdKey)
 }
 
-function isMovieMoving(movieId?: number | null) {
-  return Boolean(movieId && movingMovieIds.value.includes(movieId))
+function isMovieSelected(movieId?: MovieId | null) {
+  const movieIdKey = getMovieIdKey(movieId)
+  return Boolean(movieIdKey && selectedMovieIds.value.some((id) => getMovieIdKey(id) === movieIdKey))
 }
 
-function isMovieBusy(movieId?: number | null) {
+function isMovieMoving(movieId?: MovieId | null) {
+  const movieIdKey = getMovieIdKey(movieId)
+  return Boolean(movieIdKey && movingMovieIds.value.some((id) => getMovieIdKey(id) === movieIdKey))
+}
+
+function isMovieBusy(movieId?: MovieId | null) {
   return isMovieRemoving(movieId) || isMovieMoving(movieId)
 }
 
-function isMovieRemoving(movieId?: number | null) {
-  return Boolean(movieId && removingMovieIds.value.includes(movieId))
+function isMovieRemoving(movieId?: MovieId | null) {
+  const movieIdKey = getMovieIdKey(movieId)
+  return Boolean(movieIdKey && removingMovieIds.value.some((id) => getMovieIdKey(id) === movieIdKey))
 }
 
-function openMoveFavoritesModal(movieIds: number[], movieLabel?: string) {
+function openMoveFavoritesModal(movieIds: MovieId[], movieLabel?: string) {
   if (!canManageFolder(activeFolder.value)) {
     message.info('当前收藏夹暂不支持移动内容')
     return
@@ -509,16 +572,17 @@ function openMoveFavoritesModal(movieIds: number[], movieLabel?: string) {
   showFormModal.value = true
 }
 
-function resolveFolderName(folderId: number) {
-  return props.folders.find((folder) => folder.id === folderId)?.name || '目标收藏夹'
+function resolveFolderName(folderId: FavoriteFolderId) {
+  return props.folders.find((folder) => favoriteFolderIdEquals(folder.id, folderId))?.name || '目标收藏夹'
 }
 
-async function handleMoveFavorites(payload: { toFolderId: number }) {
+async function handleMoveFavorites(payload: { toFolderId: FavoriteFolderId }) {
   const fromFolderId = activeFolder.value?.id
   const targetFolderId = payload.toFolderId
   const uniqueMovieIds = normalizeMovieIds(pendingMoveMovieIds.value)
+  const uniqueMovieIdKeys = new Set(uniqueMovieIds.map((movieId) => String(movieId)))
 
-  if (!fromFolderId || fromFolderId <= 0) {
+  if (!fromFolderId) {
     message.error('当前收藏夹不可移动内容')
     return
   }
@@ -528,12 +592,12 @@ async function handleMoveFavorites(payload: { toFolderId: number }) {
     return
   }
 
-  if (!targetFolderId || targetFolderId <= 0) {
+  if (!targetFolderId) {
     message.warning('请先选择目标收藏夹')
     return
   }
 
-  if (targetFolderId === fromFolderId) {
+  if (favoriteFolderIdEquals(targetFolderId, fromFolderId)) {
     message.warning('目标收藏夹不能与当前收藏夹相同')
     return
   }
@@ -544,9 +608,9 @@ async function handleMoveFavorites(payload: { toFolderId: number }) {
   try {
     await moveFavoritesMutation.mutateAsync({
       data: {
-        fromFolderId,
-        toFolderId: targetFolderId,
-        movieIds: uniqueMovieIds
+        fromFolderId: fromFolderId as unknown as number,
+        toFolderId: targetFolderId as unknown as number,
+        movieIds: uniqueMovieIds as unknown as number[]
       }
     })
 
@@ -557,7 +621,7 @@ async function handleMoveFavorites(payload: { toFolderId: number }) {
         : `已将${pendingMoveMovieLabel.value || '该电影'}移动到“${targetFolderName}”`
     )
 
-    selectedMovieIds.value = selectedMovieIds.value.filter((movieId) => !uniqueMovieIds.includes(movieId))
+    selectedMovieIds.value = selectedMovieIds.value.filter((movieId) => !uniqueMovieIdKeys.has(String(movieId)))
     showFormModal.value = false
     await loadActiveFolderMovies()
     emit('refresh')
@@ -566,17 +630,18 @@ async function handleMoveFavorites(payload: { toFolderId: number }) {
     message.error(extractErrorMessage(error) || '移动收藏失败，请稍后再试')
   } finally {
     movingFavorites.value = false
-    movingMovieIds.value = movingMovieIds.value.filter((movieId) => !uniqueMovieIds.includes(movieId))
+    movingMovieIds.value = movingMovieIds.value.filter((movieId) => !uniqueMovieIdKeys.has(String(movieId)))
   }
 }
 
-async function removeMoviesFromFolder(movieIds: number[]) {
-  if (!movieIds.length || !activeFolderId.value || activeFolderId.value <= 0) {
+async function removeMoviesFromFolder(movieIds: MovieId[]) {
+  if (!movieIds.length || !activeFolderId.value) {
     return
   }
 
   const folderId = activeFolderId.value
   const uniqueMovieIds = normalizeMovieIds(movieIds)
+  const uniqueMovieIdKeys = new Set(uniqueMovieIds.map((movieId) => String(movieId)))
 
   removingMovieIds.value = Array.from(new Set([...removingMovieIds.value, ...uniqueMovieIds]))
   bulkRemoving.value = uniqueMovieIds.length > 1
@@ -585,8 +650,8 @@ async function removeMoviesFromFolder(movieIds: number[]) {
     const results = await Promise.allSettled(
       uniqueMovieIds.map((movieId) =>
         removeFavoriteMutation.mutateAsync({
-          movieId,
-          params: { folderId }
+          movieId: movieId as unknown as number,
+          params: { folderId: folderId as unknown as number }
         })
       )
     )
@@ -610,14 +675,14 @@ async function removeMoviesFromFolder(movieIds: number[]) {
       )
     }
 
-    selectedMovieIds.value = selectedMovieIds.value.filter((movieId) => !uniqueMovieIds.includes(movieId))
+    selectedMovieIds.value = selectedMovieIds.value.filter((movieId) => !uniqueMovieIdKeys.has(String(movieId)))
     await loadActiveFolderMovies()
     emit('refresh')
   } catch (error) {
     console.error('Failed to remove movies from favorite folder:', error)
     message.error(extractErrorMessage(error) || '从收藏夹移除电影失败，请稍后再试')
   } finally {
-    removingMovieIds.value = removingMovieIds.value.filter((movieId) => !uniqueMovieIds.includes(movieId))
+    removingMovieIds.value = removingMovieIds.value.filter((movieId) => !uniqueMovieIdKeys.has(String(movieId)))
     bulkRemoving.value = false
   }
 }
@@ -634,20 +699,22 @@ function handleMoveSelectedMovies() {
   openMoveFavoritesModal(selectedMovieIds.value)
 }
 
-function handleRemoveMovie(movieId?: number) {
-  if (!movieId) {
+function handleRemoveMovie(movieId?: MovieId) {
+  const normalizedMovieId = normalizeMovieId(movieId)
+  if (!normalizedMovieId) {
     return
   }
 
-  void removeMoviesFromFolder([movieId])
+  void removeMoviesFromFolder([normalizedMovieId])
 }
 
-function handleMoveMovie(movieId?: number, movieName?: string) {
-  if (!movieId) {
+function handleMoveMovie(movieId?: MovieId, movieName?: string) {
+  const normalizedMovieId = normalizeMovieId(movieId)
+  if (!normalizedMovieId) {
     return
   }
 
-  openMoveFavoritesModal([movieId], movieName ? `《${movieName}》` : '该电影')
+  openMoveFavoritesModal([normalizedMovieId], movieName ? `《${movieName}》` : '该电影')
 }
 
 function openEditingFolderMovieManager() {
@@ -676,7 +743,7 @@ watch(
       return
     }
 
-    const matchedFolder = nextFolders.find((folder) => folder.id === activeFolderId.value)
+    const matchedFolder = nextFolders.find((folder) => favoriteFolderIdEquals(folder.id, activeFolderId.value))
     if (!matchedFolder) {
       closeDetailModal()
     }
@@ -708,13 +775,9 @@ watch(
 watch(
   folderMovies,
   (nextMovies) => {
-    const nextMovieIds = new Set(
-      nextMovies
-        .map((movie) => movie.movieId)
-        .filter((movieId): movieId is number => typeof movieId === 'number')
-    )
+    const nextMovieIds = new Set(normalizeMovieIdList(nextMovies.map((movie) => movie.movieId)).map((movieId) => String(movieId)))
 
-    selectedMovieIds.value = selectedMovieIds.value.filter((movieId) => nextMovieIds.has(movieId))
+    selectedMovieIds.value = selectedMovieIds.value.filter((movieId) => nextMovieIds.has(String(movieId)))
   },
   { deep: true }
 )
@@ -782,7 +845,7 @@ watch(
           </n-checkbox>
 
           <span class="text-sm text-slate-500">
-            已选 {{ selectedFolderCount }} 个，系统默认收藏夹不会参与批量删除。
+            已选 {{ selectedFolderCount }} 个
           </span>
         </div>
 
@@ -875,12 +938,6 @@ watch(
                 删除
               </n-button>
             </template>
-            <span
-              v-if="isDefaultFavoriteFolder(folder)"
-              class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-500"
-            >
-              名称由系统维护，不支持删除
-            </span>
           </div>
         </article>
       </div>
@@ -929,7 +986,7 @@ watch(
 
           <div class="flex flex-wrap gap-3 text-sm text-slate-500">
             <span class="rounded-full bg-slate-100 px-3 py-1">
-              当前展示 {{ folderMovies.length }} / {{ folderMoviesTotal }} 部电影
+              共 {{ folderMoviesTotal }} 部电影
             </span>
             <span class="rounded-full bg-slate-100 px-3 py-1">
               已选 {{ selectedMovieCount }} 部
@@ -1005,10 +1062,6 @@ watch(
 
       </section>
 
-      <section v-if="isFolderMoviesTruncated" class="rounded-[20px] bg-amber-50 px-4 py-3 text-sm text-amber-800">
-        当前接口单次最多加载前 100 部电影用于管理；如果收藏夹更大，请先清理一部分后再继续整理。
-      </section>
-
       <n-spin :show="folderMoviesLoading">
         <div v-if="!folderMoviesLoading && folderMovies.length === 0">
           <n-empty
@@ -1027,7 +1080,7 @@ watch(
               <div class="pt-1">
                 <n-checkbox
                   v-if="movie.movieId && canManageActiveFolder"
-                  :checked="selectedMovieIds.includes(movie.movieId)"
+                  :checked="isMovieSelected(movie.movieId)"
                   :disabled="isMovieBusy(movie.movieId)"
                   @update:checked="handleToggleMovie(movie.movieId, $event)"
                 />
@@ -1120,6 +1173,18 @@ watch(
               </n-button>
             </div>
           </article>
+        </div>
+
+        <div v-if="folderMoviesTotal > folderMoviesPageSize" class="flex justify-center pt-4">
+          <n-pagination
+            v-model:page="folderMoviesPage"
+            :page-size="folderMoviesPageSize"
+            :page-sizes="[10, 20, 50]"
+            :item-count="folderMoviesTotal"
+            size="small"
+            @update:page="handleFolderMoviesPageChange"
+            @update:page-size="handleFolderMoviesPageSizeChange"
+          />
         </div>
       </n-spin>
     </div>

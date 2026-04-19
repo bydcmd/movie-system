@@ -346,59 +346,7 @@ const genrePreferenceChartOption = computed(() => {
 
 <template>
   <section class="space-y-6">
-    <div class="dashboard-hero-grid">
-      <article class="dashboard-hero">
-        <span class="dashboard-badge">OVERVIEW</span>
-        <h2 class="dashboard-title">管理后台总览</h2>
-
-        <div class="dashboard-meta">
-          <span class="dashboard-chip">最近同步 {{ lastUpdatedText }}</span>
-        </div>
-
-        <div class="dashboard-actions">
-          <n-button
-            type="primary"
-            class="rounded-full px-6"
-            :loading="isRefreshingOverview"
-            @click="refreshOverview"
-          >
-            刷新仪表盘
-          </n-button>
-        </div>
-      </article>
-
-      <article class="dashboard-summary">
-        <div class="dashboard-summary-row">
-          <span class="dashboard-summary-label">注册用户</span>
-          <strong class="dashboard-summary-value">{{ formatCount(overview.totalUsers) }}</strong>
-        </div>
-        <div class="dashboard-summary-row">
-          <span class="dashboard-summary-label">电影资产</span>
-          <strong class="dashboard-summary-value">{{ formatCount(overview.totalMovies) }}</strong>
-        </div>
-        <div class="dashboard-summary-row">
-          <span class="dashboard-summary-label">已发布评论</span>
-          <strong class="dashboard-summary-value">{{ formatCount(overview.publishedCommentCount) }}</strong>
-        </div>
-        <div class="dashboard-summary-row">
-          <span class="dashboard-summary-label">互动总量</span>
-          <strong class="dashboard-summary-value">{{ formatCount(overview.totalCommentLikes) }}</strong>
-        </div>
-
-        <div class="dashboard-shortcuts">
-          <button type="button" class="dashboard-shortcut" @click="goToUsers">
-            进入用户管理
-          </button>
-          <button type="button" class="dashboard-shortcut" @click="goToComments">
-            进入评论管理
-          </button>
-          <button type="button" class="dashboard-shortcut" @click="goToMovies">
-            进入电影管理
-          </button>
-        </div>
-      </article>
-    </div>
-
+    
     <n-alert
       v-if="hasLoadError"
       type="warning"
@@ -499,134 +447,6 @@ const genrePreferenceChartOption = computed(() => {
 </template>
 
 <style scoped>
-.dashboard-hero-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.9fr);
-  gap: 1rem;
-}
-
-.dashboard-hero,
-.dashboard-summary {
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 1.75rem;
-  padding: 1.5rem;
-  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.06);
-}
-
-.dashboard-hero {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  background:
-    radial-gradient(circle at top right, rgba(245, 158, 11, 0.18), transparent 26%),
-    linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(30, 41, 59, 0.94));
-  color: #f8fafc;
-}
-
-.dashboard-badge {
-  display: inline-flex;
-  align-self: flex-start;
-  padding: 0.45rem 0.8rem;
-  border-radius: 999px;
-  background: rgba(245, 158, 11, 0.16);
-  color: #fcd34d;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.22em;
-}
-
-.dashboard-title {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: clamp(1.8rem, 3vw, 2.5rem);
-  line-height: 1.08;
-  font-weight: 700;
-}
-
-.dashboard-description {
-  margin: 0;
-  max-width: 48rem;
-  color: rgba(226, 232, 240, 0.88);
-  font-size: 1rem;
-  line-height: 1.8;
-}
-
-.dashboard-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.65rem;
-}
-
-.dashboard-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.55rem 0.85rem;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(226, 232, 240, 0.9);
-  font-size: 0.86rem;
-}
-
-.dashboard-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.8rem;
-  margin-top: auto;
-}
-
-.dashboard-summary {
-  display: flex;
-  flex-direction: column;
-  gap: 0.8rem;
-  background: rgba(255, 255, 255, 0.94);
-}
-
-.dashboard-summary-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding-bottom: 0.8rem;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
-}
-
-.dashboard-summary-label {
-  color: #64748b;
-  font-size: 0.92rem;
-  font-weight: 600;
-}
-
-.dashboard-summary-value {
-  font-family: var(--font-display);
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.dashboard-shortcuts {
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
-  margin-top: auto;
-}
-
-.dashboard-shortcut {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 2.8rem;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 999px;
-  background: rgba(248, 250, 252, 0.96);
-  color: #0f172a;
-  font-weight: 600;
-  transition: transform 0.16s ease, border-color 0.16s ease;
-}
-
-.dashboard-shortcut:hover {
-  transform: translateY(-1px);
-  border-color: rgba(15, 23, 42, 0.24);
-}
 
 .stat-grid {
   display: grid;
@@ -749,12 +569,6 @@ const genrePreferenceChartOption = computed(() => {
   .stat-grid,
   .trend-grid {
     grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 768px) {
-  .dashboard-actions {
-    flex-direction: column;
   }
 }
 

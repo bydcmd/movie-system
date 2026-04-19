@@ -8,7 +8,8 @@ import {
 } from '@/api/endpoints/comment-management/comment-management'
 import type { Comment } from '@/api/model'
 import CommentComposerModal from '@/components/comment/CommentComposerModal.vue'
-import { getCommentPreviewText, getCommentTypeLabel, isLongReview } from '@/utils/comment'
+import { getCommentPreviewText, getCommentTypeLabel, isLongReview, normalizeCommentId } from '@/utils/comment'
+import { getMovieIdKey, normalizeMovieId, type MovieId } from '@/utils/movie'
 import { formatDateTimeLabel } from '@/utils/profile'
 
 const props = withDefaults(defineProps<{
@@ -35,8 +36,8 @@ const message = useMessage()
 const editingShortComment = shallowRef<Comment | null>(null)
 const draftResetToken = shallowRef(0)
 const bulkDeleting = shallowRef(false)
-const selectedCommentIds = ref<number[]>([])
-const deletingCommentIds = ref<number[]>([])
+const selectedCommentIds = ref<string[]>([])
+const deletingCommentIds = ref<string[]>([])
 
 const updateMyMovieCommentContentMutation = useUpdateMyMovieCommentContent()
 const deleteMyCommentsMutation = useDeleteMyComments()
@@ -63,7 +64,7 @@ const shortDraftStorageKeyBase = computed(() => {
 const selectableCommentIds = computed(() => {
   return props.items
     .map((item) => getCommentId(item))
-    .filter((commentId): commentId is number => typeof commentId === 'number')
+    .filter((commentId): commentId is string => typeof commentId === 'string')
 })
 const selectedCount = computed(() => selectedCommentIds.value.length)
 const allVisibleSelected = computed(() => {
@@ -122,25 +123,25 @@ function extractErrorMessage(error: unknown): string {
   return typeof record.message === 'string' ? record.message : ''
 }
 
-function getCommentId(item?: Comment | null): number | null {
-  const commentId = item?.id
-  return typeof commentId === 'number' && commentId > 0 ? commentId : null
+function getCommentId(item?: Comment | null): string | null {
+  return normalizeCommentId(item?.id)
 }
 
-function getMovieId(item?: Comment | null): number | null {
-  const movieId = item?.movieId
-  return typeof movieId === 'number' && movieId > 0 ? movieId : null
+function getMovieId(item?: Comment | null): MovieId | null {
+  return normalizeMovieId(item?.movieId)
 }
 
-function isDeletingComment(commentId?: number): boolean {
-  return typeof commentId === 'number' && deletingCommentIds.value.includes(commentId)
+function isDeletingComment(commentId?: unknown): boolean {
+  const normalizedCommentId = normalizeCommentId(commentId)
+  return Boolean(normalizedCommentId && deletingCommentIds.value.includes(normalizedCommentId))
 }
 
-function isCommentSelected(commentId?: number): boolean {
-  return typeof commentId === 'number' && selectedCommentIds.value.includes(commentId)
+function isCommentSelected(commentId?: unknown): boolean {
+  const normalizedCommentId = normalizeCommentId(commentId)
+  return Boolean(normalizedCommentId && selectedCommentIds.value.includes(normalizedCommentId))
 }
 
-function markCommentDeleting(commentId: number, pending: boolean) {
+function markCommentDeleting(commentId: string, pending: boolean) {
   if (pending) {
     if (!deletingCommentIds.value.includes(commentId)) {
       deletingCommentIds.value = [...deletingCommentIds.value, commentId]
@@ -151,12 +152,13 @@ function markCommentDeleting(commentId: number, pending: boolean) {
   deletingCommentIds.value = deletingCommentIds.value.filter((id) => id !== commentId)
 }
 
-function openMovie(movieId?: number) {
-  if (!movieId) {
+function openMovie(movieId?: MovieId) {
+  const movieIdKey = getMovieIdKey(movieId)
+  if (!movieIdKey) {
     return
   }
 
-  void router.push(`/movie/${movieId}`)
+  void router.push(`/movie/${movieIdKey}`)
 }
 
 function openCommentEditor(item: Comment) {
@@ -203,7 +205,7 @@ async function handleShortCommentSubmit(payload: { type: 'short'; content: strin
 
   try {
     await updateMyMovieCommentContentMutation.mutateAsync({
-      movieId,
+      movieId: movieId as unknown as number,
       data: {
         content: payload.content
       }
@@ -222,7 +224,7 @@ function handleToggleAllComments(checked: boolean) {
   selectedCommentIds.value = checked ? [...selectableCommentIds.value] : []
 }
 
-function handleToggleComment(commentId: number, checked: boolean) {
+function handleToggleComment(commentId: string, checked: boolean) {
   if (checked) {
     if (!selectedCommentIds.value.includes(commentId)) {
       selectedCommentIds.value = [...selectedCommentIds.value, commentId]
@@ -233,7 +235,16 @@ function handleToggleComment(commentId: number, checked: boolean) {
   selectedCommentIds.value = selectedCommentIds.value.filter((id) => id !== commentId)
 }
 
-async function deleteComments(commentIds: number[], options?: { bulk?: boolean }) {
+function handleCommentSelectionUpdate(item: Comment, checked: boolean) {
+  const commentId = getCommentId(item)
+  if (!commentId) {
+    return
+  }
+
+  handleToggleComment(commentId, checked)
+}
+
+async function deleteComments(commentIds: string[], options?: { bulk?: boolean }) {
   const uniqueIds = Array.from(new Set(commentIds))
   if (!uniqueIds.length) {
     return
@@ -250,7 +261,7 @@ async function deleteComments(commentIds: number[], options?: { bulk?: boolean }
   try {
     await deleteMyCommentsMutation.mutateAsync({
       data: {
-        ids: uniqueIds
+        ids: uniqueIds as unknown as number[]
       }
     })
 
@@ -362,15 +373,6 @@ function confirmDeleteSelectedComments() {
           <span class="profile-comment-selection-count">
             已选 {{ selectedCount }} 条
           </span>
-
-          <span class="profile-comment-toolbar-hint">
-            <template v-if="isPreviewTruncated">
-              当前展示最近 {{ props.items.length }} / {{ props.total }} 条，删除所选仅作用于当前可见记录。
-            </template>
-            <template v-else>
-              删除所选仅影响勾选记录。
-            </template>
-          </span>
         </div>
 
         <div class="profile-comment-toolbar-actions">
@@ -407,7 +409,7 @@ function confirmDeleteSelectedComments() {
                   class="profile-comment-checkbox"
                   :checked="isCommentSelected(item.id)"
                   :disabled="isDeletingComments"
-                  @update:checked="(checked) => handleToggleComment(item.id as number, checked)"
+                  @update:checked="(checked) => handleCommentSelectionUpdate(item, checked)"
                 />
                 <div class="profile-comment-meta">
                   <n-tag round :type="item.type === 2 ? 'warning' : 'default'">

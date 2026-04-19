@@ -65,8 +65,8 @@ function navigateTo(name: string) {
     <div class="sidebar-brand" @click="navigateTo('admin-dashboard')">
       <div class="sidebar-brand-mark">M</div>
       <div>
-        <p class="sidebar-kicker">MOVIE SYSTEM</p>
-        <h1 class="sidebar-title">Admin Console</h1>
+        <p class="sidebar-kicker">电影系统</p>
+        <h1 class="sidebar-title">管理后台</h1>
       </div>
     </div>
 

@@ -24,7 +24,12 @@ import type {
   Movie,
   PageInfoCommentVO
 } from '@/api/model'
-import type { CommentFilter, ReviewSubmitPayload } from '@/utils/comment'
+import {
+  isSameCommentId,
+  normalizeCommentId,
+  type CommentFilter,
+  type ReviewSubmitPayload
+} from '@/utils/comment'
 import CommentComposerModal from '@/components/comment/CommentComposerModal.vue'
 import CommentList from '@/components/comment/CommentList.vue'
 import NavBar from '@/components/layout/NavBar.vue'
@@ -64,8 +69,16 @@ import {
   useRemoveWatched
 } from '@/api/endpoints/watched-management/watched-management'
 import { useAuthStore } from '@/stores/auth'
-import { getMovieId } from '@/utils/movie'
-import { isDefaultFavoriteFolder, sortFavoriteFolders } from '@/utils/favorite-folder'
+import { getMovieId, getMovieIdKey } from '@/utils/movie'
+import {
+  getFavoriteFolderIdKey,
+  hasFavoriteFolderId,
+  isDefaultFavoriteFolder,
+  normalizeFavoriteFolderId,
+  sortFavoriteFolders,
+  type FavoriteFolderId,
+  type FavoriteFolderWithId
+} from '@/utils/favorite-folder'
 
 const route = useRoute()
 const router = useRouter()
@@ -93,8 +106,8 @@ const commentsLoading = ref(false)
 const similarMovies = ref<Movie[]>([])
 const similarMoviesLoading = ref(false)
 const commentFilter = ref<CommentFilter>(route.query.filter === 'long' ? 'long' : 'short')
-const pendingLikeIds = ref<number[]>([])
-const pendingDeleteIds = ref<number[]>([])
+const pendingLikeIds = ref<string[]>([])
+const pendingDeleteIds = ref<string[]>([])
 const showReviewModal = ref(false)
 const reviewPrefillLoading = ref(false)
 const submitReviewLoading = ref(false)
@@ -107,8 +120,8 @@ const myShortComment = ref<Comment | null>(null)
 const myLongReview = ref<Comment | null>(null)
 const reviewDraftResetToken = ref(0)
 const showFavoriteFolderPicker = ref(false)
-const selectedFavoriteFolderIds = ref<number[]>([])
-const currentFavoriteFolderIds = ref<number[]>([])
+const selectedFavoriteFolderIds = ref<FavoriteFolderId[]>([])
+const currentFavoriteFolderIds = ref<FavoriteFolderId[]>([])
 const showCreateFavoriteFolderModal = ref(false)
 const favoriteFolderSubmitting = ref(false)
 const creatingFavoriteFolder = ref(false)
@@ -120,7 +133,7 @@ type FavoriteFolderChangeAction = 'add' | 'remove'
 type FavoriteFolderSubmitStatus = 'success' | 'duplicate' | 'failed'
 
 type FavoriteFolderSubmitResult = {
-  folder: FavoriteFolderVO & { id: number }
+  folder: FavoriteFolderWithId
   action: FavoriteFolderChangeAction
   status: FavoriteFolderSubmitStatus
   errorMessage?: string
@@ -286,15 +299,16 @@ const normalizeMovieList = (value: unknown): Movie[] => {
 
 const normalizeSimilarMovieList = (value: unknown, targetMovieId: number): Movie[] => {
   const result: Movie[] = []
-  const seenMovieIds = new Set<number>()
+  const seenMovieIds = new Set<string>()
+  const targetMovieIdKey = String(targetMovieId)
 
   for (const movie of normalizeMovieList(value)) {
-    const id = getMovieId(movie)
-    if (!id || id <= 0 || id === targetMovieId || seenMovieIds.has(id)) {
+    const idKey = getMovieIdKey(getMovieId(movie))
+    if (!idKey || idKey === targetMovieIdKey || seenMovieIds.has(idKey)) {
       continue
     }
 
-    seenMovieIds.add(id)
+    seenMovieIds.add(idKey)
     result.push(movie)
 
     if (result.length >= SIMILAR_MOVIES_DISPLAY_LIMIT) {
@@ -313,20 +327,24 @@ const normalizeFavoriteFolderList = (value: unknown): FavoriteFolderVO[] => {
   return sortFavoriteFolders(value as FavoriteFolderVO[])
 }
 
-const normalizeFolderIdList = (value: unknown): number[] => {
+const normalizeFolderIdList = (value: unknown): FavoriteFolderId[] => {
   if (!Array.isArray(value)) {
     return []
   }
 
   return Array.from(
-    new Set(value.filter((folderId): folderId is number => typeof folderId === 'number' && folderId > 0))
+    new Set(
+      value
+        .map((folderId) => normalizeFavoriteFolderId(folderId))
+        .filter((folderId): folderId is FavoriteFolderId => folderId !== null)
+    )
   )
 }
 
 const isSelectableFavoriteFolder = (
   folder?: FavoriteFolderVO | null
-): folder is FavoriteFolderVO & { id: number } => {
-  return Boolean(folder && typeof folder.id === 'number' && folder.id > 0)
+): folder is FavoriteFolderWithId => {
+  return Boolean(folder && hasFavoriteFolderId(folder))
 }
 
 const ensureAuthenticated = () => {
@@ -420,7 +438,7 @@ const handleFavoriteActionError = (error: unknown, fallbackMessage: string) => {
 
 const markPending = (
   target: typeof pendingLikeIds | typeof pendingDeleteIds,
-  id: number,
+  id: string,
   pending: boolean
 ) => {
   if (pending) {
@@ -757,7 +775,12 @@ const toggleFavorite = async () => {
     const defaultFolder = favoriteFolders.value.find(
       (folder) => isDefaultFavoriteFolder(folder)
     )
-    if (isSelectableFavoriteFolder(defaultFolder) && !currentFavoriteFolderIds.value.includes(defaultFolder.id)) {
+    const defaultFolderIdKey = getFavoriteFolderIdKey(defaultFolder?.id)
+    if (
+      isSelectableFavoriteFolder(defaultFolder) &&
+      defaultFolderIdKey &&
+      !currentFavoriteFolderIds.value.some((folderId) => String(folderId) === defaultFolderIdKey)
+    ) {
       currentFavoriteFolderIds.value = [...currentFavoriteFolderIds.value, defaultFolder.id]
     }
     message.success('已添加到默认收藏夹')
@@ -791,7 +814,7 @@ const openFavoriteFolderPicker = async () => {
   selectedFavoriteFolderIds.value = [...folderIds]
 }
 
-const describeFolderSelection = (folders: Array<FavoriteFolderVO & { id: number }>) => {
+const describeFolderSelection = (folders: FavoriteFolderWithId[]) => {
   if (folders.length === 1) {
     const folder = folders[0]!
     return isDefaultFavoriteFolder(folder) ? '默认收藏夹' : `“${folder.name || '未命名收藏夹'}”`
@@ -800,7 +823,7 @@ const describeFolderSelection = (folders: Array<FavoriteFolderVO & { id: number 
   return `${folders.length} 个收藏夹`
 }
 
-const handleFavoriteFolderSubmit = async (folderIds: number[]) => {
+const handleFavoriteFolderSubmit = async (folderIds: FavoriteFolderId[]) => {
   if (!ensureAuthenticated() || !movieId.value) {
     return
   }
@@ -809,18 +832,18 @@ const handleFavoriteFolderSubmit = async (folderIds: number[]) => {
   const favoriteFolderMap = new Map(
     favoriteFolders.value
       .filter(isSelectableFavoriteFolder)
-      .map((folder) => [folder.id, folder] as const)
+      .map((folder) => [String(folder.id), folder] as const)
   )
-  const currentFolderIdSet = new Set(currentFavoriteFolderIds.value)
-  const nextFolderIdSet = new Set(nextFolderIds)
+  const currentFolderIdSet = new Set(currentFavoriteFolderIds.value.map((folderId) => String(folderId)))
+  const nextFolderIdSet = new Set(nextFolderIds.map((folderId) => String(folderId)))
   const targetAddFolders = nextFolderIds
-    .filter((folderId) => !currentFolderIdSet.has(folderId))
-    .map((folderId) => favoriteFolderMap.get(folderId))
-    .filter((folder): folder is FavoriteFolderVO & { id: number } => Boolean(folder))
+    .filter((folderId) => !currentFolderIdSet.has(String(folderId)))
+    .map((folderId) => favoriteFolderMap.get(String(folderId)))
+    .filter((folder): folder is FavoriteFolderWithId => Boolean(folder))
   const targetRemoveFolders = currentFavoriteFolderIds.value
-    .filter((folderId) => !nextFolderIdSet.has(folderId))
-    .map((folderId) => favoriteFolderMap.get(folderId))
-    .filter((folder): folder is FavoriteFolderVO & { id: number } => Boolean(folder))
+    .filter((folderId) => !nextFolderIdSet.has(String(folderId)))
+    .map((folderId) => favoriteFolderMap.get(String(folderId)))
+    .filter((folder): folder is FavoriteFolderWithId => Boolean(folder))
 
   if (!targetAddFolders.length && !targetRemoveFolders.length) {
     showFavoriteFolderPicker.value = false
@@ -836,7 +859,7 @@ const handleFavoriteFolderSubmit = async (folderIds: number[]) => {
       try {
         await addFavoriteMutation.mutateAsync({
           movieId: movieId.value,
-          params: { folderId: folder.id }
+          params: { folderId: folder.id as unknown as number }
         })
         results.push({
           folder,
@@ -870,7 +893,7 @@ const handleFavoriteFolderSubmit = async (folderIds: number[]) => {
       try {
         await removeFavoriteMutation.mutateAsync({
           movieId: movieId.value,
-          params: { folderId: folder.id }
+          params: { folderId: folder.id as unknown as number }
         })
         results.push({
           folder,
@@ -1122,12 +1145,17 @@ const handleReviewSubmit = async (payload: ReviewSubmitPayload) => {
   }
 }
 
-const handleToggleCommentLike = async (commentId: number) => {
+const handleToggleCommentLike = async (commentId: string) => {
+  const normalizedCommentId = normalizeCommentId(commentId)
+  if (!normalizedCommentId) {
+    return
+  }
+
   if (!ensureAuthenticated()) {
     return
   }
 
-  const target = comments.value.find((item) => item.id === commentId)
+  const target = comments.value.find((item) => isSameCommentId(item.id, normalizedCommentId))
   if (!target) {
     return
   }
@@ -1138,7 +1166,7 @@ const handleToggleCommentLike = async (commentId: number) => {
   const nextVotes = Math.max(0, previousVotes + (nextLiked ? 1 : -1))
 
   comments.value = comments.value.map((item) =>
-    item.id === commentId
+    isSameCommentId(item.id, normalizedCommentId)
       ? {
           ...item,
           isLiked: nextLiked,
@@ -1146,18 +1174,18 @@ const handleToggleCommentLike = async (commentId: number) => {
         }
       : item
   )
-  markPending(pendingLikeIds, commentId, true)
+  markPending(pendingLikeIds, normalizedCommentId, true)
 
   try {
     if (nextLiked) {
-      await likeCommentMutation.mutateAsync({ commentId })
+      await likeCommentMutation.mutateAsync({ commentId: normalizedCommentId })
     } else {
-      await unlikeCommentMutation.mutateAsync({ commentId })
+      await unlikeCommentMutation.mutateAsync({ commentId: normalizedCommentId })
     }
   } catch (error) {
     console.error('Failed to toggle comment like:', error)
     comments.value = comments.value.map((item) =>
-      item.id === commentId
+      isSameCommentId(item.id, normalizedCommentId)
         ? {
             ...item,
             isLiked: previousLiked,
@@ -1169,11 +1197,11 @@ const handleToggleCommentLike = async (commentId: number) => {
       message.error('点赞操作失败，请稍后再试')
     }
   } finally {
-    markPending(pendingLikeIds, commentId, false)
+    markPending(pendingLikeIds, normalizedCommentId, false)
   }
 }
 
-const confirmDeleteComment = async (commentId?: number) => {
+const confirmDeleteComment = async (commentId?: string | null) => {
   if (!commentId || !ensureAuthenticated()) {
     return
   }
@@ -1183,7 +1211,7 @@ const confirmDeleteComment = async (commentId?: number) => {
   try {
     await deleteCommentMutation.mutateAsync({
       data: {
-        ids: [commentId]
+        ids: [commentId] as unknown as number[]
       }
     })
     const shouldFallbackToPreviousPage = comments.value.length === 1 && commentsPage.value > 1
@@ -1213,7 +1241,7 @@ const requestDeleteComment = (comment: CommentVO) => {
     content: `确定删除这条${comment.type === 2 ? '长评' : '短评'}吗？删除后无法恢复。`,
     positiveText: '删除',
     negativeText: '取消',
-    onPositiveClick: () => confirmDeleteComment(comment.id)
+    onPositiveClick: () => confirmDeleteComment(normalizeCommentId(comment.id))
   })
 }
 

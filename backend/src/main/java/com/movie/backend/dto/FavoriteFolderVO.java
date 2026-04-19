@@ -1,5 +1,7 @@
 package com.movie.backend.dto;
 
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
@@ -7,7 +9,8 @@ import lombok.Data;
 @Schema(description = "收藏夹详情视图对象")
 public class FavoriteFolderVO {
     
-    @Schema(description = "收藏夹ID", example = "1")
+    @JsonSerialize(using = ToStringSerializer.class)
+    @Schema(description = "收藏夹ID", example = "1152491045462596111", type = "string")
     private Long id;
     
     @Schema(description = "收藏夹名称", example = "我的科幻电影")

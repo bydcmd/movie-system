@@ -60,10 +60,13 @@ public class WatchedController {
 
     @Operation(operationId = "getBatchWatchedStatus", summary = "批量查询看过状态", description = "批量查询当前用户对多部电影的看过状态")
     @PostMapping("/status/batch")
-    public Result<Map<Long, Boolean>> getBatchWatchedStatus(
+    public Result<Map<String, Boolean>> getBatchWatchedStatus(
             @Parameter(description = "电影ID列表", required = true) @Valid @RequestBody BatchIdsDTO dto,
             @AuthenticationPrincipal User user) {
-        return Result.success(watchedService.getBatchWatchedStatus(user.getId(), dto.getIds()));
+        Map<String, Boolean> statusMap = new java.util.HashMap<>();
+        watchedService.getBatchWatchedStatus(user.getId(), dto.getIds())
+                .forEach((movieId, watched) -> statusMap.put(String.valueOf(movieId), watched));
+        return Result.success(statusMap);
     }
 
     @Operation(operationId = "getMyWatchedList", summary = "获取我的看过列表", description = "分页获取当前用户标记看过的电影列表")

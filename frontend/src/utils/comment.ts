@@ -3,6 +3,7 @@ import type { Comment, CommentVO } from '@/api/model'
 type JsonRecord = Record<string, unknown>
 
 export type CommentFilter = 'short' | 'long'
+export type CommentId = string
 
 export type ReviewSubmitPayload = {
   type: 'short'
@@ -37,6 +38,34 @@ export function isLongReview(type?: number | null): boolean {
 
 export function getCommentTypeLabel(type?: number | null): string {
   return isLongReview(type) ? '长评' : '短评'
+}
+
+export function normalizeCommentId(value: unknown): CommentId | null {
+  if (Array.isArray(value)) {
+    return normalizeCommentId(value[0])
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return /^\d+$/.test(trimmed) ? trimmed : null
+  }
+
+  if (typeof value === 'bigint') {
+    return value > 0n ? value.toString() : null
+  }
+
+  if (typeof value === 'number') {
+    return Number.isInteger(value) && value > 0 ? String(value) : null
+  }
+
+  return null
+}
+
+export function isSameCommentId(left: unknown, right: unknown): boolean {
+  const normalizedLeft = normalizeCommentId(left)
+  const normalizedRight = normalizeCommentId(right)
+
+  return Boolean(normalizedLeft && normalizedRight && normalizedLeft === normalizedRight)
 }
 
 export function parseTiptapJson(content?: string | null): JsonRecord | null {

@@ -9,6 +9,7 @@ import {
 import type { MovieItemVO } from '@/api/model'
 import MoviePlaceholder from '@/components/movie/MoviePlaceholder.vue'
 import { formatDateLabel, resolveAssetUrl, splitCsvLike, truncateText } from '@/utils/profile'
+import { getMovieIdKey, normalizeMovieId, normalizeMovieIdList, type MovieId } from '@/utils/movie'
 
 const props = withDefaults(defineProps<{
   items: MovieItemVO[]
@@ -33,17 +34,15 @@ const dialog = useDialog()
 const message = useMessage()
 const clearingAll = shallowRef(false)
 const deletingSelected = shallowRef(false)
-const selectedHistoryIds = ref<number[]>([])
+const selectedHistoryIds = ref<MovieId[]>([])
 
-const failedPosterIds = ref<Set<number>>(new Set())
+const failedPosterIds = ref<Set<string>>(new Set())
 
 const clearHistoryMutation = useClearHistory()
 const deleteHistoryBatchMutation = useDeleteHistoryBatch()
 
 const selectableHistoryIds = computed(() => {
-  return props.items
-    .map((item) => item.movieId)
-    .filter((movieId): movieId is number => typeof movieId === 'number' && movieId > 0)
+  return normalizeMovieIdList(props.items.map((item) => item.movieId))
 })
 const selectedCount = computed(() => selectedHistoryIds.value.length)
 const allVisibleSelected = computed(() => {
@@ -84,14 +83,16 @@ function getPosterUrl(movie?: MovieItemVO | null): string | null {
   return url && url.trim() ? url : null
 }
 
-function handlePosterError(movieId: number) {
-  if (movieId) {
-    failedPosterIds.value.add(movieId)
+function handlePosterError(movieId?: MovieId) {
+  const movieIdKey = getMovieIdKey(movieId)
+  if (movieIdKey) {
+    failedPosterIds.value.add(movieIdKey)
   }
 }
 
 function shouldShowPlaceholder(movie?: MovieItemVO | null): boolean {
-  return !getPosterUrl(movie) || failedPosterIds.value.has(movie?.movieId ?? 0)
+  const movieIdKey = getMovieIdKey(movie?.movieId)
+  return !getPosterUrl(movie) || (movieIdKey !== null && failedPosterIds.value.has(movieIdKey))
 }
 
 function getGenres(movie: MovieItemVO) {
@@ -120,31 +121,38 @@ function extractErrorMessage(error: unknown): string {
   return typeof record.message === 'string' ? record.message : ''
 }
 
-function openMovie(movieId?: number) {
-  if (!movieId) {
+function openMovie(movieId?: MovieId) {
+  const movieIdKey = getMovieIdKey(movieId)
+  if (!movieIdKey) {
     return
   }
 
-  void router.push(`/movie/${movieId}`)
+  void router.push(`/movie/${movieIdKey}`)
 }
 
 function handleToggleAllHistory(checked: boolean) {
   selectedHistoryIds.value = checked ? [...selectableHistoryIds.value] : []
 }
 
-function handleToggleHistory(historyId: number, checked: boolean) {
+function handleToggleHistory(historyId: MovieId, checked: boolean) {
+  const historyIdKey = getMovieIdKey(historyId)
+  const normalizedHistoryId = normalizeMovieId(historyId)
+  if (!historyIdKey || !normalizedHistoryId) {
+    return
+  }
+
   if (checked) {
-    if (!selectedHistoryIds.value.includes(historyId)) {
-      selectedHistoryIds.value = [...selectedHistoryIds.value, historyId]
+    if (!selectedHistoryIds.value.some((id) => getMovieIdKey(id) === historyIdKey)) {
+      selectedHistoryIds.value = [...selectedHistoryIds.value, normalizedHistoryId]
     }
     return
   }
 
-  selectedHistoryIds.value = selectedHistoryIds.value.filter((id) => id !== historyId)
+  selectedHistoryIds.value = selectedHistoryIds.value.filter((id) => getMovieIdKey(id) !== historyIdKey)
 }
 
-async function deleteHistory(historyIds: number[]) {
-  const uniqueIds = Array.from(new Set(historyIds))
+async function deleteHistory(historyIds: MovieId[]) {
+  const uniqueIds = normalizeMovieIdList(historyIds)
   if (!uniqueIds.length) {
     return
   }
@@ -154,10 +162,11 @@ async function deleteHistory(historyIds: number[]) {
   try {
     await deleteHistoryBatchMutation.mutateAsync({
       data: {
-        ids: uniqueIds
+        ids: uniqueIds as unknown as number[]
       }
     })
-    selectedHistoryIds.value = selectedHistoryIds.value.filter((historyId) => !uniqueIds.includes(historyId))
+    const uniqueIdKeys = new Set(uniqueIds.map((id) => String(id)))
+    selectedHistoryIds.value = selectedHistoryIds.value.filter((historyId) => !uniqueIdKeys.has(String(historyId)))
     message.success(uniqueIds.length > 1 ? `已删除 ${uniqueIds.length} 条浏览记录` : '浏览记录已删除')
     emit('refresh')
   } catch (error) {
@@ -245,15 +254,6 @@ function confirmClearAll() {
 
         <span class="profile-history-selection-count">
           已选 {{ selectedCount }} 条
-        </span>
-
-        <span class="profile-history-toolbar-hint">
-          <template v-if="isPreviewTruncated">
-            当前展示最近 {{ items.length }} / {{ total }} 条，删除所选仅作用于当前可见记录。
-          </template>
-          <template v-else>
-            删除所选仅影响勾选记录，清空会删除全部历史。
-          </template>
         </span>
       </div>
 

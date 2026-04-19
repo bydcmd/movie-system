@@ -258,11 +258,7 @@ watch(
     :style="modalStyle"
   >
     <div class="space-y-6" @keydown="handleFormKeydown">
-      <section class="rounded-[24px] bg-slate-50 px-4 py-4 text-sm leading-6 text-slate-600">
-        先维护基础信息，再按需要补充演员、导演和编剧。人物字段支持两种写法：简写模式按行填写，或直接粘贴 JSON
-        数组。
-      </section>
-
+     
       <n-form label-placement="top" class="movie-form">
         <section class="space-y-4">
           <div class="flex items-center justify-between">
@@ -415,27 +411,12 @@ watch(
           <h3 class="text-sm font-semibold text-slate-900">评分与统计</h3>
 
           <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <n-form-item label="本站评分">
-              <n-input
-                v-model:value="form.score"
-                placeholder="0 - 10"
-                inputmode="decimal"
-              />
-            </n-form-item>
 
             <n-form-item label="豆瓣评分">
               <n-input
                 v-model:value="form.doubanScore"
                 placeholder="0 - 10"
                 inputmode="decimal"
-              />
-            </n-form-item>
-
-            <n-form-item label="本站评分人数">
-              <n-input
-                v-model:value="form.votes"
-                placeholder="例如：2956885"
-                inputmode="numeric"
               />
             </n-form-item>
 
@@ -461,17 +442,6 @@ watch(
                 maxlength="20000"
                 show-count
                 :autosize="{ minRows: 5, maxRows: 9 }"
-              />
-            </n-form-item>
-
-            <n-form-item label="上榜理由" class="md:col-span-2">
-              <n-input
-                v-model:value="form.reason"
-                type="textarea"
-                placeholder="冷门佳作榜等场景可以填写推荐理由"
-                maxlength="500"
-                show-count
-                :autosize="{ minRows: 2, maxRows: 4 }"
               />
             </n-form-item>
           </div>

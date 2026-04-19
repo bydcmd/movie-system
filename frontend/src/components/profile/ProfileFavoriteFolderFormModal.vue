@@ -2,7 +2,11 @@
 import { computed, reactive, watch } from 'vue'
 import { NButton, NForm, NFormItem, NInput, NModal, NSelect, NSwitch, useMessage } from 'naive-ui'
 import type { FavoriteFolderDTO, FavoriteFolderVO } from '@/api/model'
-import { isDefaultFavoriteFolder } from '@/utils/favorite-folder'
+import {
+  hasFavoriteFolderId,
+  isDefaultFavoriteFolder,
+  type FavoriteFolderId
+} from '@/utils/favorite-folder'
 
 type FolderFormMode = 'create' | 'edit' | 'move'
 
@@ -13,7 +17,7 @@ type FolderFormState = {
 }
 
 type MoveFormState = {
-  targetFolderId: number | null
+  targetFolderId: FavoriteFolderId | null
 }
 
 const show = defineModel<boolean>('show', { required: true })
@@ -44,7 +48,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   submit: [payload: FavoriteFolderDTO]
-  moveFavorites: [payload: { toFolderId: number }]
+  moveFavorites: [payload: { toFolderId: FavoriteFolderId }]
   deleteFolder: []
   bulkRemoveMovies: []
 }>()
@@ -87,9 +91,7 @@ const moveSubjectLabel = computed(() => {
 })
 const moveTargetFolderOptions = computed(() => {
   return props.moveTargetFolders
-    .filter((folder): folder is FavoriteFolderVO & { id: number } => {
-      return typeof folder.id === 'number' && folder.id > 0
-    })
+    .filter(hasFavoriteFolderId)
     .map((folder) => {
       const count = typeof folder.movieCount === 'number' ? folder.movieCount : 0
       const visibilityLabel = isDefaultFavoriteFolder(folder)
@@ -128,26 +130,14 @@ const modalStyle = computed(() => ({
 }))
 const introText = computed(() => {
   if (isMovingFavorites.value) {
-    return `选择目标收藏夹后，会把${moveSubjectLabel.value}从“${moveSourceFolderName.value}”移动过去，当前收藏夹里将不再保留这些收藏记录。`
+    return ''
   }
 
   if (props.mode !== 'edit') {
     return '设置片单名称、说明和可见性，方便后续整理不同主题的电影。'
   }
 
-  if (isEditingDefaultFolder.value) {
-    if (canDeleteFolder.value && canBulkRemoveMovies.value) {
-      return '默认收藏夹名称由系统维护，这里可以更新说明和公开状态；如需整理内容，也支持删除收藏夹或批量移除其中的电影。'
-    }
-
-    if (canBulkRemoveMovies.value) {
-      return '默认收藏夹名称由系统维护，这里可以更新说明和公开状态；如需整理内容，也可以继续批量移除其中的电影。'
-    }
-
-    return '默认收藏夹名称由系统维护，这里可以更新说明和公开状态。'
-  }
-
-  return '修改收藏夹名称、说明和公开状态，让片单信息保持清晰。'
+  return ''
 })
 const nameInputPlaceholder = computed(() => {
   return props.mode === 'create' ? '例如：午夜科幻、年度十佳、想再看一遍' : ''
@@ -158,14 +148,10 @@ const descriptionPlaceholder = computed(() => {
 
 const actionHintText = computed(() => {
   if (isEditingDefaultFolder.value) {
-    if (canDeleteFolder.value) {
-      return '默认收藏夹现在也支持删除；点击“批量移除电影”后，会进入内容管理面板继续勾选处理。'
-    }
-
-    return '默认收藏夹名称仍由系统维护；点击“批量移除电影”后，会进入内容管理面板继续勾选处理。'
+    return canDeleteFolder.value ? '支持删除收藏夹或批量移除电影。' : '支持批量移除电影。'
   }
 
-  return '需要继续整理片单时，可以直接删除当前收藏夹，或进入内容管理面板批量移除电影。'
+  return '可以删除收藏夹或批量移除电影。'
 })
 
 function applyFormState(folder?: FavoriteFolderVO | null) {
@@ -188,7 +174,7 @@ function closeModal() {
 
 function handleSubmit() {
   if (isMovingFavorites.value) {
-    if (!moveForm.targetFolderId || moveForm.targetFolderId <= 0) {
+    if (!moveForm.targetFolderId) {
       message.warning('请先选择目标收藏夹')
       return
     }
@@ -234,7 +220,9 @@ watch(
 watch(
   moveTargetFolderOptions,
   (nextOptions) => {
-    const validTargetFolderIds = new Set(nextOptions.map((option) => option.value))
+    const validTargetFolderIds = new Set<FavoriteFolderId>(
+      nextOptions.map((option) => option.value as FavoriteFolderId)
+    )
     if (!moveForm.targetFolderId || validTargetFolderIds.has(moveForm.targetFolderId)) {
       return
     }
@@ -253,20 +241,17 @@ watch(
     class="favorite-folder-form-modal"
     :style="modalStyle"
   >
-    <div class="space-y-6">
-      <section class="rounded-[24px] bg-slate-50 px-4 py-4 text-sm leading-6 text-slate-600">
+    <div class="space-y-4">
+      <section v-if="introText" class="rounded-[24px] bg-slate-50 px-4 py-3 text-sm text-slate-600">
         {{ introText }}
       </section>
 
-      <n-form label-placement="top" class="space-y-4">
+      <n-form label-placement="top" class="space-y-3">
         <template v-if="isMovingFavorites">
-          <section class="rounded-[24px] border border-slate-200 bg-white px-4 py-4">
+          <section class="rounded-[24px] border border-slate-200 bg-white px-4 py-3">
             <div class="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <h3 class="text-sm font-semibold text-slate-900">移动范围</h3>
-                <p class="mt-1 text-sm leading-6 text-slate-500">
-                  当前来源：{{ moveSourceFolderName }}，本次将处理 {{ moveSubjectLabel }}。
-                </p>
               </div>
 
               <div class="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600">
@@ -288,84 +273,57 @@ watch(
         </template>
 
         <template v-else>
-          <n-form-item label="收藏夹名称" :required="!isEditingDefaultFolder">
-            <n-input
-              v-model:value="form.name"
-              :readonly="isEditingDefaultFolder"
-              :placeholder="nameInputPlaceholder"
-              maxlength="100"
-              show-count
-            />
-            <p v-if="isEditingDefaultFolder" class="mt-2 text-xs leading-5 text-slate-500">
-              默认收藏夹名称由系统维护，暂不支持在这里修改名称。
-            </p>
-          </n-form-item>
+          <div class="space-y-3">
+            <div class="flex items-start gap-4">
+              <n-form-item label="收藏夹名称" :required="!isEditingDefaultFolder" class="flex-1 mb-0">
+                <n-input
+                  v-model:value="form.name"
+                  :readonly="isEditingDefaultFolder"
+                  :placeholder="nameInputPlaceholder"
+                  maxlength="100"
+                  show-count
+                />
+              </n-form-item>
 
-          <n-form-item label="收藏夹说明">
-            <n-input
-              v-model:value="form.description"
-              type="textarea"
-              :placeholder="descriptionPlaceholder"
-              maxlength="500"
-              :autosize="{ minRows: 4, maxRows: 8 }"
-              show-count
-            />
-          </n-form-item>
-
-          <section class="rounded-[24px] border border-slate-200 bg-white px-4 py-4">
-            <div class="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <h3 class="text-sm font-semibold text-slate-900">公开设置</h3>
-                <p class="mt-1 text-sm leading-6 text-slate-500">
-                  公开后，其他用户可以查看这个{{ isEditingDefaultFolder ? '默认' : '' }}收藏夹的详情页与片单内容。
-                </p>
-              </div>
-
-              <div class="flex items-center gap-3">
-                <span class="text-sm font-medium text-slate-600">
-                  {{ form.isPublic ? '公开' : '私密' }}
-                </span>
-                <n-switch v-model:value="form.isPublic" />
-              </div>
-            </div>
-          </section>
-
-          <section
-            v-if="showFolderActions"
-            class="rounded-[24px] border border-slate-200 bg-white px-4 py-4"
-          >
-            <div class="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <h3 class="text-sm font-semibold text-slate-900">内容整理</h3>
-                <p class="mt-1 text-sm leading-6 text-slate-500">
-                  {{ actionHintText }}
-                </p>
-              </div>
-
-              <div class="flex flex-wrap items-center gap-3">
+              <div class="flex items-center gap-3 pt-[22px]">
                 <n-button
                   v-if="canBulkRemoveMovies"
+                  size="small"
                   tertiary
-                  class="rounded-full px-6"
                   :disabled="busy"
                   @click="emit('bulkRemoveMovies')"
                 >
-                  批量移除电影
+                  内容管理
                 </n-button>
                 <n-button
                   v-if="canDeleteFolder"
+                  size="small"
                   type="error"
                   secondary
-                  class="rounded-full px-6"
                   :loading="deleting"
                   :disabled="saving"
                   @click="emit('deleteFolder')"
                 >
-                  删除收藏夹
+                  删除
                 </n-button>
+                <div class="flex items-center gap-2">
+                  <span class="text-sm text-slate-600">公开</span>
+                  <n-switch v-model:value="form.isPublic" />
+                </div>
               </div>
             </div>
-          </section>
+
+            <n-form-item label="收藏夹说明">
+              <n-input
+                v-model:value="form.description"
+                type="textarea"
+                :placeholder="descriptionPlaceholder"
+                maxlength="500"
+                :autosize="{ minRows: 4, maxRows: 8 }"
+                show-count
+              />
+            </n-form-item>
+          </div>
         </template>
       </n-form>
 

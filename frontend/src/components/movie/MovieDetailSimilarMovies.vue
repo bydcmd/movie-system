@@ -5,7 +5,7 @@ import { NSpin } from 'naive-ui'
 import type { Movie } from '@/api/model'
 import MoviePlaceholder from '@/components/movie/MoviePlaceholder.vue'
 import { resolveAssetUrl, splitCsvLike } from '@/utils/profile'
-import { getMovieId } from '@/utils/movie'
+import { getMovieId, getMovieIdKey } from '@/utils/movie'
 
 const props = defineProps<{
   movies: Movie[]
@@ -59,7 +59,7 @@ const movieItems = computed<SimilarMovieViewItem[]>(() =>
     const movieId = getMovieId(movie)
     const title = movie.name || '未命名电影'
     const posterUrl = resolveAssetUrl(movie.cover) || undefined
-    const identity = movieId && movieId > 0 ? String(movieId) : `${title}-${movie.year ?? 'unknown'}`
+    const identity = getMovieIdKey(movieId) ?? `${title}-${movie.year ?? 'unknown'}`
 
     return {
       key: identity,
@@ -96,8 +96,8 @@ const handlePosterError = (posterStateKey: string) => {
 }
 
 const openMovieDetail = (movie: Movie) => {
-  const id = getMovieId(movie)
-  if (!id || id <= 0) {
+  const id = getMovieIdKey(movie)
+  if (!id) {
     return
   }
 

@@ -12,6 +12,7 @@ import {
 import AdminMovieFormModal from '@/components/admin/movie/AdminMovieFormModal.vue'
 import AdminMovieListItem from '@/components/admin/movie/AdminMovieListItem.vue'
 import { useAdminMovies } from '@/composables/admin/useAdminMovies'
+import type { MovieId } from '@/utils/movie'
 
 const router = useRouter()
 const {
@@ -40,7 +41,7 @@ const emptyDescription = computed(() => {
   return state.keyword ? '没有匹配的电影' : '暂时还没有电影数据'
 })
 
-function openMovieDetail(movieId?: number) {
+function openMovieDetail(movieId?: MovieId) {
   if (!movieId) {
     return
   }

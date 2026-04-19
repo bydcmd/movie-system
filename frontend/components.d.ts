@@ -19,7 +19,6 @@ declare module 'vue' {
     CommentCard: typeof import('./src/components/comment/CommentCard.vue')['default']
     CommentComposerModal: typeof import('./src/components/comment/CommentComposerModal.vue')['default']
     CommentList: typeof import('./src/components/comment/CommentList.vue')['default']
-    LoginModal: typeof import('./src/components/auth/LoginModal.vue')['default']
     LongReviewArticle: typeof import('./src/components/comment/LongReviewArticle.vue')['default']
     MovieCard: typeof import('./src/components/movie/MovieCard.vue')['default']
     MovieDetailSimilarMovies: typeof import('./src/components/movie/MovieDetailSimilarMovies.vue')['default']

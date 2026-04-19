@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import copy
 import datetime as dt
-import math
 import random
 from decimal import Decimal
 from typing import Any
@@ -14,7 +13,6 @@ from pyspark.sql import types as T
 import _bootstrap  # noqa: F401
 
 from utils.config_loader import load_config
-from utils.hive_utils import write_partition
 from utils.spark_factory import build_spark_session
 
 
@@ -29,23 +27,11 @@ DEFAULT_GENERATOR_CONFIG: dict[str, Any] = {
     "comment_like_target": 2500,
     "favorite_target": 2000,
     "watched_target": 1800,
-    "sample_ratio": 0.35,
     "lookback_days": 90,
     "seed": 20260412,
-    "jdbc_query_limit_cap": 20000,
+    "write_batch_size": 1000,
+    "cleanup_existing": True,
 }
-
-REQUIRED_SOURCE_TABLES: tuple[str, ...] = (
-    "public.movies",
-    "public.users",
-    "public.favorite_folders",
-    "public.favorites",
-    "public.ratings",
-    "public.comments",
-    "public.comment_likes",
-    "public.view_history",
-    "public.watched_movies",
-)
 
 MOVIES_SCHEMA = T.StructType(
     [
@@ -99,6 +85,7 @@ FOLDERS_SCHEMA = T.StructType(
         T.StructField("movie_count", T.IntegerType(), True),
         T.StructField("create_time", T.TimestampType(), True),
         T.StructField("update_time", T.TimestampType(), True),
+        T.StructField("is_default", T.IntegerType(), True),
     ]
 )
 
@@ -131,6 +118,7 @@ COMMENTS_SCHEMA = T.StructType(
         T.StructField("title", T.StringType(), True),
         T.StructField("type", T.ShortType(), True),
         T.StructField("version", T.IntegerType(), True),
+        T.StructField("status", T.ShortType(), True),
     ]
 )
 
@@ -165,37 +153,42 @@ DEFAULT_PASSWORD_HASH = "$2a$10$lPHc.uX1uT4Q/54HYO9DfO8B4TCOJYAZGsaemn0pLxA3OoHQ
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate PostgreSQL-aligned ODS snapshot test data for the DWD/DWS pipeline."
+        description="Generate synthetic source data and append it directly into PostgreSQL business tables."
     )
     parser.add_argument("--config", required=True, help="Path of ETL json config.")
     parser.add_argument(
         "--batch-date",
         default=dt.date.today().strftime("%Y-%m-%d"),
-        help="ODS snapshot partition date in format YYYY-MM-DD.",
+        help="Logical batch date in format YYYY-MM-DD.",
     )
-    parser.add_argument("--movie-limit", type=int, default=None, help="Sampled real movie rows to keep.")
-    parser.add_argument("--user-target", type=int, default=None, help="Target row count for ods_pg_users_full.")
+    parser.add_argument("--movie-limit", type=int, default=None, help="Sampled real movie rows to reference.")
+    parser.add_argument("--user-target", type=int, default=None, help="How many synthetic users to insert.")
     parser.add_argument(
         "--new-user-target",
         type=int,
         default=None,
-        help="Target count for users registered on the batch-date.",
+        help="How many inserted users should register on the batch-date.",
     )
-    parser.add_argument("--folder-target", type=int, default=None, help="Target row count for ods_pg_favorite_folders_full.")
-    parser.add_argument("--view-target", type=int, default=None, help="Target row count for ods_pg_view_history_full.")
-    parser.add_argument("--rating-target", type=int, default=None, help="Target row count for ods_pg_ratings_full.")
-    parser.add_argument("--comment-target", type=int, default=None, help="Target row count for ods_pg_comments_full.")
+    parser.add_argument("--folder-target", type=int, default=None, help="How many favorite folders to insert.")
+    parser.add_argument("--view-target", type=int, default=None, help="How many view history rows to insert.")
+    parser.add_argument("--rating-target", type=int, default=None, help="How many ratings to insert.")
+    parser.add_argument("--comment-target", type=int, default=None, help="How many comments to insert.")
     parser.add_argument(
         "--comment-like-target",
         type=int,
         default=None,
-        help="Target row count for ods_pg_comment_likes_full.",
+        help="How many comment likes to insert.",
     )
-    parser.add_argument("--favorite-target", type=int, default=None, help="Target row count for ods_pg_favorites_full.")
-    parser.add_argument("--watched-target", type=int, default=None, help="Target row count for ods_pg_watched_movies_full.")
-    parser.add_argument("--sample-ratio", type=float, default=None, help="Share of non-movie rows sampled from PostgreSQL.")
+    parser.add_argument("--favorite-target", type=int, default=None, help="How many favorites to insert.")
+    parser.add_argument("--watched-target", type=int, default=None, help="How many watched rows to insert.")
     parser.add_argument("--lookback-days", type=int, default=None, help="How many historical days synthetic timestamps may span.")
     parser.add_argument("--seed", type=int, default=None, help="Random seed.")
+    parser.add_argument("--write-batch-size", type=int, default=None, help="JDBC batch size when appending to PostgreSQL.")
+    parser.add_argument(
+        "--skip-cleanup",
+        action="store_true",
+        help="Skip deleting previously generated test rows for the same batch-date before inserting.",
+    )
     return parser.parse_args()
 
 
@@ -221,14 +214,16 @@ def apply_arg_overrides(generator_config: dict[str, Any], args: argparse.Namespa
         "comment_like_target": args.comment_like_target,
         "favorite_target": args.favorite_target,
         "watched_target": args.watched_target,
-        "sample_ratio": args.sample_ratio,
         "lookback_days": args.lookback_days,
         "seed": args.seed,
+        "write_batch_size": args.write_batch_size,
     }
     merged = dict(generator_config)
     for key, value in key_mapping.items():
         if value is not None:
             merged[key] = value
+    if args.skip_cleanup:
+        merged["cleanup_existing"] = False
     return merged
 
 
@@ -265,24 +260,6 @@ def fetch_records(spark: SparkSession, pg_config: dict[str, Any], query: str) ->
     return [row.asDict(recursive=True) for row in build_jdbc_df(spark, pg_config, query).collect()]
 
 
-def build_postgres_target_map(config: dict[str, Any]) -> dict[str, dict[str, str]]:
-    table_map: dict[str, dict[str, str]] = {}
-    for table_cfg in config["postgres"]["tables"]:
-        source_table = table_cfg.get("source_table")
-        if not source_table:
-            continue
-        table_map[source_table] = {
-            "target_table": table_cfg["target_table"],
-            "sink_path": table_cfg["sink_path"],
-        }
-
-    missing_tables = [table_name for table_name in REQUIRED_SOURCE_TABLES if table_name not in table_map]
-    if missing_tables:
-        raise ValueError(f"Missing postgres.tables config for: {', '.join(missing_tables)}")
-
-    return table_map
-
-
 def create_dataframe(spark: SparkSession, schema: T.StructType, records: list[dict[str, Any]]) -> DataFrame:
     if not records:
         return spark.createDataFrame([], schema)
@@ -292,12 +269,6 @@ def create_dataframe(spark: SparkSession, schema: T.StructType, records: list[di
     for record in records:
         normalized_records.append({field_name: record.get(field_name) for field_name in field_names})
     return spark.createDataFrame(normalized_records, schema=schema)
-
-
-def ceil_sample_count(target: int, sample_ratio: float, hard_cap: int) -> int:
-    if target <= 0 or sample_ratio <= 0:
-        return 0
-    return min(hard_cap, max(0, math.ceil(target * sample_ratio)))
 
 
 def parse_batch_date(batch_date: str) -> dt.date:
@@ -341,17 +312,6 @@ def batch_date_timestamp(
         return end_time
     delta_seconds = int((end_time - effective_start).total_seconds())
     return effective_start + dt.timedelta(seconds=rng.randint(0, max(delta_seconds, 0)))
-
-
-def is_registered_on_batch_date(record: dict[str, Any], batch_date: dt.date) -> bool:
-    create_time = record.get("create_time")
-    if create_time is None:
-        return False
-    if isinstance(create_time, dt.datetime):
-        return create_time.date() == batch_date
-    if isinstance(create_time, dt.date):
-        return create_time == batch_date
-    return False
 
 
 def build_synthetic_user(
@@ -422,236 +382,193 @@ def sample_movies(spark: SparkSession, pg_config: dict[str, Any], movie_limit: i
     return records
 
 
-def sample_users(spark: SparkSession, pg_config: dict[str, Any], user_limit: int) -> list[dict[str, Any]]:
-    if user_limit <= 0:
-        return []
+def fetch_existing_generated_user_ids(
+    spark: SparkSession,
+    pg_config: dict[str, Any],
+    user_id_prefix: str,
+) -> set[str]:
     query = f"""
-        SELECT
-          user_id,
-          user_nickname,
-          user_password,
-          user_avatar,
-          user_url,
-          COALESCE(role, 1) AS role,
-          COALESCE(status, 0) AS status,
-          COALESCE(password_version, 1) AS password_version,
-          email,
-          create_time,
-          update_time
+        SELECT user_id
         FROM public.users
-        WHERE user_id IS NOT NULL
-        ORDER BY RANDOM()
-        LIMIT {int(user_limit)}
+        WHERE user_id LIKE {quote_sql_string(user_id_prefix + "%")}
     """
-    return fetch_records(spark, pg_config, query)
+    return {str(record["user_id"]) for record in fetch_records(spark, pg_config, query)}
 
 
-def sample_folders(spark: SparkSession, pg_config: dict[str, Any], user_ids: list[str], folder_limit: int) -> list[dict[str, Any]]:
-    if folder_limit <= 0 or not user_ids:
-        return []
-    query = f"""
-        SELECT
-          id,
-          user_id,
-          name,
-          description,
-          COALESCE(is_public, 0) AS is_public,
-          COALESCE(movie_count, 0) AS movie_count,
-          create_time,
-          update_time
-        FROM public.favorite_folders
-        WHERE user_id IN {in_clause_string(user_ids)}
-        ORDER BY RANDOM()
-        LIMIT {int(folder_limit)}
-    """
-    return fetch_records(spark, pg_config, query)
-
-
-def sample_favorites(
+def fetch_max_bigint(
     spark: SparkSession,
     pg_config: dict[str, Any],
-    user_ids: list[str],
-    movie_ids: list[int],
-    folder_ids: list[int],
-    favorite_limit: int,
-) -> list[dict[str, Any]]:
-    if favorite_limit <= 0 or not user_ids or not movie_ids or not folder_ids:
-        return []
+    table_name: str,
+    column_name: str,
+) -> int:
     query = f"""
-        SELECT
-          user_id,
-          movie_id,
-          folder_id,
-          create_time
-        FROM public.favorites
-        WHERE user_id IN {in_clause_string(user_ids)}
-          AND movie_id IN {in_clause_bigint(movie_ids)}
-          AND folder_id IN {in_clause_bigint(folder_ids)}
-        ORDER BY RANDOM()
-        LIMIT {int(favorite_limit)}
+        SELECT COALESCE(MAX({column_name}), 0) AS max_id
+        FROM {table_name}
     """
-    return fetch_records(spark, pg_config, query)
+    records = fetch_records(spark, pg_config, query)
+    if not records:
+        return 0
+    value = records[0].get("max_id")
+    return 0 if value is None else int(value)
 
 
-def sample_ratings(
+def fetch_existing_comment_keys(
     spark: SparkSession,
     pg_config: dict[str, Any],
-    user_ids: list[str],
+    user_id_prefix: str,
     movie_ids: list[int],
-    rating_limit: int,
-) -> list[dict[str, Any]]:
-    if rating_limit <= 0 or not user_ids or not movie_ids:
-        return []
+) -> set[tuple[str, int, int]]:
+    if not movie_ids:
+        return set()
     query = f"""
-        SELECT
-          user_id,
-          movie_id,
-          rating,
-          rating_time
-        FROM public.ratings
-        WHERE user_id IN {in_clause_string(user_ids)}
-          AND movie_id IN {in_clause_bigint(movie_ids)}
-          AND rating_time IS NOT NULL
-        ORDER BY RANDOM()
-        LIMIT {int(rating_limit)}
-    """
-    return fetch_records(spark, pg_config, query)
-
-
-def sample_comments(
-    spark: SparkSession,
-    pg_config: dict[str, Any],
-    user_ids: list[str],
-    movie_ids: list[int],
-    comment_limit: int,
-) -> list[dict[str, Any]]:
-    if comment_limit <= 0 or not user_ids or not movie_ids:
-        return []
-    query = f"""
-        SELECT
-          comment_id,
-          user_id,
-          movie_id,
-          content,
-          COALESCE(votes, 0) AS votes,
-          comment_time,
-          title,
-          COALESCE(type, 1) AS type,
-          COALESCE(version, 0) AS version
+        SELECT user_id, movie_id, type
         FROM public.comments
-        WHERE user_id IN {in_clause_string(user_ids)}
+        WHERE user_id LIKE {quote_sql_string(user_id_prefix + "%")}
           AND movie_id IN {in_clause_bigint(movie_ids)}
-          AND comment_time IS NOT NULL
-        ORDER BY RANDOM()
-        LIMIT {int(comment_limit)}
+          AND type IS NOT NULL
     """
-    return fetch_records(spark, pg_config, query)
+    return {
+        (str(record["user_id"]), int(record["movie_id"]), int(record["type"]))
+        for record in fetch_records(spark, pg_config, query)
+        if record.get("user_id") is not None and record.get("movie_id") is not None and record.get("type") is not None
+    }
 
 
-def sample_comment_likes(
+def fetch_existing_user_movie_keys(
     spark: SparkSession,
     pg_config: dict[str, Any],
-    user_ids: list[str],
-    comment_ids: list[int],
-    comment_like_limit: int,
-) -> list[dict[str, Any]]:
-    if comment_like_limit <= 0 or not user_ids or not comment_ids:
-        return []
-    query = f"""
-        SELECT
-          id,
-          comment_id,
-          user_id,
-          create_time
-        FROM public.comment_likes
-        WHERE user_id IN {in_clause_string(user_ids)}
-          AND comment_id IN {in_clause_bigint(comment_ids)}
-          AND create_time IS NOT NULL
-        ORDER BY RANDOM()
-        LIMIT {int(comment_like_limit)}
-    """
-    return fetch_records(spark, pg_config, query)
-
-
-def sample_view_history(
-    spark: SparkSession,
-    pg_config: dict[str, Any],
-    user_ids: list[str],
+    table_name: str,
+    user_id_prefix: str,
     movie_ids: list[int],
-    history_limit: int,
-) -> list[dict[str, Any]]:
-    if history_limit <= 0 or not user_ids or not movie_ids:
-        return []
+) -> set[tuple[str, int]]:
+    if not movie_ids:
+        return set()
     query = f"""
-        SELECT
-          history_id,
-          user_id,
-          movie_id,
-          view_time
-        FROM public.view_history
-        WHERE user_id IN {in_clause_string(user_ids)}
+        SELECT user_id, movie_id
+        FROM {table_name}
+        WHERE user_id LIKE {quote_sql_string(user_id_prefix + "%")}
           AND movie_id IN {in_clause_bigint(movie_ids)}
-          AND view_time IS NOT NULL
-        ORDER BY RANDOM()
-        LIMIT {int(history_limit)}
     """
-    return fetch_records(spark, pg_config, query)
+    return {
+        (str(record["user_id"]), int(record["movie_id"]))
+        for record in fetch_records(spark, pg_config, query)
+        if record.get("user_id") is not None and record.get("movie_id") is not None
+    }
 
 
-def sample_watched_movies(
+def write_to_postgres(
+    df: DataFrame,
+    pg_config: dict[str, Any],
+    table_name: str,
+    batch_size: int,
+) -> None:
+    if df.rdd.isEmpty():
+        return
+
+    (
+        df.write.format("jdbc")
+        .option("url", pg_config["jdbc_url"])
+        .option("dbtable", table_name)
+        .option("driver", pg_config.get("driver", "org.postgresql.Driver"))
+        .option("user", pg_config["user"])
+        .option("password", pg_config["password"])
+        .option("batchsize", str(batch_size))
+        .mode("append")
+        .save()
+    )
+
+
+def cleanup_generated_batch_data(
     spark: SparkSession,
     pg_config: dict[str, Any],
-    user_ids: list[str],
-    movie_ids: list[int],
-    watched_limit: int,
-) -> list[dict[str, Any]]:
-    if watched_limit <= 0 or not user_ids or not movie_ids:
-        return []
+    batch_date: dt.date,
+) -> dict[str, int]:
+    user_prefix = f"test_user_{batch_date.strftime('%Y%m%d')}_"
+    user_like = quote_sql_string(user_prefix + "%")
+
+    jvm = spark.sparkContext._gateway.jvm
+    driver = pg_config.get("driver", "org.postgresql.Driver")
+    jvm.java.lang.Class.forName(driver)
+
+    statements: list[tuple[str, str]] = [
+        (
+            "comment_likes",
+            f"""
+            DELETE FROM public.comment_likes
+            WHERE user_id LIKE {user_like}
+               OR comment_id IN (
+                    SELECT comment_id
+                    FROM public.comments
+                    WHERE user_id LIKE {user_like}
+               )
+            """,
+        ),
+        ("favorites", f"DELETE FROM public.favorites WHERE user_id LIKE {user_like}"),
+        ("ratings", f"DELETE FROM public.ratings WHERE user_id LIKE {user_like}"),
+        ("view_history", f"DELETE FROM public.view_history WHERE user_id LIKE {user_like}"),
+        ("watched_movies", f"DELETE FROM public.watched_movies WHERE user_id LIKE {user_like}"),
+        ("comments", f"DELETE FROM public.comments WHERE user_id LIKE {user_like}"),
+        ("favorite_folders", f"DELETE FROM public.favorite_folders WHERE user_id LIKE {user_like}"),
+        ("users", f"DELETE FROM public.users WHERE user_id LIKE {user_like}"),
+    ]
+
+    connection = None
+    statement = None
+    deleted_counts: dict[str, int] = {}
+    try:
+        connection = jvm.java.sql.DriverManager.getConnection(
+            pg_config["jdbc_url"],
+            pg_config["user"],
+            pg_config["password"],
+        )
+        connection.setAutoCommit(False)
+        statement = connection.createStatement()
+        for label, sql_text in statements:
+            deleted_counts[label] = int(statement.executeUpdate(sql_text))
+        connection.commit()
+        return deleted_counts
+    except Exception:
+        if connection is not None:
+            connection.rollback()
+        raise
+    finally:
+        if statement is not None:
+            statement.close()
+        if connection is not None:
+            connection.close()
+
+
+def sync_postgres_sequence(
+    spark: SparkSession,
+    pg_config: dict[str, Any],
+    sequence_name: str,
+    table_name: str,
+    column_name: str,
+) -> None:
     query = f"""
-        SELECT
-          user_id,
-          movie_id,
-          create_time
-        FROM public.watched_movies
-        WHERE user_id IN {in_clause_string(user_ids)}
-          AND movie_id IN {in_clause_bigint(movie_ids)}
-          AND create_time IS NOT NULL
-        ORDER BY RANDOM()
-        LIMIT {int(watched_limit)}
+        SELECT setval(
+          {quote_sql_string(sequence_name)},
+          GREATEST((SELECT COALESCE(MAX({column_name}), 0) FROM {table_name}), 1),
+          true
+        ) AS sequence_value
     """
-    return fetch_records(spark, pg_config, query)
+    fetch_records(spark, pg_config, query)
 
 
 def generate_users(
-    existing_users: list[dict[str, Any]],
     user_target: int,
     new_user_target: int,
     batch_date: dt.date,
     lookback_days: int,
     rng: random.Random,
+    existing_generated_user_ids: set[str],
 ) -> list[dict[str, Any]]:
     required_new_users = min(max(new_user_target, 0), max(user_target, 0))
-    sampled_new_users = [record for record in existing_users if is_registered_on_batch_date(record, batch_date)]
-    sampled_other_users = [record for record in existing_users if not is_registered_on_batch_date(record, batch_date)]
-
-    selected_new_users = sampled_new_users[:required_new_users]
-    records = list(selected_new_users)
-    selected_ids = {record["user_id"] for record in records}
-    remaining_slots = max(0, user_target - required_new_users)
-    selected_other_count = 0
-    for record in sampled_other_users:
-        if selected_other_count >= remaining_slots:
-            break
-        if record["user_id"] in selected_ids:
-            continue
-        records.append(record)
-        selected_ids.add(record["user_id"])
-        selected_other_count += 1
-
-    existing_ids = {record["user_id"] for record in existing_users} | selected_ids
+    records: list[dict[str, Any]] = []
+    existing_ids = set(existing_generated_user_ids)
     next_index = 1
 
-    current_new_user_count = len(selected_new_users)
+    current_new_user_count = 0
     while current_new_user_count < required_new_users and len(records) < user_target:
         user_id = f"test_user_{batch_date.strftime('%Y%m%d')}_{next_index:05d}"
         next_index += 1
@@ -662,15 +579,6 @@ def generate_users(
         records.append(build_synthetic_user(user_id, len(records) + 1, create_time, update_time))
         existing_ids.add(user_id)
         current_new_user_count += 1
-
-    remaining_sampled_users = sampled_new_users[required_new_users:] + sampled_other_users[selected_other_count:]
-    for record in remaining_sampled_users:
-        if len(records) >= user_target:
-            break
-        if record["user_id"] in selected_ids:
-            continue
-        records.append(record)
-        selected_ids.add(record["user_id"])
 
     while len(records) < user_target:
         user_id = f"test_user_{batch_date.strftime('%Y%m%d')}_{next_index:05d}"
@@ -691,11 +599,12 @@ def generate_folders(
     batch_date: dt.date,
     lookback_days: int,
     rng: random.Random,
+    start_folder_id: int,
 ) -> list[dict[str, Any]]:
     records = list(existing_folders)
     existing_ids = {int(record["id"]) for record in records if record.get("id") is not None}
     existing_user_ids = {record["user_id"] for record in records}
-    folder_id_cursor = int(batch_date.strftime("%Y%m%d")) * 1_000_000 + 1
+    folder_id_cursor = max(int(start_folder_id), 0) + 1
 
     def next_folder_id() -> int:
         nonlocal folder_id_cursor
@@ -730,6 +639,7 @@ def generate_folders(
                 "movie_count": 0,
                 "create_time": create_time,
                 "update_time": update_time,
+                "is_default": 1,
             }
         )
         existing_user_ids.add(user["user_id"])
@@ -754,6 +664,7 @@ def generate_folders(
                 "movie_count": 0,
                 "create_time": create_time,
                 "update_time": update_time,
+                "is_default": 0,
             }
         )
     return records[:folder_target]
@@ -767,12 +678,13 @@ def top_up_ratings(
     batch_date: dt.date,
     lookback_days: int,
     rng: random.Random,
+    existing_pairs: set[tuple[str, int]],
 ) -> list[dict[str, Any]]:
     records = list(existing_records)
-    used_pairs = {(record["user_id"], int(record["movie_id"])) for record in records}
+    used_pairs = {(record["user_id"], int(record["movie_id"])) for record in records} | set(existing_pairs)
     user_create_map = {record["user_id"]: record.get("create_time") for record in users}
     max_possible = len(users) * len(movie_ids)
-    target_count = min(target_count, max_possible)
+    target_count = min(target_count, max_possible - len(existing_pairs))
     attempts = 0
     while len(records) < target_count and attempts < max(target_count * 20, 100):
         attempts += 1
@@ -802,12 +714,13 @@ def top_up_watched_movies(
     batch_date: dt.date,
     lookback_days: int,
     rng: random.Random,
+    existing_pairs: set[tuple[str, int]],
 ) -> list[dict[str, Any]]:
     records = list(existing_records)
-    used_pairs = {(record["user_id"], int(record["movie_id"])) for record in records}
+    used_pairs = {(record["user_id"], int(record["movie_id"])) for record in records} | set(existing_pairs)
     user_create_map = {record["user_id"]: record.get("create_time") for record in users}
     max_possible = len(users) * len(movie_ids)
-    target_count = min(target_count, max_possible)
+    target_count = min(target_count, max_possible - len(existing_pairs))
     attempts = 0
     while len(records) < target_count and attempts < max(target_count * 20, 100):
         attempts += 1
@@ -875,10 +788,13 @@ def top_up_view_history(
     batch_date: dt.date,
     lookback_days: int,
     rng: random.Random,
+    start_history_id: int,
+    existing_pairs: set[tuple[str, int]],
 ) -> list[dict[str, Any]]:
     records = list(existing_records)
     existing_ids = {int(record["history_id"]) for record in records if record.get("history_id") is not None}
-    history_id_cursor = int(batch_date.strftime("%Y%m%d")) * 10_000_000 + 1
+    used_pairs = {(record["user_id"], int(record["movie_id"])) for record in records} | set(existing_pairs)
+    history_id_cursor = max(int(start_history_id), 0) + 1
     user_create_map = {record["user_id"]: record.get("create_time") for record in users}
 
     def next_history_id() -> int:
@@ -890,17 +806,26 @@ def top_up_view_history(
         history_id_cursor += 1
         return next_value
 
-    while len(records) < target_count and users and movie_ids:
+    max_possible = len(users) * len(movie_ids)
+    target_count = min(target_count, max_possible - len(existing_pairs))
+    attempts = 0
+    while len(records) < target_count and users and movie_ids and attempts < max(target_count * 20, 100):
+        attempts += 1
         user = rng.choice(users)
+        movie_id = int(rng.choice(movie_ids))
+        key = (user["user_id"], movie_id)
+        if key in used_pairs:
+            continue
         view_time = recent_timestamp(rng, batch_date, lookback_days, not_before=user_create_map.get(user["user_id"]))
         records.append(
             {
                 "history_id": next_history_id(),
                 "user_id": user["user_id"],
-                "movie_id": int(rng.choice(movie_ids)),
+                "movie_id": movie_id,
                 "view_time": view_time,
             }
         )
+        used_pairs.add(key)
     return records[:target_count]
 
 
@@ -912,10 +837,17 @@ def top_up_comments(
     batch_date: dt.date,
     lookback_days: int,
     rng: random.Random,
+    start_comment_id: int,
+    existing_comment_keys: set[tuple[str, int, int]],
 ) -> list[dict[str, Any]]:
     records = list(existing_records)
     existing_ids = {int(record["comment_id"]) for record in records if record.get("comment_id") is not None}
-    comment_id_cursor = int(batch_date.strftime("%Y%m%d")) * 10_000_000 + 2_000_000
+    used_keys = {
+        (str(record["user_id"]), int(record["movie_id"]), int(record["type"]))
+        for record in records
+        if record.get("user_id") is not None and record.get("movie_id") is not None and record.get("type") is not None
+    } | set(existing_comment_keys)
+    comment_id_cursor = max(int(start_comment_id), 0) + 1
     movie_name_map = {int(record["movie_id"]): record["name"] for record in movie_records}
     movie_ids = list(movie_name_map.keys())
     user_create_map = {record["user_id"]: record.get("create_time") for record in users}
@@ -941,11 +873,18 @@ def top_up_comments(
         comment_id_cursor += 1
         return next_value
 
-    while len(records) < target_count and users and movie_ids:
+    max_possible = max(0, len(users) * len(movie_ids) * 2 - len(used_keys))
+    target_count = min(target_count, len(records) + max_possible)
+    attempts = 0
+    while len(records) < target_count and users and movie_ids and attempts < max(target_count * 40, 200):
+        attempts += 1
         user = rng.choice(users)
         movie_id = int(rng.choice(movie_ids))
         movie_name = movie_name_map[movie_id]
         comment_type = 2 if rng.random() < 0.18 else 1
+        unique_key = (user["user_id"], movie_id, comment_type)
+        if unique_key in used_keys:
+            continue
         comment_time = recent_timestamp(rng, batch_date, lookback_days, not_before=user_create_map.get(user["user_id"]))
         records.append(
             {
@@ -958,8 +897,10 @@ def top_up_comments(
                 "title": f"关于《{movie_name}》的观后感" if comment_type == 2 else None,
                 "type": comment_type,
                 "version": 0,
+                "status": 2,
             }
         )
+        used_keys.add(unique_key)
     return records[:target_count]
 
 
@@ -971,11 +912,12 @@ def top_up_comment_likes(
     batch_date: dt.date,
     lookback_days: int,
     rng: random.Random,
+    start_like_id: int,
 ) -> list[dict[str, Any]]:
     records = list(existing_records)
     existing_ids = {int(record["id"]) for record in records if record.get("id") is not None}
     used_pairs = {(int(record["comment_id"]), record["user_id"]) for record in records}
-    comment_like_id_cursor = int(batch_date.strftime("%Y%m%d")) * 10_000_000 + 4_000_000
+    comment_like_id_cursor = max(int(start_like_id), 0) + 1
     user_create_map = {record["user_id"]: record.get("create_time") for record in users}
     comment_time_map = {int(record["comment_id"]): record.get("comment_time") for record in comments}
     comment_author_map = {int(record["comment_id"]): record.get("user_id") for record in comments}
@@ -1032,17 +974,6 @@ def recompute_folder_movie_counts(folders: list[dict[str, Any]], favorites: list
     return normalized_records
 
 
-def write_ods_partition(
-    spark: SparkSession,
-    table_map: dict[str, dict[str, str]],
-    source_table: str,
-    df: DataFrame,
-    batch_date: str,
-) -> None:
-    target_cfg = table_map[source_table]
-    write_partition(df, target_cfg["target_table"], target_cfg["sink_path"], batch_date, spark)
-
-
 def run() -> None:
     args = parse_args()
     config = load_config(args.config)
@@ -1053,62 +984,54 @@ def run() -> None:
 
     batch_date = parse_batch_date(args.batch_date)
     batch_date_str = batch_date.isoformat()
-    sample_ratio = float(generator_config["sample_ratio"])
     lookback_days = int(generator_config["lookback_days"])
     rng = random.Random(int(generator_config["seed"]))
-    jdbc_query_limit_cap = int(generator_config["jdbc_query_limit_cap"])
+    write_batch_size = int(generator_config["write_batch_size"])
+    cleanup_existing = bool(generator_config.get("cleanup_existing", True))
+    if write_batch_size <= 0:
+        raise ValueError(f"Invalid write_batch_size: {write_batch_size}")
 
     spark = build_spark_session("movie-generate-dwd-source-data", config["spark"])
     try:
-        spark.sql("CREATE DATABASE IF NOT EXISTS ods")
-
         pg_config = config["postgres"]
-        table_map = build_postgres_target_map(config)
+
+        cleanup_summary: dict[str, int] | None = None
+        if cleanup_existing:
+            cleanup_summary = cleanup_generated_batch_data(spark, pg_config, batch_date)
+            print(
+                "Cleaned existing generated PostgreSQL rows. "
+                + ", ".join(f"{key}={value}" for key, value in cleanup_summary.items())
+            )
 
         movie_records = sample_movies(spark, pg_config, int(generator_config["movie_limit"]))
         movie_ids = [int(record["movie_id"]) for record in movie_records]
 
-        sampled_user_records = sample_users(
+        existing_generated_user_ids = fetch_existing_generated_user_ids(
             spark,
             pg_config,
-            ceil_sample_count(int(generator_config["user_target"]), sample_ratio, jdbc_query_limit_cap),
+            f"test_user_{batch_date.strftime('%Y%m%d')}_",
         )
         user_records = generate_users(
-            sampled_user_records,
             int(generator_config["user_target"]),
             int(generator_config["new_user_target"]),
             batch_date,
             lookback_days,
             rng,
+            existing_generated_user_ids,
         )
-        user_ids = [record["user_id"] for record in user_records]
 
-        sampled_folder_records = sample_folders(
-            spark,
-            pg_config,
-            user_ids,
-            ceil_sample_count(int(generator_config["folder_target"]), sample_ratio, jdbc_query_limit_cap),
-        )
         folder_records = generate_folders(
-            sampled_folder_records,
+            [],
             user_records,
             int(generator_config["folder_target"]),
             batch_date,
             lookback_days,
             rng,
+            fetch_max_bigint(spark, pg_config, "public.favorite_folders", "id"),
         )
-        folder_ids = [int(record["id"]) for record in folder_records]
 
-        favorite_records = sample_favorites(
-            spark,
-            pg_config,
-            user_ids,
-            movie_ids,
-            folder_ids,
-            ceil_sample_count(int(generator_config["favorite_target"]), sample_ratio, jdbc_query_limit_cap),
-        )
         favorite_records = top_up_favorites(
-            favorite_records,
+            [],
             int(generator_config["favorite_target"]),
             folder_records,
             movie_ids,
@@ -1118,93 +1041,86 @@ def run() -> None:
         )
         folder_records = recompute_folder_movie_counts(folder_records, favorite_records)
 
-        rating_records = sample_ratings(
-            spark,
-            pg_config,
-            user_ids,
-            movie_ids,
-            ceil_sample_count(int(generator_config["rating_target"]), sample_ratio, jdbc_query_limit_cap),
-        )
         rating_records = top_up_ratings(
-            rating_records,
+            [],
             int(generator_config["rating_target"]),
             user_records,
             movie_ids,
             batch_date,
             lookback_days,
             rng,
+            fetch_existing_user_movie_keys(
+                spark,
+                pg_config,
+                "public.ratings",
+                f"test_user_{batch_date.strftime('%Y%m%d')}_",
+                movie_ids,
+            ),
         )
 
-        view_history_records = sample_view_history(
-            spark,
-            pg_config,
-            user_ids,
-            movie_ids,
-            ceil_sample_count(int(generator_config["view_target"]), sample_ratio, jdbc_query_limit_cap),
-        )
         view_history_records = top_up_view_history(
-            view_history_records,
+            [],
             int(generator_config["view_target"]),
             user_records,
             movie_ids,
             batch_date,
             lookback_days,
             rng,
+            fetch_max_bigint(spark, pg_config, "public.view_history", "history_id"),
+            fetch_existing_user_movie_keys(
+                spark,
+                pg_config,
+                "public.view_history",
+                f"test_user_{batch_date.strftime('%Y%m%d')}_",
+                movie_ids,
+            ),
         )
 
-        watched_records = sample_watched_movies(
-            spark,
-            pg_config,
-            user_ids,
-            movie_ids,
-            ceil_sample_count(int(generator_config["watched_target"]), sample_ratio, jdbc_query_limit_cap),
-        )
         watched_records = top_up_watched_movies(
-            watched_records,
+            [],
             int(generator_config["watched_target"]),
             user_records,
             movie_ids,
             batch_date,
             lookback_days,
             rng,
+            fetch_existing_user_movie_keys(
+                spark,
+                pg_config,
+                "public.watched_movies",
+                f"test_user_{batch_date.strftime('%Y%m%d')}_",
+                movie_ids,
+            ),
         )
 
-        comment_records = sample_comments(
-            spark,
-            pg_config,
-            user_ids,
-            movie_ids,
-            ceil_sample_count(int(generator_config["comment_target"]), sample_ratio, jdbc_query_limit_cap),
-        )
         comment_records = top_up_comments(
-            comment_records,
+            [],
             int(generator_config["comment_target"]),
             user_records,
             movie_records,
             batch_date,
             lookback_days,
             rng,
+            fetch_max_bigint(spark, pg_config, "public.comments", "comment_id"),
+            fetch_existing_comment_keys(
+                spark,
+                pg_config,
+                f"test_user_{batch_date.strftime('%Y%m%d')}_",
+                movie_ids,
+            ),
         )
 
-        sampled_comment_ids = [int(record["comment_id"]) for record in comment_records]
-        comment_like_records = sample_comment_likes(
-            spark,
-            pg_config,
-            user_ids,
-            sampled_comment_ids,
-            ceil_sample_count(int(generator_config["comment_like_target"]), sample_ratio, jdbc_query_limit_cap),
-        )
         comment_like_records = top_up_comment_likes(
-            comment_like_records,
+            [],
             int(generator_config["comment_like_target"]),
             user_records,
             comment_records,
             batch_date,
             lookback_days,
             rng,
+            fetch_max_bigint(spark, pg_config, "public.comment_likes", "id"),
         )
 
-        movies_df = create_dataframe(spark, MOVIES_SCHEMA, movie_records)
         users_df = create_dataframe(spark, USERS_SCHEMA, user_records)
         folders_df = create_dataframe(spark, FOLDERS_SCHEMA, folder_records)
         favorites_df = create_dataframe(spark, FAVORITES_SCHEMA, favorite_records)
@@ -1214,19 +1130,23 @@ def run() -> None:
         view_history_df = create_dataframe(spark, VIEW_HISTORY_SCHEMA, view_history_records)
         watched_df = create_dataframe(spark, WATCHED_SCHEMA, watched_records)
 
-        write_ods_partition(spark, table_map, "public.movies", movies_df, batch_date_str)
-        write_ods_partition(spark, table_map, "public.users", users_df, batch_date_str)
-        write_ods_partition(spark, table_map, "public.favorite_folders", folders_df, batch_date_str)
-        write_ods_partition(spark, table_map, "public.favorites", favorites_df, batch_date_str)
-        write_ods_partition(spark, table_map, "public.ratings", ratings_df, batch_date_str)
-        write_ods_partition(spark, table_map, "public.comments", comments_df, batch_date_str)
-        write_ods_partition(spark, table_map, "public.comment_likes", comment_likes_df, batch_date_str)
-        write_ods_partition(spark, table_map, "public.view_history", view_history_df, batch_date_str)
-        write_ods_partition(spark, table_map, "public.watched_movies", watched_df, batch_date_str)
+        write_to_postgres(users_df, pg_config, "public.users", write_batch_size)
+        write_to_postgres(folders_df, pg_config, "public.favorite_folders", write_batch_size)
+        write_to_postgres(favorites_df, pg_config, "public.favorites", write_batch_size)
+        write_to_postgres(ratings_df, pg_config, "public.ratings", write_batch_size)
+        write_to_postgres(comments_df, pg_config, "public.comments", write_batch_size)
+        write_to_postgres(comment_likes_df, pg_config, "public.comment_likes", write_batch_size)
+        write_to_postgres(view_history_df, pg_config, "public.view_history", write_batch_size)
+        write_to_postgres(watched_df, pg_config, "public.watched_movies", write_batch_size)
+
+        sync_postgres_sequence(spark, pg_config, "favorite_folders_id_seq", "public.favorite_folders", "id")
+        sync_postgres_sequence(spark, pg_config, "comments_comment_id_seq", "public.comments", "comment_id")
+        sync_postgres_sequence(spark, pg_config, "comment_likes_id_seq", "public.comment_likes", "id")
+        sync_postgres_sequence(spark, pg_config, "view_history_history_id_seq", "public.view_history", "history_id")
 
         print(
-            "Generated PostgreSQL-aligned ODS snapshot test data. "
-            f"dt={batch_date_str}, movies={len(movie_records)}, users={len(user_records)}, "
+            "Inserted synthetic PostgreSQL source data. "
+            f"batch_date={batch_date_str}, referenced_movies={len(movie_records)}, inserted_users={len(user_records)}, "
             f"folders={len(folder_records)}, favorites={len(favorite_records)}, ratings={len(rating_records)}, "
             f"comments={len(comment_records)}, comment_likes={len(comment_like_records)}, "
             f"view_history={len(view_history_records)}, watched={len(watched_records)}"

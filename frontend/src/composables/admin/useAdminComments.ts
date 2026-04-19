@@ -9,6 +9,7 @@ import type {
   GetCommentListAdminParams,
   PageInfoComment
 } from '@/api/model'
+import { normalizeCommentId } from '@/utils/comment'
 import { formatDateTimeLabel, truncateText } from '@/utils/profile'
 import {
   DEFAULT_ADMIN_PAGE_SIZE,
@@ -28,7 +29,7 @@ type AdminCommentListState = {
 export function useAdminComments() {
   const dialog = useDialog()
   const message = useMessage()
-  const pendingDeletedCommentId = shallowRef<number | null>(null)
+  const pendingDeletedCommentId = shallowRef<string | null>(null)
 
   const state = reactive<AdminCommentListState>({
     keywordInput: '',
@@ -111,12 +112,13 @@ export function useAdminComments() {
     }
   }
 
-  function isDeletingComment(commentId?: number | null): boolean {
-    return Boolean(commentId && pendingDeletedCommentId.value === commentId)
+  function isDeletingComment(commentId?: unknown): boolean {
+    const normalizedCommentId = normalizeCommentId(commentId)
+    return Boolean(normalizedCommentId && pendingDeletedCommentId.value === normalizedCommentId)
   }
 
   async function deleteComment(comment: Comment) {
-    const commentId = comment.id
+    const commentId = normalizeCommentId(comment.id)
     if (!commentId) {
       message.warning('评论 ID 无效，无法删除')
       return
@@ -127,7 +129,7 @@ export function useAdminComments() {
     try {
       const shouldFallbackToPreviousPage = comments.value.length === 1 && state.page > 1
 
-      await deleteCommentMutation.mutateAsync({ id: commentId })
+      await deleteCommentMutation.mutateAsync({ id: commentId as unknown as number })
 
       if (shouldFallbackToPreviousPage) {
         state.page -= 1
@@ -146,7 +148,7 @@ export function useAdminComments() {
   }
 
   function requestDeleteComment(comment: Comment) {
-    const commentId = comment.id
+    const commentId = normalizeCommentId(comment.id)
     if (!commentId) {
       message.warning('评论 ID 无效，无法删除')
       return

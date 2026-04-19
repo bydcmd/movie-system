@@ -10,9 +10,10 @@ usage() {
 Usage:
   bash etl.sh [calc-date] [config-path]
   bash etl.sh [config-path]
-  bash etl.sh --calc-date YYYY-MM-DD --config conf/etl_config.json [--skip-ods] [--skip-dwd] [--skip-dws] [--skip-ads]
+  bash etl.sh --calc-date YYYY-MM-DD --config conf/etl_config.json [--generate-source] [--skip-ods] [--skip-dwd] [--skip-dws] [--skip-ads]
 
 Full Pipeline Steps:
+  0. Source: Generate synthetic PostgreSQL source data (optional, run_generate_dwd_source_data.sh)
   1. ODS: PostgreSQL sync (run_postgres_sync.sh)
   2. DWD: Build event wide table (run_dwd_build.sh)
   3. DWD: Build snapshots (run_dwd_snapshots.sh)
@@ -24,6 +25,7 @@ Full Pipeline Steps:
   9. ADS: Sync to PostgreSQL (run_ads_pg_sync.sh)
 
 Options:
+  --generate-source  Generate synthetic PostgreSQL source data before ODS sync
   --skip-ods      Skip ODS layer jobs
   --skip-dwd      Skip DWD layer jobs
   --skip-dws      Skip DWS layer jobs
@@ -36,6 +38,7 @@ Examples:
   bash etl.sh 2026-03-25                         # Run full pipeline for specific date
   bash etl.sh conf/etl_config.dev.json           # Run with custom config
   bash etl.sh 2026-03-25 conf/etl_config.dev.json
+  bash etl.sh --generate-source --calc-date 2026-03-25
   bash etl.sh --skip-ods --calc-date 2026-03-25  # Skip ODS, run from DWD onwards
   bash etl.sh --skip-sync                        # Run everything except final PG sync
 EOF
@@ -46,6 +49,7 @@ cd "${SCRIPT_DIR}"
 
 CALC_DATE="$(date +%F)"
 CONFIG_PATH="conf/etl_config.json"
+GENERATE_SOURCE=false
 SKIP_ODS=false
 SKIP_DWD=false
 SKIP_DWS=false
@@ -70,6 +74,10 @@ while [[ $# -gt 0 ]]; do
     --config)
       CONFIG_PATH="${2:-}"
       shift 2
+      ;;
+    --generate-source)
+      GENERATE_SOURCE=true
+      shift
       ;;
     --skip-ods)
       SKIP_ODS=true
@@ -133,6 +141,7 @@ echo "Movie Analytics ETL Pipeline"
 echo "======================================"
 echo "Calc Date:    ${CALC_DATE}"
 echo "Config Path:  ${CONFIG_PATH}"
+echo "Generate Src: ${GENERATE_SOURCE}"
 echo "Skip ODS:     ${SKIP_ODS}"
 echo "Skip DWD:     ${SKIP_DWD}"
 echo "Skip DWS:     ${SKIP_DWS}"
@@ -166,6 +175,21 @@ run_job() {
     # Continue with next job unless it's a critical failure
   fi
 }
+
+# ============================================
+# LAYER 0: Source Data Generation (Optional)
+# ============================================
+if [[ "${GENERATE_SOURCE}" == "true" ]]; then
+  echo ""
+  echo "######################################"
+  echo "# LAYER 0: Source - Synthetic Data"
+  echo "######################################"
+
+  run_job "Generate PostgreSQL Source Data" "run_generate_dwd_source_data.sh"
+else
+  echo ""
+  echo "# Skipping synthetic source generation (enable with --generate-source)"
+fi
 
 # ============================================
 # LAYER 1: ODS (Operational Data Store)

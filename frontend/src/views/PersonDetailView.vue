@@ -11,7 +11,7 @@ import {
 import NavBar from '@/components/layout/NavBar.vue'
 import MoviePlaceholder from '@/components/movie/MoviePlaceholder.vue'
 import { resolveAssetUrl, splitCsvLike } from '@/utils/profile'
-import { getMovieId } from '@/utils/movie'
+import { getMovieId, getMovieIdKey, type MovieId } from '@/utils/movie'
 
 const route = useRoute()
 const router = useRouter()
@@ -63,17 +63,18 @@ type FilmographyItem = {
   posterUrl: string | undefined
   posterKey: string
   scoreLabel: string
-  movieId: number
+  movieId: MovieId
 }
 
 const filmography = computed<FilmographyItem[]>(() =>
   movies.value
     .map((m) => {
       const id = getMovieId(m)
-      if (!id || id <= 0) return null
+      const movieIdKey = getMovieIdKey(id)
+      if (!movieIdKey || !id) return null
       const title = m.name || '未命名电影'
       const posterUrl = resolveAssetUrl(m.cover) || undefined
-      const posterKey = `${id}::${posterUrl ?? 'none'}`
+      const posterKey = `${movieIdKey}::${posterUrl ?? 'none'}`
       const parts: string[] = []
       if (m.year) parts.push(String(m.year))
       const genres = splitCsvLike(m.genres)
@@ -81,7 +82,7 @@ const filmography = computed<FilmographyItem[]>(() =>
       let scoreLabel = '暂无评分'
       if (typeof m.doubanScore === 'number') scoreLabel = `豆瓣 ${m.doubanScore.toFixed(1)}`
       else if (typeof m.score === 'number') scoreLabel = `本站 ${(m.score / 2).toFixed(1)}`
-      return { key: String(id), title, meta: parts.join(' · '), posterUrl, posterKey, scoreLabel, movieId: id }
+      return { key: movieIdKey, title, meta: parts.join(' · '), posterUrl, posterKey, scoreLabel, movieId: id }
     })
     .filter((item): item is FilmographyItem => item !== null)
 )
@@ -127,8 +128,8 @@ const goBack = () => {
   router.back()
 }
 
-const openMovie = (movieId: number) => {
-  void router.push({ name: 'movie-detail', params: { id: movieId } })
+const openMovie = (movieId: MovieId) => {
+  void router.push({ name: 'movie-detail', params: { id: String(movieId) } })
 }
 
 watch(
