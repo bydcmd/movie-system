@@ -5,9 +5,22 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  bash run_ads_user_retention.sh [calc-date] [config-path]
-  bash run_ads_user_retention.sh [config-path]
-  bash run_ads_user_retention.sh --calc-date YYYY-MM-DD --config conf/etl_config.json
+  bash run_dm_pg_sync.sh [calc-date] [config-path]
+  bash run_dm_pg_sync.sh [config-path]
+  bash run_dm_pg_sync.sh --calc-date YYYY-MM-DD --config conf/etl_config.json --sync-types hot_movies,user_retention
+
+Notes:
+  --sync-types: Comma-separated list of sync types.
+    Options: hot_movies, user_retention, genre_preference, all.
+    Default: all
+
+Examples:
+  bash run_dm_pg_sync.sh
+  bash run_dm_pg_sync.sh 2026-03-25
+  bash run_dm_pg_sync.sh conf/etl_config.dev.json
+  bash run_dm_pg_sync.sh 2026-03-25 conf/etl_config.dev.json
+  bash run_dm_pg_sync.sh --sync-types hot_movies
+  bash run_dm_pg_sync.sh --sync-types user_retention,genre_preference
 EOF
 }
 
@@ -16,6 +29,7 @@ cd "${SCRIPT_DIR}"
 
 CALC_DATE="$(date +%F)"
 CONFIG_PATH="conf/etl_config.json"
+SYNC_TYPES="all"
 POSITIONAL_ARGS=()
 
 is_date() {
@@ -34,6 +48,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --config)
       CONFIG_PATH="${2:-}"
+      shift 2
+      ;;
+    --sync-types)
+      SYNC_TYPES="${2:-}"
       shift 2
       ;;
     *)
@@ -91,9 +109,11 @@ CMD=(
   --conf spark.serializer=org.apache.spark.serializer.KryoSerializer
   --conf spark.driver.maxResultSize=256m
   --conf spark.network.timeout=600s
-  jobs/build_ads_user_retention.py
+  --packages org.postgresql:postgresql:42.7.3
+  jobs/sync_dm_to_postgres.py
   --config "${CONFIG_PATH}"
   --calc-date "${CALC_DATE}"
+  --sync-types "${SYNC_TYPES}"
 )
 
 printf 'Running command:\n%s\n' "${CMD[*]}"

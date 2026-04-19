@@ -5,31 +5,18 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  bash run_postgres_sync.sh [batch-date] [config-path] [tables]
-  bash run_postgres_sync.sh [config-path] [tables]
-  bash run_postgres_sync.sh --batch-date YYYY-MM-DD --config conf/etl_config.json --tables public.movies,public.users
-
-Examples:
-  bash run_postgres_sync.sh
-  bash run_postgres_sync.sh 2026-03-25
-  bash run_postgres_sync.sh conf/etl_config.dev.json
-  bash run_postgres_sync.sh conf/etl_config.dev.json public.movies,public.users
-  bash run_postgres_sync.sh 2026-03-25 conf/etl_config.json
-  bash run_postgres_sync.sh 2026-03-25 conf/etl_config.json public.movies,public.users
-
-Arguments:
-  batch-date   Partition date, default: today (YYYY-MM-DD)
-  config-path  Config file path, default: conf/etl_config.json
-  tables       Optional comma-separated source tables
+  bash run_dm_genre_preference.sh [calc-date] [config-path]
+  bash run_dm_genre_preference.sh [config-path]
+  bash run_dm_genre_preference.sh --calc-date YYYY-MM-DD --config conf/etl_config.json [--top-n 100]
 EOF
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
 
-BATCH_DATE="$(date +%F)"
+CALC_DATE="$(date +%F)"
 CONFIG_PATH="conf/etl_config.json"
-TABLES=""
+TOP_N=""
 POSITIONAL_ARGS=()
 
 is_date() {
@@ -42,16 +29,16 @@ while [[ $# -gt 0 ]]; do
       usage
       exit 0
       ;;
-    --batch-date)
-      BATCH_DATE="${2:-}"
+    --calc-date)
+      CALC_DATE="${2:-}"
       shift 2
       ;;
     --config)
       CONFIG_PATH="${2:-}"
       shift 2
       ;;
-    --tables)
-      TABLES="${2:-}"
+    --top-n)
+      TOP_N="${2:-}"
       shift 2
       ;;
     *)
@@ -66,28 +53,14 @@ case "${#POSITIONAL_ARGS[@]}" in
     ;;
   1)
     if is_date "${POSITIONAL_ARGS[0]}"; then
-      BATCH_DATE="${POSITIONAL_ARGS[0]}"
+      CALC_DATE="${POSITIONAL_ARGS[0]}"
     else
       CONFIG_PATH="${POSITIONAL_ARGS[0]}"
     fi
     ;;
   2)
-    if is_date "${POSITIONAL_ARGS[0]}"; then
-      BATCH_DATE="${POSITIONAL_ARGS[0]}"
-      if [[ "${POSITIONAL_ARGS[1]}" == *.json ]]; then
-        CONFIG_PATH="${POSITIONAL_ARGS[1]}"
-      else
-        TABLES="${POSITIONAL_ARGS[1]}"
-      fi
-    else
-      CONFIG_PATH="${POSITIONAL_ARGS[0]}"
-      TABLES="${POSITIONAL_ARGS[1]}"
-    fi
-    ;;
-  3)
-    BATCH_DATE="${POSITIONAL_ARGS[0]}"
+    CALC_DATE="${POSITIONAL_ARGS[0]}"
     CONFIG_PATH="${POSITIONAL_ARGS[1]}"
-    TABLES="${POSITIONAL_ARGS[2]}"
     ;;
   *)
     usage
@@ -123,14 +96,13 @@ CMD=(
   --conf spark.serializer=org.apache.spark.serializer.KryoSerializer
   --conf spark.driver.maxResultSize=256m
   --conf spark.network.timeout=600s
-  --packages org.postgresql:postgresql:42.7.3
-  jobs/postgres_to_hive_ods.py
+  jobs/build_dm_genre_preference_1d.py
   --config "${CONFIG_PATH}"
-  --batch-date "${BATCH_DATE}"
+  --calc-date "${CALC_DATE}"
 )
 
-if [[ -n "${TABLES}" ]]; then
-  CMD+=(--tables "${TABLES}")
+if [[ -n "${TOP_N}" ]]; then
+  CMD+=(--top-n "${TOP_N}")
 fi
 
 printf 'Running command:\n%s\n' "${CMD[*]}"

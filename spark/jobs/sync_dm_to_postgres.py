@@ -15,28 +15,21 @@ from utils.config_loader import load_config
 from utils.hive_utils import assert_non_empty_partition
 from utils.spark_factory import build_spark_session
 
-DEFAULT_ADS_HOT_MOVIES_SYNC_CONFIG: dict[str, Any] = {
-    "source_table": "ads.ads_hot_movies",
+DEFAULT_DM_HOT_MOVIES_SYNC_CONFIG: dict[str, Any] = {
+    "source_table": "dm.dm_hot_movies",
     "target_table": "public.stats_hot_movies",
     "supported_period_types": ["DAILY", "WEEKLY", "MONTHLY", "TOTAL"],
     "batch_size": 1000,
 }
 
-DEFAULT_ADS_SIMILAR_MOVIES_SYNC_CONFIG: dict[str, Any] = {
-    "source_table": "ads.ads_itemcf_similar_movies",
-    "target_table": "public.stats_similar_movies",
-    "supported_similarity_types": [2],
-    "batch_size": 1000,
-}
-
-DEFAULT_ADS_USER_RETENTION_SYNC_CONFIG: dict[str, Any] = {
-    "source_table": "ads.ads_user_retention",
+DEFAULT_DM_USER_RETENTION_SYNC_CONFIG: dict[str, Any] = {
+    "source_table": "dm.dm_user_retention",
     "target_table": "public.stats_user_retention",
     "batch_size": 1000,
 }
 
-DEFAULT_ADS_GENRE_PREFERENCE_SYNC_CONFIG: dict[str, Any] = {
-    "source_table": "ads.ads_genre_preference_1d",
+DEFAULT_DM_GENRE_PREFERENCE_SYNC_CONFIG: dict[str, Any] = {
+    "source_table": "dm.dm_genre_preference_1d",
     "target_table": "public.stats_genre_preference_1d",
     "batch_size": 1000,
 }
@@ -60,7 +53,7 @@ def ensure_non_empty_partition(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Sync ADS data from Hive to PostgreSQL."
+        description="Sync compact DM data from Hive to PostgreSQL."
     )
     parser.add_argument("--config", required=True, help="Path of ETL json config.")
     parser.add_argument(
@@ -71,7 +64,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--sync-types",
         default="all",
-        help="Comma-separated list of sync types. Options: hot_movies, similar_movies, user_retention, genre_preference, all. Default: all",
+        help="Comma-separated list of sync types. Options: hot_movies, user_retention, genre_preference, all. Default: all",
     )
     return parser.parse_args()
 
@@ -98,39 +91,24 @@ def normalize_period_types(period_types: list[Any] | tuple[Any, ...]) -> list[st
     return normalized
 
 
-def normalize_similarity_types(similarity_types: list[Any] | tuple[Any, ...]) -> list[int]:
-    normalized: list[int] = []
-    for item in similarity_types:
-        if item is None:
-            continue
-        normalized.append(int(item))
-
-    deduplicated = list(dict.fromkeys(normalized))
-    if not deduplicated:
-        raise ValueError("supported_similarity_types must not be empty")
-    return deduplicated
-
-
 def parse_sync_types_arg(sync_types_arg: str) -> set[str]:
     """Parse the --sync-types argument into a set of sync types."""
     sync_types = {s.strip().lower() for s in sync_types_arg.split(",") if s.strip()}
     if "all" in sync_types:
         return {
             "hot_movies",
-            "similar_movies",
             "user_retention",
             "genre_preference",
         }
     valid = {
         "hot_movies",
-        "similar_movies",
         "user_retention",
         "genre_preference",
     }
     invalid = sync_types - valid
     if invalid:
         raise ValueError(
-            f"Invalid sync types: {invalid}. Valid options: hot_movies, similar_movies, user_retention, genre_preference, all"
+            f"Invalid sync types: {invalid}. Valid options: hot_movies, user_retention, genre_preference, all"
         )
     return sync_types
 
@@ -172,61 +150,11 @@ def build_hot_movies_source_frame(
         joined_supported = ",".join(supported_period_types)
         rebuild_hint = ""
         if available_period_types == ["SNAPSHOT"]:
-            rebuild_hint = " Rebuild the ads_hot_movies partition with the updated build_ads_hot_movies.py first."
+            rebuild_hint = " Rebuild the dm_hot_movies partition with the updated build_dm_hot_movies.py first."
         raise ValueError(
             "No supported period data found in source partition. "
             f"source_table={source_table}, dt={calc_date}, available_period_types={joined_available}, "
             f"supported_period_types={joined_supported}.{rebuild_hint}"
-        )
-
-    return filtered_df
-
-
-def build_similar_movies_source_frame(
-    spark: SparkSession,
-    source_table: str,
-    calc_date: str,
-    supported_similarity_types: list[int],
-) -> DataFrame:
-    source_df = spark.table(source_table).where(F.col("dt") == calc_date)
-    ensure_non_empty_partition(source_df, source_table, {"dt": calc_date}, spark=spark)
-
-    available_similarity_types = [
-        int(row["similarity_type"])
-        for row in source_df.select(F.col("similarity_type").cast("int").alias("similarity_type")).distinct().collect()
-        if row["similarity_type"] is not None
-    ]
-
-    filtered_df = (
-        source_df.select(
-            F.col("movie_id").cast("bigint").alias("movie_id"),
-            F.col("similar_movie_id").cast("bigint").alias("similar_movie_id"),
-            F.col("similarity_score").cast("double").alias("similarity_score"),
-            F.col("similarity_type").cast("smallint").alias("similarity_type"),
-        )
-        .where(
-            F.col("movie_id").isNotNull()
-            & F.col("similar_movie_id").isNotNull()
-            & F.col("similarity_score").isNotNull()
-            & F.col("similarity_type").isNotNull()
-            & (F.col("movie_id") != F.col("similar_movie_id"))
-            & F.col("similarity_type").isin([int(item) for item in supported_similarity_types])
-        )
-        .dropDuplicates(["movie_id", "similar_movie_id", "similarity_type"])
-        .select("movie_id", "similar_movie_id", "similarity_score", "similarity_type")
-    )
-
-    if filtered_df.limit(1).count() == 0:
-        joined_available = (
-            ",".join(str(item) for item in sorted(available_similarity_types))
-            if available_similarity_types
-            else "<empty>"
-        )
-        joined_supported = ",".join(str(item) for item in supported_similarity_types)
-        raise ValueError(
-            "No supported similarity data found in source partition. "
-            f"source_table={source_table}, dt={calc_date}, available_similarity_types={joined_available}, "
-            f"supported_similarity_types={joined_supported}"
         )
 
     return filtered_df
@@ -296,49 +224,6 @@ def delete_hot_movies_target_rows(
         connection.setAutoCommit(False)
         statement = connection.prepareStatement(f"DELETE FROM {target_table} WHERE calc_date = ?")
         statement.setDate(1, jvm.java.sql.Date.valueOf(calc_date))
-        deleted_rows = int(statement.executeUpdate())
-        connection.commit()
-        return deleted_rows
-    except Exception:
-        if connection is not None:
-            connection.rollback()
-        raise
-    finally:
-        if statement is not None:
-            statement.close()
-        if connection is not None:
-            connection.close()
-
-
-def delete_similar_movies_target_rows(
-    spark: SparkSession,
-    pg_config: dict[str, Any],
-    target_table: str,
-    similarity_types: list[int],
-) -> int:
-    validate_table_name(target_table)
-    if not similarity_types:
-        return 0
-
-    jvm = spark.sparkContext._gateway.jvm
-    driver = pg_config.get("driver", "org.postgresql.Driver")
-    jvm.java.lang.Class.forName(driver)
-
-    placeholders = ",".join("?" for _ in similarity_types)
-    connection = None
-    statement = None
-    try:
-        connection = jvm.java.sql.DriverManager.getConnection(
-            pg_config["jdbc_url"],
-            pg_config["user"],
-            pg_config["password"],
-        )
-        connection.setAutoCommit(False)
-        statement = connection.prepareStatement(
-            f"DELETE FROM {target_table} WHERE similarity_type IN ({placeholders})"
-        )
-        for index, similarity_type in enumerate(similarity_types, start=1):
-            statement.setInt(index, int(similarity_type))
         deleted_rows = int(statement.executeUpdate())
         connection.commit()
         return deleted_rows
@@ -451,45 +336,6 @@ def sync_hot_movies(
         result_df.unpersist()
 
 
-def sync_similar_movies(
-    spark: SparkSession,
-    pg_config: dict[str, Any],
-    sync_config: dict[str, Any],
-    calc_date: str,
-) -> str:
-    """Sync similar movies from ADS to PostgreSQL. Returns result message."""
-    source_table = str(sync_config["source_table"]).strip()
-    target_table = str(sync_config["target_table"]).strip()
-    supported_similarity_types = normalize_similarity_types(sync_config.get("supported_similarity_types", []))
-    batch_size = int(sync_config.get("batch_size", 1000))
-    if batch_size <= 0:
-        raise ValueError(f"Invalid batch_size: {batch_size}")
-
-    result_df = build_similar_movies_source_frame(
-        spark=spark,
-        source_table=source_table,
-        calc_date=calc_date,
-        supported_similarity_types=supported_similarity_types,
-    ).cache()
-    try:
-        row_count = result_df.count()
-        deleted_rows = delete_similar_movies_target_rows(
-            spark=spark,
-            pg_config=pg_config,
-            target_table=target_table,
-            similarity_types=supported_similarity_types,
-        )
-        write_to_postgres(
-            df=result_df,
-            pg_config=pg_config,
-            target_table=target_table,
-            batch_size=batch_size,
-        )
-        return f"similar_movies: source={source_table}, target={target_table}, similarity_types={supported_similarity_types}, rows={row_count}, deleted={deleted_rows}"
-    finally:
-        result_df.unpersist()
-
-
 def sync_user_retention(
     spark: SparkSession,
     pg_config: dict[str, Any],
@@ -571,24 +417,20 @@ def run() -> None:
     pg_config: dict[str, Any] = config["postgres"]
 
     hot_movies_sync_config = merge_nested_dict(
-        DEFAULT_ADS_HOT_MOVIES_SYNC_CONFIG,
-        config.get("ads_hot_movies_postgres_sync", {}),
-    )
-    similar_movies_sync_config = merge_nested_dict(
-        DEFAULT_ADS_SIMILAR_MOVIES_SYNC_CONFIG,
-        config.get("ads_itemcf_similar_movies_postgres_sync", {}),
+        DEFAULT_DM_HOT_MOVIES_SYNC_CONFIG,
+        config.get("dm_hot_movies_postgres_sync", {}),
     )
     user_retention_sync_config = merge_nested_dict(
-        DEFAULT_ADS_USER_RETENTION_SYNC_CONFIG,
-        config.get("ads_user_retention_postgres_sync", {}),
+        DEFAULT_DM_USER_RETENTION_SYNC_CONFIG,
+        config.get("dm_user_retention_postgres_sync", {}),
     )
     genre_preference_sync_config = merge_nested_dict(
-        DEFAULT_ADS_GENRE_PREFERENCE_SYNC_CONFIG,
-        config.get("ads_genre_preference_postgres_sync", {}),
+        DEFAULT_DM_GENRE_PREFERENCE_SYNC_CONFIG,
+        config.get("dm_genre_preference_postgres_sync", {}),
     )
     sync_types = parse_sync_types_arg(args.sync_types)
 
-    spark = build_spark_session("movie-ads-to-postgres-sync", spark_config)
+    spark = build_spark_session("movie-dm-to-postgres-sync", spark_config)
     try:
         results = []
 
@@ -597,15 +439,6 @@ def run() -> None:
                 spark=spark,
                 pg_config=pg_config,
                 sync_config=hot_movies_sync_config,
-                calc_date=args.calc_date,
-            )
-            results.append(result)
-
-        if "similar_movies" in sync_types:
-            result = sync_similar_movies(
-                spark=spark,
-                pg_config=pg_config,
-                sync_config=similar_movies_sync_config,
                 calc_date=args.calc_date,
             )
             results.append(result)
@@ -628,7 +461,7 @@ def run() -> None:
             )
             results.append(result)
 
-        print(f"ADS to PostgreSQL sync finished. dt={args.calc_date}. " + "; ".join(results))
+        print(f"DM to PostgreSQL sync finished. dt={args.calc_date}. " + "; ".join(results))
     finally:
         spark.stop()
 

@@ -5,9 +5,9 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  bash run_ads_genre_preference.sh [calc-date] [config-path]
-  bash run_ads_genre_preference.sh [config-path]
-  bash run_ads_genre_preference.sh --calc-date YYYY-MM-DD --config conf/etl_config.json [--top-n 100]
+  bash run_dm_user_retention.sh [calc-date] [config-path]
+  bash run_dm_user_retention.sh [config-path]
+  bash run_dm_user_retention.sh --calc-date YYYY-MM-DD --config conf/etl_config.json
 EOF
 }
 
@@ -16,7 +16,6 @@ cd "${SCRIPT_DIR}"
 
 CALC_DATE="$(date +%F)"
 CONFIG_PATH="conf/etl_config.json"
-TOP_N=""
 POSITIONAL_ARGS=()
 
 is_date() {
@@ -35,10 +34,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --config)
       CONFIG_PATH="${2:-}"
-      shift 2
-      ;;
-    --top-n)
-      TOP_N="${2:-}"
       shift 2
       ;;
     *)
@@ -96,14 +91,10 @@ CMD=(
   --conf spark.serializer=org.apache.spark.serializer.KryoSerializer
   --conf spark.driver.maxResultSize=256m
   --conf spark.network.timeout=600s
-  jobs/build_ads_genre_preference_1d.py
+  jobs/build_dm_user_retention.py
   --config "${CONFIG_PATH}"
   --calc-date "${CALC_DATE}"
 )
-
-if [[ -n "${TOP_N}" ]]; then
-  CMD+=(--top-n "${TOP_N}")
-fi
 
 printf 'Running command:\n%s\n' "${CMD[*]}"
 "${CMD[@]}"

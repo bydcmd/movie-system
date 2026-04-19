@@ -5,33 +5,31 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  bash run_dwd_build.sh [calc-date] [config-path] [snapshot-date]
-  bash run_dwd_build.sh [config-path]
-  bash run_dwd_build.sh --calc-date YYYY-MM-DD --config conf/etl_config.json --snapshot-date YYYY-MM-DD
-
-Description:
-  Build `dwd.dwd_user_event_wide_di` in offline T+1 batch mode from PostgreSQL ODS full tables.
+  bash run_postgres_sync.sh [batch-date] [config-path] [tables]
+  bash run_postgres_sync.sh [config-path] [tables]
+  bash run_postgres_sync.sh --batch-date YYYY-MM-DD --config conf/etl_config.json --tables public.movies,public.users
 
 Examples:
-  bash run_dwd_build.sh
-  bash run_dwd_build.sh 2026-03-25
-  bash run_dwd_build.sh conf/etl_config.dev.json
-  bash run_dwd_build.sh 2026-03-25 conf/etl_config.dev.json
-  bash run_dwd_build.sh 2026-03-25 conf/etl_config.dev.json 2026-03-24
+  bash run_postgres_sync.sh
+  bash run_postgres_sync.sh 2026-03-25
+  bash run_postgres_sync.sh conf/etl_config.dev.json
+  bash run_postgres_sync.sh conf/etl_config.dev.json public.movies,public.users
+  bash run_postgres_sync.sh 2026-03-25 conf/etl_config.json
+  bash run_postgres_sync.sh 2026-03-25 conf/etl_config.json public.movies,public.users
 
 Arguments:
-  calc-date      Business date to build, default: today (YYYY-MM-DD)
-  config-path    Config file path, default: conf/etl_config.json
-  snapshot-date  Optional PostgreSQL snapshot partition date; if omitted, use the latest common ODS dt partition on or before calc-date
+  batch-date   Partition date, default: today (YYYY-MM-DD)
+  config-path  Config file path, default: conf/etl_config.json
+  tables       Optional comma-separated source tables
 EOF
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
 
-CALC_DATE="$(date +%F)"
+BATCH_DATE="$(date +%F)"
 CONFIG_PATH="conf/etl_config.json"
-SNAPSHOT_DATE=""
+TABLES=""
 POSITIONAL_ARGS=()
 
 is_date() {
@@ -44,16 +42,16 @@ while [[ $# -gt 0 ]]; do
       usage
       exit 0
       ;;
-    --calc-date)
-      CALC_DATE="${2:-}"
+    --batch-date)
+      BATCH_DATE="${2:-}"
       shift 2
       ;;
     --config)
       CONFIG_PATH="${2:-}"
       shift 2
       ;;
-    --snapshot-date)
-      SNAPSHOT_DATE="${2:-}"
+    --tables)
+      TABLES="${2:-}"
       shift 2
       ;;
     *)
@@ -68,19 +66,28 @@ case "${#POSITIONAL_ARGS[@]}" in
     ;;
   1)
     if is_date "${POSITIONAL_ARGS[0]}"; then
-      CALC_DATE="${POSITIONAL_ARGS[0]}"
+      BATCH_DATE="${POSITIONAL_ARGS[0]}"
     else
       CONFIG_PATH="${POSITIONAL_ARGS[0]}"
     fi
     ;;
   2)
-    CALC_DATE="${POSITIONAL_ARGS[0]}"
-    CONFIG_PATH="${POSITIONAL_ARGS[1]}"
+    if is_date "${POSITIONAL_ARGS[0]}"; then
+      BATCH_DATE="${POSITIONAL_ARGS[0]}"
+      if [[ "${POSITIONAL_ARGS[1]}" == *.json ]]; then
+        CONFIG_PATH="${POSITIONAL_ARGS[1]}"
+      else
+        TABLES="${POSITIONAL_ARGS[1]}"
+      fi
+    else
+      CONFIG_PATH="${POSITIONAL_ARGS[0]}"
+      TABLES="${POSITIONAL_ARGS[1]}"
+    fi
     ;;
   3)
-    CALC_DATE="${POSITIONAL_ARGS[0]}"
+    BATCH_DATE="${POSITIONAL_ARGS[0]}"
     CONFIG_PATH="${POSITIONAL_ARGS[1]}"
-    SNAPSHOT_DATE="${POSITIONAL_ARGS[2]}"
+    TABLES="${POSITIONAL_ARGS[2]}"
     ;;
   *)
     usage
@@ -99,10 +106,6 @@ if [[ ! -f "${CONFIG_PATH}" ]]; then
 fi
 
 # Batch job memory configuration for 4c8g pseudo-distributed cluster
-# Total memory budget: 8GB - (OS ~0.5G + HDFS/YARN ~2G) = ~5.5GB for Spark
-# - Driver: 1g (minimal, only coordination)
-# - Single executor: 2g with overhead (data processing)
-# - shuffle.partitions: reduced for small cluster
 CMD=(
   spark-submit
   --master yarn
@@ -115,21 +118,19 @@ CMD=(
   --conf spark.sql.shuffle.partitions=8
   --conf spark.sql.adaptive.enabled=true
   --conf spark.sql.adaptive.coalescePartitions.enabled=true
-  --conf spark.sql.adaptive.advisoryPartitionSizeInBytes=67108864
   --conf spark.memory.fraction=0.5
   --conf spark.memory.storageFraction=0.3
   --conf spark.serializer=org.apache.spark.serializer.KryoSerializer
-  --conf spark.kryoserializer.buffer.max=128m
   --conf spark.driver.maxResultSize=256m
   --conf spark.network.timeout=600s
-  --conf spark.executor.heartbeatInterval=60s
-  jobs/build_dwd_user_event_wide_di.py
+  --packages org.postgresql:postgresql:42.7.3
+  ../../jobs/postgres_jdbc.py
   --config "${CONFIG_PATH}"
-  --calc-date "${CALC_DATE}"
+  --batch-date "${BATCH_DATE}"
 )
 
-if [[ -n "${SNAPSHOT_DATE}" ]]; then
-  CMD+=(--snapshot-date "${SNAPSHOT_DATE}")
+if [[ -n "${TABLES}" ]]; then
+  CMD+=(--tables "${TABLES}")
 fi
 
 printf 'Running command:\n%s\n' "${CMD[*]}"

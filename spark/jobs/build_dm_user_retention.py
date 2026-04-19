@@ -15,7 +15,7 @@ from utils.spark_factory import build_spark_session
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Build ADS user retention metrics from DWD event wide table.")
+    parser = argparse.ArgumentParser(description="Build DM user retention metrics from compact user event fact table.")
     parser.add_argument("--config", required=True, help="Path of ETL json config.")
     parser.add_argument(
         "--calc-date",
@@ -91,18 +91,20 @@ def run() -> None:
     args = parse_args()
     config = load_config(args.config)
     spark_config: dict[str, Any] = config["spark"]
-    ads_config: dict[str, Any] = config["ads_user_retention"]
+    dm_config: dict[str, Any] = config["dm_user_retention"]
 
     calc_date = args.calc_date
-    register_source_table = ads_config["register_source_table"]
+    register_source_table = dm_config["register_source_table"]
     # active users derived directly from register source (all events) — no pre-aggregated DWS table needed
-    target_table = ads_config["target_table"]
-    sink_path = ads_config["sink_path"]
-    retention_days = parse_retention_days(ads_config.get("retention_days"))
+    target_table = dm_config["target_table"]
+    sink_path = dm_config["sink_path"]
+    retention_days = parse_retention_days(dm_config.get("retention_days"))
 
-    spark = build_spark_session("movie-ads-user-retention", spark_config)
+    spark = build_spark_session("movie-dm-user-retention", spark_config)
     try:
-        spark.sql("CREATE DATABASE IF NOT EXISTS ads")
+        target_db = target_table.split(".", 1)[0] if "." in target_table else "default"
+        if target_db != "default":
+            spark.sql(f"CREATE DATABASE IF NOT EXISTS {target_db}")
 
         register_events_df = spark.table(register_source_table)
 
@@ -110,7 +112,7 @@ def run() -> None:
         write_partition(result_df, target_table, sink_path, calc_date, spark)
 
         print(
-            "ADS user retention build finished. "
+            "DM user retention build finished. "
             f"register_source={register_source_table}, target={target_table}, dt={calc_date}"
         )
     finally:

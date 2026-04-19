@@ -5,23 +5,16 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  bash run_ads_pg_sync.sh [calc-date] [config-path]
-  bash run_ads_pg_sync.sh [config-path]
-  bash run_ads_pg_sync.sh --calc-date YYYY-MM-DD --config conf/etl_config.json --sync-types hot_movies,similar_movies
-
-Notes:
-  --sync-types: Comma-separated list of sync types.
-    Options: hot_movies, similar_movies, user_retention,
-             genre_preference, all.
-    Default: all
+  bash run_dm_hot_movies.sh [calc-date] [config-path]
+  bash run_dm_hot_movies.sh [config-path]
+  bash run_dm_hot_movies.sh --calc-date YYYY-MM-DD --config conf/etl_config.json [--top-n 100]
 
 Examples:
-  bash run_ads_pg_sync.sh
-  bash run_ads_pg_sync.sh 2026-03-25
-  bash run_ads_pg_sync.sh conf/etl_config.dev.json
-  bash run_ads_pg_sync.sh 2026-03-25 conf/etl_config.dev.json
-  bash run_ads_pg_sync.sh --sync-types hot_movies
-  bash run_ads_pg_sync.sh --sync-types similar_movies
+  bash run_dm_hot_movies.sh
+  bash run_dm_hot_movies.sh 2026-03-25
+  bash run_dm_hot_movies.sh conf/etl_config.dev.json
+  bash run_dm_hot_movies.sh 2026-03-25 conf/etl_config.dev.json
+  bash run_dm_hot_movies.sh --calc-date 2026-03-25 --config conf/etl_config.dev.json --top-n 200
 EOF
 }
 
@@ -30,7 +23,7 @@ cd "${SCRIPT_DIR}"
 
 CALC_DATE="$(date +%F)"
 CONFIG_PATH="conf/etl_config.json"
-SYNC_TYPES="all"
+TOP_N=""
 POSITIONAL_ARGS=()
 
 is_date() {
@@ -51,8 +44,8 @@ while [[ $# -gt 0 ]]; do
       CONFIG_PATH="${2:-}"
       shift 2
       ;;
-    --sync-types)
-      SYNC_TYPES="${2:-}"
+    --top-n)
+      TOP_N="${2:-}"
       shift 2
       ;;
     *)
@@ -110,12 +103,14 @@ CMD=(
   --conf spark.serializer=org.apache.spark.serializer.KryoSerializer
   --conf spark.driver.maxResultSize=256m
   --conf spark.network.timeout=600s
-  --packages org.postgresql:postgresql:42.7.3
-  jobs/sync_ads_to_postgres.py
+  jobs/build_dm_hot_movies.py
   --config "${CONFIG_PATH}"
   --calc-date "${CALC_DATE}"
-  --sync-types "${SYNC_TYPES}"
 )
+
+if [[ -n "${TOP_N}" ]]; then
+  CMD+=(--top-n "${TOP_N}")
+fi
 
 printf 'Running command:\n%s\n' "${CMD[*]}"
 "${CMD[@]}"

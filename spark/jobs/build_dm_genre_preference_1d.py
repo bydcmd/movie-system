@@ -9,21 +9,16 @@ from pyspark.sql import Window
 from pyspark.sql import functions as F
 
 import _bootstrap  # noqa: F401
-from build_dws_postgres_interactions_1d import DEFAULT_DWS_POSTGRES_INTERACTIONS_CONFIG
 
 from utils.config_loader import load_config
-from utils.hive_utils import assert_non_empty_partition, resolve_common_dt_partition_date, write_partition
+from utils.hive_utils import write_partition
 from utils.spark_factory import build_spark_session
 
-DEFAULT_RAW_SOURCE_TABLES: dict[str, str] = {
-    "movie_snapshot": str(DEFAULT_DWS_POSTGRES_INTERACTIONS_CONFIG["source_tables"]["movie_snapshot"]),
-    "view_history": str(DEFAULT_DWS_POSTGRES_INTERACTIONS_CONFIG["source_tables"]["view_history"]),
-    "watched_movies": str(DEFAULT_DWS_POSTGRES_INTERACTIONS_CONFIG["source_tables"]["watched_movies"]),
-}
+DEFAULT_EVENT_SOURCE_TABLE = "dw.dw_user_event_fact_di"
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Build ADS daily genre preference ranking from DWS movie metrics.")
+    parser = argparse.ArgumentParser(description="Build DM daily genre preference ranking from compact movie metrics.")
     parser.add_argument("--config", required=True, help="Path of ETL json config.")
     parser.add_argument(
         "--calc-date",
@@ -34,24 +29,12 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def resolve_raw_source_tables(config: dict[str, Any], ads_config: dict[str, Any]) -> dict[str, str]:
-    resolved = dict(DEFAULT_RAW_SOURCE_TABLES)
-
-    dws_source_tables = config.get("dws_postgres_interactions", {}).get("source_tables", {})
-    for key in resolved:
-        if key in dws_source_tables:
-            resolved[key] = str(dws_source_tables[key]).strip()
-
-    ads_raw_source_tables = ads_config.get("raw_source_tables", {})
-    for key in resolved:
-        if key in ads_raw_source_tables:
-            resolved[key] = str(ads_raw_source_tables[key]).strip()
-
-    return resolved
-
-
-def load_partition(spark, table_name: str, partition_date: str) -> DataFrame:
-    return spark.table(table_name).where(F.col("dt") == partition_date)
+def resolve_event_source_table(config: dict[str, Any], dm_config: dict[str, Any]) -> str:
+    return str(
+        dm_config.get("event_source_table")
+        or config.get("dw_event_fact", {}).get("target_table")
+        or DEFAULT_EVENT_SOURCE_TABLE
+    ).strip()
 
 
 def build_genre_movie_metrics(movie_metrics_df: DataFrame) -> DataFrame:
@@ -77,14 +60,10 @@ def build_genre_movie_metrics(movie_metrics_df: DataFrame) -> DataFrame:
     )
 
 
-def build_genre_user_metrics(
-    movie_snapshot_df: DataFrame,
-    view_history_df: DataFrame,
-    watched_movies_df: DataFrame,
-    calc_date: str,
-) -> DataFrame:
+def build_genre_user_metrics(events_df: DataFrame, calc_date: str) -> DataFrame:
     genre_mapping_df = (
-        movie_snapshot_df.select(
+        events_df.where(F.col("movie_id").isNotNull())
+        .select(
             F.col("movie_id").cast("bigint").alias("movie_id"),
             F.explode(F.split(F.coalesce(F.col("movie_genres"), F.lit("")), "[,/]")).alias("genre"),
         )
@@ -94,10 +73,11 @@ def build_genre_user_metrics(
     )
 
     genre_view_users_df = (
-        view_history_df.where(
+        events_df.where(
             F.col("user_id").isNotNull()
             & F.col("movie_id").isNotNull()
-            & (F.to_date(F.col("view_time")) == F.lit(calc_date).cast("date"))
+            & (F.col("is_view") == 1)
+            & (F.to_date(F.col("event_ts")) == F.lit(calc_date).cast("date"))
         )
         .select(
             F.col("user_id").cast("string").alias("user_id"),
@@ -109,10 +89,11 @@ def build_genre_user_metrics(
     )
 
     genre_watched_users_df = (
-        watched_movies_df.where(
+        events_df.where(
             F.col("user_id").isNotNull()
             & F.col("movie_id").isNotNull()
-            & (F.to_date(F.col("create_time")) == F.lit(calc_date).cast("date"))
+            & (F.col("is_watched") == 1)
+            & (F.to_date(F.col("event_ts")) == F.lit(calc_date).cast("date"))
         )
         .select(
             F.col("user_id").cast("string").alias("user_id"),
@@ -165,48 +146,38 @@ def run() -> None:
     args = parse_args()
     config = load_config(args.config)
     spark_config: dict[str, Any] = config["spark"]
-    ads_config: dict[str, Any] = config["ads_genre_preference"]
+    dm_config: dict[str, Any] = config["dm_genre_preference"]
 
     calc_date = args.calc_date
-    source_table = ads_config["source_table"]
-    target_table = ads_config["target_table"]
-    sink_path = ads_config["sink_path"]
+    source_table = dm_config["source_table"]
+    target_table = dm_config["target_table"]
+    sink_path = dm_config["sink_path"]
+    event_source_table = resolve_event_source_table(config, dm_config)
+    metric_period_type = str(dm_config.get("metric_period_type", "DAILY")).strip().upper()
 
-    top_n = args.top_n if args.top_n > 0 else int(ads_config.get("top_n", 100))
+    top_n = args.top_n if args.top_n > 0 else int(dm_config.get("top_n", 100))
     if top_n <= 0:
         raise ValueError(f"Invalid top_n: {top_n}")
 
-    spark = build_spark_session("movie-ads-genre-preference-1d", spark_config)
+    spark = build_spark_session("movie-dm-genre-preference-1d", spark_config)
     try:
-        spark.sql("CREATE DATABASE IF NOT EXISTS ads")
+        target_db = target_table.split(".", 1)[0] if "." in target_table else "default"
+        if target_db != "default":
+            spark.sql(f"CREATE DATABASE IF NOT EXISTS {target_db}")
 
         movie_metrics_df = spark.table(source_table).where(F.col("dt") == calc_date)
-        raw_source_tables = resolve_raw_source_tables(config, ads_config)
-        snapshot_date = resolve_common_dt_partition_date(
-            [
-                raw_source_tables["movie_snapshot"],
-                raw_source_tables["view_history"],
-                raw_source_tables["watched_movies"],
-            ],
-            requested_date="",
-            spark=spark,
-            fallback_max_date=calc_date,
-        )
-        movie_snapshot_df = load_partition(spark, raw_source_tables["movie_snapshot"], snapshot_date)
-        assert_non_empty_partition(movie_snapshot_df, raw_source_tables["movie_snapshot"], {"dt": snapshot_date}, spark=spark)
-        view_history_df = load_partition(spark, raw_source_tables["view_history"], snapshot_date)
-        watched_movies_df = load_partition(spark, raw_source_tables["watched_movies"], snapshot_date)
+        if "period_type" in movie_metrics_df.columns:
+            movie_metrics_df = movie_metrics_df.where(F.col("period_type") == metric_period_type)
+        events_df = spark.table(event_source_table).where(F.col("dt") == calc_date)
 
-        genre_user_metrics_df = build_genre_user_metrics(
-            movie_snapshot_df=movie_snapshot_df,
-            view_history_df=view_history_df,
-            watched_movies_df=watched_movies_df,
-            calc_date=calc_date,
-        )
+        genre_user_metrics_df = build_genre_user_metrics(events_df=events_df, calc_date=calc_date)
         result_df = build_genre_preference(movie_metrics_df, genre_user_metrics_df, top_n)
         write_partition(result_df, target_table, sink_path, calc_date, spark)
 
-        print(f"ADS genre preference build finished. source={source_table}, target={target_table}, dt={calc_date}, top_n={top_n}")
+        print(
+            "DM genre preference build finished. "
+            f"source={source_table}, event_source={event_source_table}, target={target_table}, dt={calc_date}, top_n={top_n}"
+        )
     finally:
         spark.stop()
 

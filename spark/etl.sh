@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Full ETL Pipeline Script - Run the complete data workflow from ODS to ADS
+# Compact ETL Pipeline Script - Run the 4-table warehouse workflow
 #
 
 set -euo pipefail
@@ -10,26 +10,20 @@ usage() {
 Usage:
   bash etl.sh [calc-date] [config-path]
   bash etl.sh [config-path]
-  bash etl.sh --calc-date YYYY-MM-DD --config conf/etl_config.json [--generate-source] [--skip-ods] [--skip-dwd] [--skip-dws] [--skip-ads]
+  bash etl.sh --calc-date YYYY-MM-DD --config conf/etl_config.json [--generate-source] [--skip-dwd] [--skip-ads]
 
-Full Pipeline Steps:
-  0. Source: Generate synthetic PostgreSQL source data (optional, run_generate_dwd_source_data.sh)
-  1. ODS: PostgreSQL sync (run_postgres_sync.sh)
-  2. DWD: Build event wide table (run_dwd_build.sh)
-  3. DWD: Build snapshots (run_dwd_snapshots.sh)
-  4. DWS: Build interactions (run_dws_postgres_interactions.sh)
-  5. ADS: Build hot movies (run_ads_hot_movies.sh)
-  6. ADS: Build ItemCF recommendations (run_ads_itemcf.sh)
-  7. ADS: Build user retention (run_ads_user_retention.sh)
-  8. ADS: Build genre preference (run_ads_genre_preference.sh)
-  9. ADS: Sync to PostgreSQL (run_ads_pg_sync.sh)
+Compact Pipeline Steps:
+  0. Source: Generate synthetic PostgreSQL source data (optional, run_dw_source_data.sh)
+  1. DW: Build user event fact table (run_dw_user_event_fact.sh)
+  2. DM: Build hot movies (run_dm_hot_movies.sh)
+  3. DM: Build user retention (run_dm_user_retention.sh)
+  4. DM: Build genre preference (run_dm_genre_preference.sh)
+  5. DM: Sync to PostgreSQL (run_dm_pg_sync.sh)
 
 Options:
-  --generate-source  Generate synthetic PostgreSQL source data before ODS sync
-  --skip-ods      Skip ODS layer jobs
-  --skip-dwd      Skip DWD layer jobs
-  --skip-dws      Skip DWS layer jobs
-  --skip-ads      Skip ADS layer jobs
+  --generate-source  Generate synthetic PostgreSQL source data before compact warehouse build
+  --skip-dwd      Skip DW fact table job
+  --skip-ads      Skip DM result jobs
   --skip-sync     Skip final PostgreSQL sync
   --help, -h      Show this help message
 
@@ -39,7 +33,7 @@ Examples:
   bash etl.sh conf/etl_config.dev.json           # Run with custom config
   bash etl.sh 2026-03-25 conf/etl_config.dev.json
   bash etl.sh --generate-source --calc-date 2026-03-25
-  bash etl.sh --skip-ods --calc-date 2026-03-25  # Skip ODS, run from DWD onwards
+  bash etl.sh --skip-dwd --calc-date 2026-03-25  # Skip fact table, run DM jobs
   bash etl.sh --skip-sync                        # Run everything except final PG sync
 EOF
 }
@@ -50,9 +44,9 @@ cd "${SCRIPT_DIR}"
 CALC_DATE="$(date +%F)"
 CONFIG_PATH="conf/etl_config.json"
 GENERATE_SOURCE=false
-SKIP_ODS=false
+SKIP_ODS=true
 SKIP_DWD=false
-SKIP_DWS=false
+SKIP_DWS=true
 SKIP_ADS=false
 SKIP_SYNC=false
 POSITIONAL_ARGS=()
@@ -185,100 +179,55 @@ if [[ "${GENERATE_SOURCE}" == "true" ]]; then
   echo "# LAYER 0: Source - Synthetic Data"
   echo "######################################"
 
-  run_job "Generate PostgreSQL Source Data" "run_generate_dwd_source_data.sh"
+  run_job "Generate PostgreSQL Source Data" "run_dw_source_data.sh"
 else
   echo ""
   echo "# Skipping synthetic source generation (enable with --generate-source)"
 fi
 
 # ============================================
-# LAYER 1: ODS (Operational Data Store)
-# ============================================
-if [[ "${SKIP_ODS}" == "false" ]]; then
-  echo ""
-  echo "######################################"
-  echo "# LAYER 1: ODS - Data Ingestion"
-  echo "######################################"
-
-  # PostgreSQL snapshot sync
-  run_job "ODS PostgreSQL Sync" "run_postgres_sync.sh"
-else
-  echo ""
-  echo "# Skipping ODS layer (--skip-ods)"
-fi
-
-# ============================================
-# LAYER 2: DWD (Data Warehouse Detail)
+# LAYER 1: DW (Compact Fact)
 # ============================================
 if [[ "${SKIP_DWD}" == "false" ]]; then
   echo ""
   echo "######################################"
-  echo "# LAYER 2: DWD - Detail Processing"
+  echo "# LAYER 1: DW - Compact Event Fact"
   echo "######################################"
 
-  # Build event wide table
-  run_job "DWD Event Wide Table" "run_dwd_build.sh"
-
-  # Build snapshots
-  run_job "DWD Snapshots" "run_dwd_snapshots.sh"
+  run_job "DW User Event Fact" "run_dw_user_event_fact.sh"
 else
   echo ""
-  echo "# Skipping DWD layer (--skip-dwd)"
+  echo "# Skipping DW fact layer (--skip-dwd)"
 fi
 
 # ============================================
-# LAYER 3: DWS (Data Warehouse Summary)
-# ============================================
-if [[ "${SKIP_DWS}" == "false" ]]; then
-  echo ""
-  echo "######################################"
-  echo "# LAYER 3: DWS - Aggregation Layer"
-  echo "######################################"
-
-  # Build interactions
-  run_job "DWS Interactions" "run_dws_postgres_interactions.sh"
-else
-  echo ""
-  echo "# Skipping DWS layer (--skip-dws)"
-fi
-
-# ============================================
-# LAYER 4: ADS (Application Data Service)
+# LAYER 2: DM (Data Mart)
 # ============================================
 if [[ "${SKIP_ADS}" == "false" ]]; then
   echo ""
   echo "######################################"
-  echo "# LAYER 4: ADS - Analytics & Reports"
+  echo "# LAYER 2: DM - Analytics & Reports"
   echo "######################################"
 
-  # Hot movies ranking
-  run_job "ADS Hot Movies" "run_ads_hot_movies.sh"
-
-  # ItemCF recommendations
-  run_job "ADS ItemCF Recommendations" "run_ads_itemcf.sh"
-
-  # User retention
-  run_job "ADS User Retention" "run_ads_user_retention.sh"
-
-  # Genre preference
-  run_job "ADS Genre Preference" "run_ads_genre_preference.sh"
+  run_job "DM Hot Movies" "run_dm_hot_movies.sh"
+  run_job "DM User Retention" "run_dm_user_retention.sh"
+  run_job "DM Genre Preference" "run_dm_genre_preference.sh"
 
 else
   echo ""
-  echo "# Skipping ADS layer (--skip-ads)"
+  echo "# Skipping DM layer (--skip-ads)"
 fi
 
 # ============================================
-# LAYER 5: Sync to PostgreSQL
+# LAYER 3: Sync to PostgreSQL
 # ============================================
 if [[ "${SKIP_SYNC}" == "false" && "${SKIP_ADS}" == "false" ]]; then
   echo ""
   echo "######################################"
-  echo "# LAYER 5: PostgreSQL Sync"
+  echo "# LAYER 3: PostgreSQL Sync"
   echo "######################################"
 
-  # Sync ADS data back to PostgreSQL
-  run_job "ADS PostgreSQL Sync" "run_ads_pg_sync.sh"
+  run_job "DM PostgreSQL Sync" "run_dm_pg_sync.sh"
 else
   echo ""
   echo "# Skipping PostgreSQL sync (--skip-sync or --skip-ads)"

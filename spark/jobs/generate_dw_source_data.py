@@ -978,7 +978,7 @@ def run() -> None:
     args = parse_args()
     config = load_config(args.config)
     generator_config = apply_arg_overrides(
-        merge_nested_dict(DEFAULT_GENERATOR_CONFIG, config.get("dwd_source_generator", {})),
+        merge_nested_dict(DEFAULT_GENERATOR_CONFIG, config.get("dw_source_generator", {})),
         args,
     )
 

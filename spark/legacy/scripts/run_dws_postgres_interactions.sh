@@ -5,9 +5,12 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  bash run_ads_itemcf.sh [calc-date] [config-path]
-  bash run_ads_itemcf.sh [config-path]
-  bash run_ads_itemcf.sh --calc-date YYYY-MM-DD --config conf/etl_config.json [--top-k 100]
+  bash run_dws_postgres_interactions.sh [calc-date] [config-path] [snapshot-date]
+  bash run_dws_postgres_interactions.sh [config-path]
+  bash run_dws_postgres_interactions.sh --calc-date YYYY-MM-DD --config conf/etl_config.json --snapshot-date YYYY-MM-DD
+
+Notes:
+  If snapshot-date is omitted, the job uses the latest common snapshot dt partition on or before calc-date.
 EOF
 }
 
@@ -16,7 +19,7 @@ cd "${SCRIPT_DIR}"
 
 CALC_DATE="$(date +%F)"
 CONFIG_PATH="conf/etl_config.json"
-TOP_K=""
+SNAPSHOT_DATE=""
 POSITIONAL_ARGS=()
 
 is_date() {
@@ -37,8 +40,8 @@ while [[ $# -gt 0 ]]; do
       CONFIG_PATH="${2:-}"
       shift 2
       ;;
-    --top-k)
-      TOP_K="${2:-}"
+    --snapshot-date)
+      SNAPSHOT_DATE="${2:-}"
       shift 2
       ;;
     *)
@@ -61,6 +64,11 @@ case "${#POSITIONAL_ARGS[@]}" in
   2)
     CALC_DATE="${POSITIONAL_ARGS[0]}"
     CONFIG_PATH="${POSITIONAL_ARGS[1]}"
+    ;;
+  3)
+    CALC_DATE="${POSITIONAL_ARGS[0]}"
+    CONFIG_PATH="${POSITIONAL_ARGS[1]}"
+    SNAPSHOT_DATE="${POSITIONAL_ARGS[2]}"
     ;;
   *)
     usage
@@ -96,13 +104,13 @@ CMD=(
   --conf spark.serializer=org.apache.spark.serializer.KryoSerializer
   --conf spark.driver.maxResultSize=256m
   --conf spark.network.timeout=600s
-  jobs/build_ads_itemcf_recommendations.py
+  ../jobs/build_dws_postgres_interactions_1d.py
   --config "${CONFIG_PATH}"
   --calc-date "${CALC_DATE}"
 )
 
-if [[ -n "${TOP_K}" ]]; then
-  CMD+=(--top-k "${TOP_K}")
+if [[ -n "${SNAPSHOT_DATE}" ]]; then
+  CMD+=(--snapshot-date "${SNAPSHOT_DATE}")
 fi
 
 printf 'Running command:\n%s\n' "${CMD[*]}"

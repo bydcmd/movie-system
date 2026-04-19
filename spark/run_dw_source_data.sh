@@ -5,19 +5,19 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  bash run_generate_dwd_source_data.sh [batch-date] [config-path] [generator-options]
-  bash run_generate_dwd_source_data.sh [config-path] [generator-options]
-  bash run_generate_dwd_source_data.sh --batch-date YYYY-MM-DD --config conf/etl_config.json [generator-options]
+  bash run_dw_source_data.sh [batch-date] [config-path] [generator-options]
+  bash run_dw_source_data.sh [config-path] [generator-options]
+  bash run_dw_source_data.sh --batch-date YYYY-MM-DD --config conf/etl_config.json [generator-options]
 
 Description:
   Generate synthetic source data and append it directly into PostgreSQL business tables.
 
 Examples:
-  bash run_generate_dwd_source_data.sh
-  bash run_generate_dwd_source_data.sh 2026-03-25
-  bash run_generate_dwd_source_data.sh conf/etl_config.dev.json
-  bash run_generate_dwd_source_data.sh 2026-03-25 conf/etl_config.json --user-target 200 --view-target 5000
-  bash run_generate_dwd_source_data.sh --batch-date 2026-03-25 --config conf/etl_config.json --write-batch-size 1000
+  bash run_dw_source_data.sh
+  bash run_dw_source_data.sh 2026-03-25
+  bash run_dw_source_data.sh conf/etl_config.dev.json
+  bash run_dw_source_data.sh 2026-03-25 conf/etl_config.json --user-target 200 --view-target 5000
+  bash run_dw_source_data.sh --batch-date 2026-03-25 --config conf/etl_config.json --write-batch-size 1000
 
 Arguments:
   batch-date   Logical data generation date, default: today (YYYY-MM-DD)
@@ -157,7 +157,7 @@ CMD=(
   --conf spark.driver.maxResultSize=256m
   --conf spark.network.timeout=600s
   --packages org.postgresql:postgresql:42.7.3
-  jobs/generate_dwd_user_event_source_data.py
+  jobs/generate_dw_source_data.py
   --config "${CONFIG_PATH}"
   --batch-date "${BATCH_DATE}"
 )

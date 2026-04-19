@@ -7,7 +7,7 @@ Movie System is a monorepo that combines a Spring Boot backend, a Vue 3 frontend
 - `backend/`: Spring Boot 3 + MyBatis API, SQL migrations, and backend tests.
 - `frontend/`: Vue 3 + TypeScript + Vite application.
 - `spark/`: Spark ETL jobs, wrapper scripts, and local runtime config examples.
-- `hive/`: Hive DDLs for ODS, DWD, DWS, and ADS layers.
+- `hive/`: Hive DDLs, with the active compact 4-table warehouse under `hive/compact/` and archived layered DDLs under `hive/legacy/`.
 - `dolphinscheduler/`: exported workflow definitions for scheduling.
 
 ## Quick Start

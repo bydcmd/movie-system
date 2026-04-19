@@ -5,12 +5,13 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  bash run_dws_postgres_interactions.sh [calc-date] [config-path] [snapshot-date]
-  bash run_dws_postgres_interactions.sh [config-path]
-  bash run_dws_postgres_interactions.sh --calc-date YYYY-MM-DD --config conf/etl_config.json --snapshot-date YYYY-MM-DD
+  bash run_dwd_snapshots.sh [calc-date] [config-path] [snapshot-date]
+  bash run_dwd_snapshots.sh [config-path]
+  bash run_dwd_snapshots.sh --calc-date YYYY-MM-DD --config conf/etl_config.json --snapshot-date YYYY-MM-DD --snapshots user,movie
 
 Notes:
-  If snapshot-date is omitted, the job uses the latest common snapshot dt partition on or before calc-date.
+  If snapshot-date is omitted, the job uses the latest available ODS dt partition on or before calc-date.
+  --snapshots: Comma-separated list of snapshots to build. Options: user, movie, all. Default: user,movie
 EOF
 }
 
@@ -20,6 +21,7 @@ cd "${SCRIPT_DIR}"
 CALC_DATE="$(date +%F)"
 CONFIG_PATH="conf/etl_config.json"
 SNAPSHOT_DATE=""
+SNAPSHOTS="user,movie"
 POSITIONAL_ARGS=()
 
 is_date() {
@@ -42,6 +44,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --snapshot-date)
       SNAPSHOT_DATE="${2:-}"
+      shift 2
+      ;;
+    --snapshots)
+      SNAPSHOTS="${2:-}"
       shift 2
       ;;
     *)
@@ -104,9 +110,10 @@ CMD=(
   --conf spark.serializer=org.apache.spark.serializer.KryoSerializer
   --conf spark.driver.maxResultSize=256m
   --conf spark.network.timeout=600s
-  jobs/build_dws_postgres_interactions_1d.py
+  ../jobs/build_dwd_snapshots_di.py
   --config "${CONFIG_PATH}"
   --calc-date "${CALC_DATE}"
+  --snapshots "${SNAPSHOTS}"
 )
 
 if [[ -n "${SNAPSHOT_DATE}" ]]; then

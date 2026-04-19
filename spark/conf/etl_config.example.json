@@ -1,6 +1,6 @@
 {
   "spark": {
-    "app_name_batch": "movie-postgres-to-hive-ods",
+    "app_name_batch": "movie-compact-warehouse",
     "master": "yarn",
     "warehouse_dir": "hdfs:///warehouse/tablespace/external/hive",
     "shuffle_partitions": 400
@@ -14,71 +14,54 @@
     "tables": [
       {
         "source_table": "public.movies",
-        "target_table": "ods.ods_pg_movies_full",
-        "sink_path": "hdfs:///warehouse/movie/ods/postgres/movies",
         "partition_column": "movie_id",
         "lower_bound": 1,
         "upper_bound": 2000000,
         "num_partitions": 24
       },
       {
-        "source_table": "public.users",
-        "target_table": "ods.ods_pg_users_full",
-        "sink_path": "hdfs:///warehouse/movie/ods/postgres/users"
+        "source_table": "public.users"
       },
       {
-        "source_table": "public.ratings",
-        "target_table": "ods.ods_pg_ratings_full",
-        "sink_path": "hdfs:///warehouse/movie/ods/postgres/ratings"
+        "source_table": "public.ratings"
       },
       {
-        "source_table": "public.comments",
-        "target_table": "ods.ods_pg_comments_full",
-        "sink_path": "hdfs:///warehouse/movie/ods/postgres/comments"
+        "source_table": "public.comments"
       },
       {
-        "source_table": "public.comment_likes",
-        "target_table": "ods.ods_pg_comment_likes_full",
-        "sink_path": "hdfs:///warehouse/movie/ods/postgres/comment_likes"
+        "source_table": "public.comment_likes"
       },
       {
-        "source_table": "public.favorite_folders",
-        "target_table": "ods.ods_pg_favorite_folders_full",
-        "sink_path": "hdfs:///warehouse/movie/ods/postgres/favorite_folders"
+        "source_table": "public.favorite_folders"
       },
       {
-        "source_table": "public.favorites",
-        "target_table": "ods.ods_pg_favorites_full",
-        "sink_path": "hdfs:///warehouse/movie/ods/postgres/favorites"
+        "source_table": "public.favorites"
       },
       {
-        "source_table": "public.view_history",
-        "target_table": "ods.ods_pg_view_history_full",
-        "sink_path": "hdfs:///warehouse/movie/ods/postgres/view_history"
+        "source_table": "public.view_history"
       },
       {
-        "source_table": "public.watched_movies",
-        "target_table": "ods.ods_pg_watched_movies_full",
-        "sink_path": "hdfs:///warehouse/movie/ods/postgres/watched_movies"
+        "source_table": "public.watched_movies"
       }
     ]
   },
-  "dwd": {
+  "dw_event_fact": {
+    "source_mode": "jdbc",
     "source_tables": {
-      "users": "ods.ods_pg_users_full",
-      "movies": "ods.ods_pg_movies_full",
-      "comments": "ods.ods_pg_comments_full",
-      "favorite_folders": "ods.ods_pg_favorite_folders_full",
-      "ratings": "ods.ods_pg_ratings_full",
-      "comment_likes": "ods.ods_pg_comment_likes_full",
-      "favorites": "ods.ods_pg_favorites_full",
-      "view_history": "ods.ods_pg_view_history_full",
-      "watched_movies": "ods.ods_pg_watched_movies_full"
+      "users": "public.users",
+      "movies": "public.movies",
+      "comments": "public.comments",
+      "favorite_folders": "public.favorite_folders",
+      "ratings": "public.ratings",
+      "comment_likes": "public.comment_likes",
+      "favorites": "public.favorites",
+      "view_history": "public.view_history",
+      "watched_movies": "public.watched_movies"
     },
-    "target_table": "dwd.dwd_user_event_wide_di",
-    "sink_path": "hdfs:///warehouse/movie/dwd/user_event_wide_di"
+    "target_table": "dw.dw_user_event_fact_di",
+    "sink_path": "hdfs:///warehouse/movie/dw/user_event_fact_di"
   },
-  "dwd_source_generator": {
+  "dw_source_generator": {
     "movie_limit": 500,
     "user_target": 300,
     "new_user_target": 30,
@@ -94,70 +77,14 @@
     "seed": 20260412,
     "jdbc_query_limit_cap": 20000
   },
-  "dwd_user_snapshot": {
-    "source_table": "ods.ods_pg_users_full",
-    "target_table": "dwd.dwd_user_snapshot_di",
-    "sink_path": "hdfs:///warehouse/movie/dwd/user_snapshot_di"
-  },
-  "dwd_movie_snapshot": {
-    "source_table": "ods.ods_pg_movies_full",
-    "target_table": "dwd.dwd_movie_snapshot_di",
-    "sink_path": "hdfs:///warehouse/movie/dwd/movie_snapshot_di"
-  },
-  "dws_postgres_interactions": {
-    "source_tables": {
-      "movie_snapshot": "dwd.dwd_movie_snapshot_di",
-      "ratings": "ods.ods_pg_ratings_full",
-      "comments": "ods.ods_pg_comments_full",
-      "comment_likes": "ods.ods_pg_comment_likes_full",
-      "favorites": "ods.ods_pg_favorites_full",
-      "view_history": "ods.ods_pg_view_history_full",
-      "watched_movies": "ods.ods_pg_watched_movies_full"
-    },
-    "target_tables": {
-      "user_item_preference_1d": "dws.dws_user_item_preference_1d",
-      "movie_engagement_1d": "dws.dws_movie_engagement_1d",
-      "movie_engagement_daily_1d": "dws.dws_movie_engagement_daily_1d"
-    },
-    "sink_paths": {
-      "user_item_preference_1d": "hdfs:///warehouse/movie/dws/user_item_preference_1d",
-      "movie_engagement_1d": "hdfs:///warehouse/movie/dws/movie_engagement_1d",
-      "movie_engagement_daily_1d": "hdfs:///warehouse/movie/dws/movie_engagement_daily_1d"
-    },
-    "preference_score_weights": {
-      "view": 1.0,
-      "favorite_add": 2.0,
-      "comment": 2.0,
-      "rating": 3.0,
-      "watched": 3.0,
-      "rating_value": 2.0
-    },
-    "hot_score_weights": {
-      "view_pv": 1.0,
-      "view_uv": 1.5,
-      "rating_cnt": 2.0,
-      "comment_cnt": 2.0,
-      "comment_like_cnt": 0.8,
-      "favorite_add_cnt": 1.2,
-      "favorite_remove_cnt": -0.8,
-      "watched_cnt": 2.5,
-      "active_user_cnt": 1.0
-    }
-  },
-  "ads": {
-    "source_table": "dws.dws_movie_engagement_daily_1d",
-    "source_type": "movie_metric_daily",
-    "target_table": "ads.ads_hot_movies",
-    "sink_path": "hdfs:///warehouse/movie/ads/hot_movies",
-    "raw_source_tables": {
-      "movie_snapshot": "dwd.dwd_movie_snapshot_di",
-      "ratings": "ods.ods_pg_ratings_full",
-      "comments": "ods.ods_pg_comments_full",
-      "comment_likes": "ods.ods_pg_comment_likes_full",
-      "favorites": "ods.ods_pg_favorites_full",
-      "view_history": "ods.ods_pg_view_history_full",
-      "watched_movies": "ods.ods_pg_watched_movies_full"
-    },
+  "dm_hot_movies": {
+    "source_table": "dw.dw_user_event_fact_di",
+    "source_type": "event_fact",
+    "event_source_table": "dw.dw_user_event_fact_di",
+    "total_source_table": "dw.dw_user_event_fact_di",
+    "total_source_type": "event_fact",
+    "target_table": "dm.dm_hot_movies",
+    "sink_path": "hdfs:///warehouse/movie/dm/hot_movies",
     "period_days": {
       "DAILY": 1,
       "WEEKLY": 7,
@@ -177,8 +104,8 @@
       "active_user_cnt": 1.0
     }
   },
-  "ads_hot_movies_postgres_sync": {
-    "source_table": "ads.ads_hot_movies",
+  "dm_hot_movies_postgres_sync": {
+    "source_table": "dm.dm_hot_movies",
     "target_table": "public.stats_hot_movies",
     "supported_period_types": [
       "DAILY",
@@ -188,58 +115,31 @@
     ],
     "batch_size": 1000
   },
-  "ads_user_retention": {
-    "register_source_table": "dwd.dwd_user_event_wide_di",
-    "target_table": "ads.ads_user_retention",
-    "sink_path": "hdfs:///warehouse/movie/ads/user_retention",
-    "retention_days": [1, 7, 30]
+  "dm_user_retention": {
+    "register_source_table": "dw.dw_user_event_fact_di",
+    "target_table": "dm.dm_user_retention",
+    "sink_path": "hdfs:///warehouse/movie/dm/user_retention",
+    "retention_days": [
+      1,
+      7,
+      30
+    ]
   },
-  "ads_genre_preference": {
-    "source_table": "dws.dws_movie_engagement_daily_1d",
-    "target_table": "ads.ads_genre_preference_1d",
-    "sink_path": "hdfs:///warehouse/movie/ads/genre_preference_1d",
-    "raw_source_tables": {
-      "movie_snapshot": "dwd.dwd_movie_snapshot_di",
-      "view_history": "ods.ods_pg_view_history_full",
-      "watched_movies": "ods.ods_pg_watched_movies_full"
-    },
+  "dm_genre_preference": {
+    "source_table": "dm.dm_hot_movies",
+    "event_source_table": "dw.dw_user_event_fact_di",
+    "metric_period_type": "DAILY",
+    "target_table": "dm.dm_genre_preference_1d",
+    "sink_path": "hdfs:///warehouse/movie/dm/genre_preference_1d",
     "top_n": 100
   },
-  "ads_itemcf": {
-    "source_table": "dws.dws_user_item_preference_1d",
-    "source_type": "user_item_preference",
-    "target_table": "ads.ads_itemcf_similar_movies",
-    "sink_path": "hdfs:///warehouse/movie/ads/itemcf_similar_movies",
-    "lookback_days": 90,
-    "min_user_item_score": 0.1,
-    "min_co_users": 2,
-    "shrinkage": 10.0,
-    "top_k_similar": 100,
-    "event_score_weights": {
-      "view": 1.0,
-      "favorite_add": 2.0,
-      "favorite_remove": -1.0,
-      "comment": 2.0,
-      "rating": 3.0,
-      "watched": 3.0,
-      "rating_value": 2.0
-    }
-  },
-  "ads_itemcf_similar_movies_postgres_sync": {
-    "source_table": "ads.ads_itemcf_similar_movies",
-    "target_table": "public.stats_similar_movies",
-    "supported_similarity_types": [
-      2
-    ],
-    "batch_size": 1000
-  },
-  "ads_user_retention_postgres_sync": {
-    "source_table": "ads.ads_user_retention",
+  "dm_user_retention_postgres_sync": {
+    "source_table": "dm.dm_user_retention",
     "target_table": "public.stats_user_retention",
     "batch_size": 1000
   },
-  "ads_genre_preference_postgres_sync": {
-    "source_table": "ads.ads_genre_preference_1d",
+  "dm_genre_preference_postgres_sync": {
+    "source_table": "dm.dm_genre_preference_1d",
     "target_table": "public.stats_genre_preference_1d",
     "batch_size": 1000
   }

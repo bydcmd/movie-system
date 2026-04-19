@@ -17,10 +17,11 @@ from utils.spark_factory import build_spark_session
 
 DEFAULT_PERIOD_DAYS: dict[str, int] = {"DAILY": 1, "WEEKLY": 7, "MONTHLY": 30}
 TOTAL_PERIOD_TYPE = "TOTAL"
-DEFAULT_TOTAL_SOURCE_TABLE = "dws.dws_movie_engagement_1d"
+DEFAULT_TOTAL_SOURCE_TABLE = "dw.dw_user_event_fact_di"
 SNAPSHOT_SOURCE_TYPE = "movie_metric_snapshot"
-DEFAULT_BOUNDED_EVENT_SOURCE_TABLE = "dwd.dwd_user_event_wide_di"
-DEFAULT_MOVIE_SNAPSHOT_SOURCE_TABLE = "dwd.dwd_movie_snapshot_di"
+EVENT_FACT_SOURCE_TYPE = "event_fact"
+DEFAULT_BOUNDED_EVENT_SOURCE_TABLE = "dw.dw_user_event_fact_di"
+DEFAULT_MOVIE_SNAPSHOT_SOURCE_TABLE = ""
 
 
 def ensure_non_empty_partition(
@@ -38,7 +39,7 @@ def ensure_non_empty_partition(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Build ADS hot movie rankings from DWD bounded facts and DWS total aggregates.")
+    parser = argparse.ArgumentParser(description="Build DM hot movie rankings from compact event facts.")
     parser.add_argument("--config", required=True, help="Path of ETL json config.")
     parser.add_argument(
         "--calc-date",
@@ -94,15 +95,14 @@ def filter_rankable_movies(df: DataFrame) -> DataFrame:
     )
 
 
-def resolve_bounded_source_tables(config: dict[str, Any], ads_config: dict[str, Any]) -> tuple[str, str]:
+def resolve_bounded_source_tables(config: dict[str, Any], dm_config: dict[str, Any]) -> tuple[str, str]:
     event_source_table = str(
-        ads_config.get("event_source_table")
-        or config.get("dwd", {}).get("target_table")
+        dm_config.get("event_source_table")
+        or config.get("dw_event_fact", {}).get("target_table")
         or DEFAULT_BOUNDED_EVENT_SOURCE_TABLE
     ).strip()
     movie_snapshot_table = str(
-        ads_config.get("movie_snapshot_table")
-        or config.get("dwd_movie_snapshot", {}).get("target_table")
+        dm_config.get("movie_snapshot_table")
         or DEFAULT_MOVIE_SNAPSHOT_SOURCE_TABLE
     ).strip()
     return event_source_table, movie_snapshot_table
@@ -124,47 +124,69 @@ def filter_events_by_date_range(
     )
 
 
-def load_dwd_hot_sources(
+def build_movie_metadata_from_events(events_df: DataFrame) -> DataFrame:
+    return (
+        events_df.where(F.col("movie_id").isNotNull())
+        .groupBy("movie_id")
+        .agg(
+            F.max("movie_name").alias("movie_name"),
+            F.max("movie_year").cast("int").alias("movie_year"),
+            F.max("movie_genres").alias("movie_genres"),
+            F.max("movie_score").cast("decimal(3,1)").alias("movie_score"),
+            F.max("movie_douban_score").cast("decimal(3,1)").alias("movie_douban_score"),
+        )
+    )
+
+
+def load_dw_hot_sources(
     spark,
     event_source_table: str,
     movie_snapshot_table: str,
     start_date: str,
     calc_date: str,
 ) -> tuple[str, DataFrame, DataFrame]:
-    snapshot_date = resolve_common_dt_partition_date(
-        [movie_snapshot_table],
-        requested_date="",
-        spark=spark,
-        fallback_max_date=calc_date,
-    )
-
-    movie_snapshot_df = load_partition(spark, movie_snapshot_table, snapshot_date)
-    ensure_non_empty_partition(movie_snapshot_df, movie_snapshot_table, {"dt": snapshot_date}, spark=spark)
-
     events_df = (
         spark.table(event_source_table)
         .where((F.col("dt") >= F.lit(start_date)) & (F.col("dt") <= F.lit(calc_date)))
         .where(F.col("movie_id").isNotNull())
         .withColumn("dt_date", F.to_date(F.col("dt")))
     )
+    if movie_snapshot_table:
+        snapshot_date = resolve_common_dt_partition_date(
+            [movie_snapshot_table],
+            requested_date="",
+            spark=spark,
+            fallback_max_date=calc_date,
+        )
+        movie_snapshot_df = load_partition(spark, movie_snapshot_table, snapshot_date)
+        ensure_non_empty_partition(movie_snapshot_df, movie_snapshot_table, {"dt": snapshot_date}, spark=spark)
+    else:
+        snapshot_date = calc_date
+        movie_snapshot_df = build_movie_metadata_from_events(events_df)
     return snapshot_date, movie_snapshot_df, events_df
 
 
-def build_dwd_period_hot_ranking(
+def build_dw_period_hot_ranking(
     events_df: DataFrame,
     movie_snapshot_df: DataFrame,
     calc_date: str,
     period_type: str,
-    period_days: int,
+    period_days: int | None,
     top_n: int,
     weights: dict[str, Any],
 ) -> DataFrame:
-    calc_date_obj = dt.date.fromisoformat(calc_date)
-    start_date = (calc_date_obj - dt.timedelta(days=period_days - 1)).isoformat()
-
-    period_events_df = filter_events_by_date_range(events_df, "event_ts", start_date, calc_date).where(
-        (F.col("dt_date") >= F.lit(start_date).cast("date")) & (F.col("dt_date") <= F.lit(calc_date).cast("date"))
-    )
+    if period_days is None:
+        start_date = None
+        period_events_df = events_df.where(
+            (F.to_date(F.col("event_ts")) <= F.lit(calc_date).cast("date"))
+            & (F.col("dt_date") <= F.lit(calc_date).cast("date"))
+        )
+    else:
+        calc_date_obj = dt.date.fromisoformat(calc_date)
+        start_date = (calc_date_obj - dt.timedelta(days=period_days - 1)).isoformat()
+        period_events_df = filter_events_by_date_range(events_df, "event_ts", start_date, calc_date).where(
+            (F.col("dt_date") >= F.lit(start_date).cast("date")) & (F.col("dt_date") <= F.lit(calc_date).cast("date"))
+        )
 
     base_interaction_events_df = period_events_df.where(
         F.col("user_id").isNotNull()
@@ -493,9 +515,21 @@ def build_total_period_frame(
     )
     if total_source_df.limit(1).count() == 0:
         raise ValueError(
-            "No source data found for ADS total hot movie build. "
+            "No source data found for DM total hot movie build. "
             f"source={total_source_table}, source_type={normalized_source_type}, dt_max={calc_date}"
         )
+    if normalized_source_type == EVENT_FACT_SOURCE_TYPE:
+        movie_snapshot_df = build_movie_metadata_from_events(total_source_df)
+        return build_dw_period_hot_ranking(
+            events_df=total_source_df,
+            movie_snapshot_df=movie_snapshot_df,
+            calc_date=calc_date,
+            period_type=TOTAL_PERIOD_TYPE,
+            period_days=None,
+            top_n=top_n,
+            weights=weights,
+        )
+
     return build_period_hot_ranking(
         source_df=total_source_df,
         calc_date=calc_date,
@@ -510,36 +544,45 @@ def run() -> None:
     args = parse_args()
     config = load_config(args.config)
     spark_config: dict[str, Any] = config["spark"]
-    ads_config: dict[str, Any] = config["ads"]
+    dm_config: dict[str, Any] = config["dm_hot_movies"]
 
     calc_date = args.calc_date
-    source_table = ads_config["source_table"]
-    target_table = ads_config["target_table"]
-    sink_path = ads_config["sink_path"]
-    source_type = str(ads_config.get("source_type", "movie_metric_daily")).strip().lower()
+    source_table = dm_config["source_table"]
+    target_table = dm_config["target_table"]
+    sink_path = dm_config["sink_path"]
+    source_type = str(dm_config.get("source_type", EVENT_FACT_SOURCE_TYPE)).strip().lower()
     total_source_table = str(
-        ads_config.get(
+        dm_config.get(
             "total_source_table",
-            DEFAULT_TOTAL_SOURCE_TABLE if source_type == "movie_metric_daily" else source_table,
+            DEFAULT_TOTAL_SOURCE_TABLE if source_type in {"movie_metric_daily", EVENT_FACT_SOURCE_TYPE} else source_table,
         )
     ).strip()
+    default_total_source_type = (
+        EVENT_FACT_SOURCE_TYPE
+        if source_type == EVENT_FACT_SOURCE_TYPE
+        else SNAPSHOT_SOURCE_TYPE
+        if total_source_table != source_table
+        else source_type
+    )
     total_source_type = str(
-        ads_config.get(
+        dm_config.get(
             "total_source_type",
-            SNAPSHOT_SOURCE_TYPE if total_source_table != source_table else source_type,
+            default_total_source_type,
         )
     ).strip().lower()
 
-    top_n = args.top_n if args.top_n > 0 else int(ads_config.get("top_n", 100))
+    top_n = args.top_n if args.top_n > 0 else int(dm_config.get("top_n", 100))
     if top_n <= 0:
         raise ValueError(f"Invalid top_n: {top_n}")
 
-    period_days = resolve_period_days(ads_config.get("period_days"))
-    weights = ads_config.get("hot_score_weights", {})
+    period_days = resolve_period_days(dm_config.get("period_days"))
+    weights = dm_config.get("hot_score_weights", {})
 
-    spark = build_spark_session("movie-ads-hot-movies", spark_config)
+    spark = build_spark_session("movie-dm-hot-movies", spark_config)
     try:
-        spark.sql("CREATE DATABASE IF NOT EXISTS ads")
+        target_db = target_table.split(".", 1)[0] if "." in target_table else "default"
+        if target_db != "default":
+            spark.sql(f"CREATE DATABASE IF NOT EXISTS {target_db}")
 
         if source_type == SNAPSHOT_SOURCE_TYPE:
             source_df = spark.table(source_table).where(F.col("dt") == calc_date)
@@ -559,10 +602,10 @@ def run() -> None:
                 if period_type != TOTAL_PERIOD_TYPE and days is not None
             }
             if bounded_period_days:
-                event_source_table, movie_snapshot_table = resolve_bounded_source_tables(config, ads_config)
+                event_source_table, movie_snapshot_table = resolve_bounded_source_tables(config, dm_config)
                 max_bounded_days = max(int(days) for days in bounded_period_days.values())
                 bounded_start_date = (dt.date.fromisoformat(calc_date) - dt.timedelta(days=max_bounded_days - 1)).isoformat()
-                _, movie_snapshot_df, events_df = load_dwd_hot_sources(
+                _, movie_snapshot_df, events_df = load_dw_hot_sources(
                     spark=spark,
                     event_source_table=event_source_table,
                     movie_snapshot_table=movie_snapshot_table,
@@ -573,7 +616,7 @@ def run() -> None:
                 try:
                     for period_type, days in bounded_period_days.items():
                         period_frames.append(
-                            build_dwd_period_hot_ranking(
+                            build_dw_period_hot_ranking(
                                 events_df=events_df,
                                 movie_snapshot_df=movie_snapshot_df,
                                 calc_date=calc_date,
@@ -606,13 +649,13 @@ def run() -> None:
         try:
             if result_df.limit(1).count() == 0:
                 raise ValueError(
-                    "ADS hot movie build produced 0 rows; refusing to register an empty target partition. "
+                    "DM hot movie build produced 0 rows; refusing to register an empty target partition. "
                     f"source={source_table}, source_type={source_type}, target={target_table}, dt={calc_date}"
                 )
 
             write_partition(result_df, target_table, sink_path, calc_date, spark)
             print(
-                "ADS hot ranking build finished. "
+                "DM hot ranking build finished. "
                 f"source={source_table}, source_type={source_type}, target={target_table}, dt={calc_date}, top_n={top_n}"
             )
         finally:

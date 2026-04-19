@@ -5,30 +5,32 @@ import copy
 import datetime as dt
 from typing import Any
 
-from pyspark.sql import DataFrame
+from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 
 import _bootstrap  # noqa: F401
+from postgres_jdbc import build_jdbc_reader
 
 from utils.config_loader import load_config
 from utils.hive_utils import resolve_common_dt_partition_date, write_partition
 from utils.spark_factory import build_spark_session
 
 
-DEFAULT_DWD_CONFIG: dict[str, Any] = {
+DEFAULT_DW_EVENT_FACT_CONFIG: dict[str, Any] = {
+    "source_mode": "jdbc",
     "source_tables": {
-        "users": "ods.ods_pg_users_full",
-        "movies": "ods.ods_pg_movies_full",
-        "comments": "ods.ods_pg_comments_full",
-        "favorite_folders": "ods.ods_pg_favorite_folders_full",
-        "ratings": "ods.ods_pg_ratings_full",
-        "comment_likes": "ods.ods_pg_comment_likes_full",
-        "favorites": "ods.ods_pg_favorites_full",
-        "view_history": "ods.ods_pg_view_history_full",
-        "watched_movies": "ods.ods_pg_watched_movies_full",
+        "users": "public.users",
+        "movies": "public.movies",
+        "comments": "public.comments",
+        "favorite_folders": "public.favorite_folders",
+        "ratings": "public.ratings",
+        "comment_likes": "public.comment_likes",
+        "favorites": "public.favorites",
+        "view_history": "public.view_history",
+        "watched_movies": "public.watched_movies",
     },
-    "target_table": "dwd.dwd_user_event_wide_di",
-    "sink_path": "hdfs:///warehouse/movie/dwd/user_event_wide_di",
+    "target_table": "dw.dw_user_event_fact_di",
+    "sink_path": "hdfs:///warehouse/movie/dw/user_event_fact_di",
 }
 
 EVENT_SCHEMA: dict[str, str] = {
@@ -67,7 +69,7 @@ EVENT_SCHEMA: dict[str, str] = {
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Build dwd_user_event_wide_di from PostgreSQL ODS snapshots in T+1 batch mode."
+        description="Build compact dw_user_event_fact_di from PostgreSQL source tables in T+1 batch mode."
     )
     parser.add_argument("--config", required=True, help="Path of ETL json config.")
     parser.add_argument(
@@ -78,8 +80,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--snapshot-date",
         default="",
-        help="Snapshot partition date for PostgreSQL ODS full tables. "
-        "If omitted, use the latest common dt partition not newer than calc-date.",
+        help="Snapshot partition date for legacy Hive source mode. "
+        "Ignored when dwd.source_mode=jdbc.",
     )
     return parser.parse_args()
 
@@ -96,6 +98,21 @@ def merge_nested_dict(defaults: dict[str, Any], overrides: dict[str, Any]) -> di
 
 def load_partition(spark, table_name: str, partition_date: str) -> DataFrame:
     return spark.table(table_name).where(F.col("dt") == partition_date)
+
+
+def resolve_jdbc_table_config(pg_config: dict[str, Any], source_table: str) -> dict[str, Any]:
+    for table_config in pg_config.get("tables", []):
+        if table_config.get("source_table") == source_table:
+            resolved_config = copy.deepcopy(table_config)
+            resolved_config.pop("target_table", None)
+            resolved_config.pop("sink_path", None)
+            return resolved_config
+    return {"source_table": source_table}
+
+
+def load_jdbc_table(spark: SparkSession, pg_config: dict[str, Any], source_table: str) -> DataFrame:
+    table_config = resolve_jdbc_table_config(pg_config, source_table)
+    return build_jdbc_reader(spark, pg_config, table_config).load()
 
 
 def filter_by_calc_date(df: DataFrame, ts_col: str, calc_date: str) -> DataFrame:
@@ -590,42 +607,61 @@ def run() -> None:
     args = parse_args()
     config = load_config(args.config)
     spark_config: dict[str, Any] = config["spark"]
-    dwd_config = merge_nested_dict(DEFAULT_DWD_CONFIG, config.get("dwd", {}))
+    pg_config: dict[str, Any] = config["postgres"]
+    dw_config = merge_nested_dict(DEFAULT_DW_EVENT_FACT_CONFIG, config.get("dw_event_fact", {}))
 
     calc_date = args.calc_date
     requested_snapshot_date = args.snapshot_date.strip()
 
     spark = build_spark_session("movie-dwd-user-event-wide-di", spark_config)
     try:
-        spark.sql("CREATE DATABASE IF NOT EXISTS dwd")
+        source_tables = dw_config["source_tables"]
+        source_mode = str(dw_config.get("source_mode", "jdbc")).strip().lower()
+        target_table = dw_config["target_table"]
+        target_db = target_table.split(".", 1)[0] if "." in target_table else "default"
+        if target_db != "default":
+            spark.sql(f"CREATE DATABASE IF NOT EXISTS {target_db}")
 
-        source_tables = dwd_config["source_tables"]
-        snapshot_date = resolve_common_dt_partition_date(
-            [
-                source_tables["users"],
-                source_tables["movies"],
-                source_tables["comments"],
-                source_tables["favorite_folders"],
-                source_tables["ratings"],
-                source_tables["comment_likes"],
-                source_tables["favorites"],
-                source_tables["view_history"],
-                source_tables["watched_movies"],
-            ],
-            requested_snapshot_date,
-            spark,
-            fallback_max_date=calc_date,
-        )
+        if source_mode == "jdbc":
+            snapshot_date = requested_snapshot_date or calc_date
+            users_df = load_jdbc_table(spark, pg_config, source_tables["users"])
+            movies_df = load_jdbc_table(spark, pg_config, source_tables["movies"])
+            comments_df = load_jdbc_table(spark, pg_config, source_tables["comments"])
+            folders_df = load_jdbc_table(spark, pg_config, source_tables["favorite_folders"])
+            ratings_df = load_jdbc_table(spark, pg_config, source_tables["ratings"])
+            comment_likes_df = load_jdbc_table(spark, pg_config, source_tables["comment_likes"])
+            favorites_df = load_jdbc_table(spark, pg_config, source_tables["favorites"])
+            view_history_df = load_jdbc_table(spark, pg_config, source_tables["view_history"])
+            watched_movies_df = load_jdbc_table(spark, pg_config, source_tables["watched_movies"])
+        elif source_mode in {"hive", "hive_partition", "partition"}:
+            snapshot_date = resolve_common_dt_partition_date(
+                [
+                    source_tables["users"],
+                    source_tables["movies"],
+                    source_tables["comments"],
+                    source_tables["favorite_folders"],
+                    source_tables["ratings"],
+                    source_tables["comment_likes"],
+                    source_tables["favorites"],
+                    source_tables["view_history"],
+                    source_tables["watched_movies"],
+                ],
+                requested_snapshot_date,
+                spark,
+                fallback_max_date=calc_date,
+            )
 
-        users_df = load_partition(spark, source_tables["users"], snapshot_date)
-        movies_df = load_partition(spark, source_tables["movies"], snapshot_date)
-        comments_df = load_partition(spark, source_tables["comments"], snapshot_date)
-        folders_df = load_partition(spark, source_tables["favorite_folders"], snapshot_date)
-        ratings_df = load_partition(spark, source_tables["ratings"], snapshot_date)
-        comment_likes_df = load_partition(spark, source_tables["comment_likes"], snapshot_date)
-        favorites_df = load_partition(spark, source_tables["favorites"], snapshot_date)
-        view_history_df = load_partition(spark, source_tables["view_history"], snapshot_date)
-        watched_movies_df = load_partition(spark, source_tables["watched_movies"], snapshot_date)
+            users_df = load_partition(spark, source_tables["users"], snapshot_date)
+            movies_df = load_partition(spark, source_tables["movies"], snapshot_date)
+            comments_df = load_partition(spark, source_tables["comments"], snapshot_date)
+            folders_df = load_partition(spark, source_tables["favorite_folders"], snapshot_date)
+            ratings_df = load_partition(spark, source_tables["ratings"], snapshot_date)
+            comment_likes_df = load_partition(spark, source_tables["comment_likes"], snapshot_date)
+            favorites_df = load_partition(spark, source_tables["favorites"], snapshot_date)
+            view_history_df = load_partition(spark, source_tables["view_history"], snapshot_date)
+            watched_movies_df = load_partition(spark, source_tables["watched_movies"], snapshot_date)
+        else:
+            raise ValueError(f"Unsupported dwd.source_mode: {source_mode}")
 
         events_df = build_postgres_events(
             calc_date=calc_date,
@@ -641,13 +677,12 @@ def run() -> None:
         )
         wide_df = build_wide_table(events_df, users_df, movies_df, comments_df, folders_df, ratings_df)
 
-        target_table = dwd_config["target_table"]
-        sink_path = dwd_config["sink_path"]
+        sink_path = dw_config["sink_path"]
         write_partition(wide_df, target_table, sink_path, calc_date, spark)
 
         print(
-            "DWD build finished in PostgreSQL T+1 batch mode. "
-            f"table={target_table}, dt={calc_date}, source_snapshot_dt={snapshot_date}"
+            "Compact fact build finished in PostgreSQL T+1 batch mode. "
+            f"source_mode={source_mode}, table={target_table}, dt={calc_date}, source_snapshot_dt={snapshot_date}"
         )
     finally:
         spark.stop()

@@ -5,17 +5,17 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  bash validate_etl_results.sh [calc-date] [snapshot-date]
-  bash validate_etl_results.sh --calc-date YYYY-MM-DD [--snapshot-date YYYY-MM-DD] [--skip-pg]
+  bash legacy/scripts/validate_etl_results.sh [calc-date] [snapshot-date]
+  bash legacy/scripts/validate_etl_results.sh --calc-date YYYY-MM-DD [--snapshot-date YYYY-MM-DD] [--skip-pg]
 
 Description:
   Validate core Hive partitions and optional PostgreSQL sync results for the movie ETL pipeline.
 
 Examples:
-  bash validate_etl_results.sh 2026-04-19
-  bash validate_etl_results.sh 2026-04-19 2026-04-19
-  bash validate_etl_results.sh --calc-date 2026-04-19 --snapshot-date 2026-04-19
-  bash validate_etl_results.sh --calc-date 2026-04-19 --skip-pg
+  bash legacy/scripts/validate_etl_results.sh 2026-04-19
+  bash legacy/scripts/validate_etl_results.sh 2026-04-19 2026-04-19
+  bash legacy/scripts/validate_etl_results.sh --calc-date 2026-04-19 --snapshot-date 2026-04-19
+  bash legacy/scripts/validate_etl_results.sh --calc-date 2026-04-19 --skip-pg
 
 Options:
   --calc-date      Business date used by DWD / DWS / ADS jobs
