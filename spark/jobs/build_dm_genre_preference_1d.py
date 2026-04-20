@@ -14,8 +14,6 @@ from utils.config_loader import load_config
 from utils.hive_utils import write_partition
 from utils.spark_factory import build_spark_session
 
-DEFAULT_EVENT_SOURCE_TABLE = "dw.dw_user_event_fact_di"
-
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build DM daily genre preference ranking from compact movie metrics.")
@@ -27,14 +25,6 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--top-n", type=int, default=0, help="Override top N genres. 0 means use config.")
     return parser.parse_args()
-
-
-def resolve_event_source_table(config: dict[str, Any], dm_config: dict[str, Any]) -> str:
-    return str(
-        dm_config.get("event_source_table")
-        or config.get("dw_event_fact", {}).get("target_table")
-        or DEFAULT_EVENT_SOURCE_TABLE
-    ).strip()
 
 
 def build_genre_movie_metrics(movie_metrics_df: DataFrame) -> DataFrame:
@@ -60,71 +50,11 @@ def build_genre_movie_metrics(movie_metrics_df: DataFrame) -> DataFrame:
     )
 
 
-def build_genre_user_metrics(events_df: DataFrame, calc_date: str) -> DataFrame:
-    genre_mapping_df = (
-        events_df.where(F.col("movie_id").isNotNull())
-        .select(
-            F.col("movie_id").cast("bigint").alias("movie_id"),
-            F.explode(F.split(F.coalesce(F.col("movie_genres"), F.lit("")), "[,/]")).alias("genre"),
-        )
-        .withColumn("genre", F.trim(F.col("genre")))
-        .where(F.col("genre") != "")
-        .distinct()
-    )
-
-    genre_view_users_df = (
-        events_df.where(
-            F.col("user_id").isNotNull()
-            & F.col("movie_id").isNotNull()
-            & (F.col("is_view") == 1)
-            & (F.to_date(F.col("event_ts")) == F.lit(calc_date).cast("date"))
-        )
-        .select(
-            F.col("user_id").cast("string").alias("user_id"),
-            F.col("movie_id").cast("bigint").alias("movie_id"),
-        )
-        .join(genre_mapping_df, on="movie_id", how="inner")
-        .groupBy("genre")
-        .agg(F.countDistinct("user_id").cast("bigint").alias("view_uv"))
-    )
-
-    genre_watched_users_df = (
-        events_df.where(
-            F.col("user_id").isNotNull()
-            & F.col("movie_id").isNotNull()
-            & (F.col("is_watched") == 1)
-            & (F.to_date(F.col("event_ts")) == F.lit(calc_date).cast("date"))
-        )
-        .select(
-            F.col("user_id").cast("string").alias("user_id"),
-            F.col("movie_id").cast("bigint").alias("movie_id"),
-        )
-        .join(genre_mapping_df, on="movie_id", how="inner")
-        .groupBy("genre")
-        .agg(F.countDistinct("user_id").cast("bigint").alias("watched_user_cnt"))
-    )
-
-    return genre_view_users_df.join(genre_watched_users_df, on="genre", how="full").select(
-        F.col("genre").alias("genre"),
-        F.coalesce(F.col("view_uv"), F.lit(0)).cast("bigint").alias("view_uv"),
-        F.coalesce(F.col("watched_user_cnt"), F.lit(0)).cast("bigint").alias("watched_user_cnt"),
-    )
-
-
-def build_genre_preference(movie_metrics_df: DataFrame, genre_user_metrics_df: DataFrame, top_n: int) -> DataFrame:
-    genre_metrics_df = (
-        build_genre_movie_metrics(movie_metrics_df)
-        .join(genre_user_metrics_df, on="genre", how="left")
-        .withColumn("view_uv", F.coalesce(F.col("view_uv"), F.lit(0)).cast("bigint"))
-        .withColumn("watched_user_cnt", F.coalesce(F.col("watched_user_cnt"), F.lit(0)).cast("bigint"))
-        .withColumn(
-            "watched_rate",
-            F.when(F.col("view_uv") > 0, F.round(F.col("watched_user_cnt") / F.col("view_uv"), 4)).otherwise(F.lit(0)),
-        )
-    )
+def build_genre_preference(movie_metrics_df: DataFrame, top_n: int) -> DataFrame:
+    genre_metrics_df = build_genre_movie_metrics(movie_metrics_df)
 
     rank_window = Window.orderBy(
-        F.col("hot_score_sum").desc(), F.col("watched_rate").desc(), F.col("view_pv").desc(), F.col("genre").asc()
+        F.col("hot_score_sum").desc(), F.col("view_pv").desc(), F.col("genre").asc()
     )
     ranked_df = genre_metrics_df.withColumn("rank_no", F.row_number().over(rank_window))
     if top_n > 0:
@@ -152,7 +82,6 @@ def run() -> None:
     source_table = dm_config["source_table"]
     target_table = dm_config["target_table"]
     sink_path = dm_config["sink_path"]
-    event_source_table = resolve_event_source_table(config, dm_config)
     metric_period_type = str(dm_config.get("metric_period_type", "DAILY")).strip().upper()
 
     top_n = args.top_n if args.top_n > 0 else int(dm_config.get("top_n", 100))
@@ -168,15 +97,13 @@ def run() -> None:
         movie_metrics_df = spark.table(source_table).where(F.col("dt") == calc_date)
         if "period_type" in movie_metrics_df.columns:
             movie_metrics_df = movie_metrics_df.where(F.col("period_type") == metric_period_type)
-        events_df = spark.table(event_source_table).where(F.col("dt") == calc_date)
 
-        genre_user_metrics_df = build_genre_user_metrics(events_df=events_df, calc_date=calc_date)
-        result_df = build_genre_preference(movie_metrics_df, genre_user_metrics_df, top_n)
+        result_df = build_genre_preference(movie_metrics_df, top_n)
         write_partition(result_df, target_table, sink_path, calc_date, spark)
 
         print(
             "DM genre preference build finished. "
-            f"source={source_table}, event_source={event_source_table}, target={target_table}, dt={calc_date}, top_n={top_n}"
+            f"source={source_table}, target={target_table}, dt={calc_date}, top_n={top_n}"
         )
     finally:
         spark.stop()

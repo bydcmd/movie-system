@@ -117,6 +117,7 @@ spark-warehouse/
 derby.log
 checkpoints/
 /spark/.venv/
+/spark/validate_test_res.txt
 /spark/conf/etl_config.json
 /spark/.python-version
 /backend/src/main/resources/application-dev.yml

@@ -69,6 +69,18 @@ Example:
 
 ```bash
 bash run_dm_pg_sync.sh 2026-02-25 conf/etl_config.json --sync-types hot_movies,user_retention
+
+## Validate results
+
+```bash
+bash validate_etl_results.sh 2026-02-25
+```
+
+Skip PostgreSQL checks when needed:
+
+```bash
+bash validate_etl_results.sh --calc-date 2026-02-25 --skip-pg
+```
 ```
 
 ## Legacy files

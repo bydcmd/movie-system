@@ -1,7 +1,6 @@
 package com.movie.backend.mapper;
 
 import com.movie.backend.dto.GenrePreferenceDTO;
-import com.movie.backend.dto.SimilarMovieDTO;
 import com.movie.backend.dto.UserRetentionDTO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -16,13 +15,6 @@ public interface AnalyticsMapper {
      */
     List<Long> selectHotMovieIds(@Param("period") String period,
                                   @Param("limit") int limit);
-
-    /**
-     * 查询相似电影
-     */
-    List<SimilarMovieDTO> selectSimilarMovies(@Param("movieId") Long movieId,
-                                               @Param("similarityType") Integer similarityType,
-                                               @Param("limit") int limit);
 
     /**
      * 查询用户留存分析数据（取最新 calc_date）

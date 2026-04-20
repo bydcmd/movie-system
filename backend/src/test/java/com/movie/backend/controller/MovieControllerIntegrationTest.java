@@ -279,42 +279,6 @@ public class MovieControllerIntegrationTest {
     }
 
     @Nested
-    @DisplayName("获取相似电影接口")
-    class GetSimilarMoviesTests {
-
-        @Test
-        @DisplayName("支持协同过滤相似类型查询")
-        void testGetSimilarMovies_SupportCollaborativeFilterType() throws Exception {
-            Movie similarMovie = new Movie();
-            similarMovie.setId(2L);
-            similarMovie.setName("星际穿越");
-            similarMovie.setReason("协同过滤相似，相似度 0.918");
-
-            when(analyticsService.getSimilarMovies(1L, 2, 5)).thenReturn(Collections.singletonList(similarMovie));
-
-            mockMvc.perform(get("/movies/1/similar")
-                            .param("type", "2")
-                            .param("limit", "5"))
-                    .andDo(print())
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.code").value(200))
-                    .andExpect(jsonPath("$.data[0].id").value(2))
-                    .andExpect(jsonPath("$.data[0].reason").value("协同过滤相似，相似度 0.918"));
-        }
-
-        @Test
-        @DisplayName("非法相似类型 - 应返回400参数错误")
-        void testGetSimilarMovies_InvalidType() throws Exception {
-            mockMvc.perform(get("/movies/1/similar")
-                            .param("type", "3"))
-                    .andDo(print())
-                    .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.code").value(400))
-                    .andExpect(jsonPath("$.message").value("无效的相似类型，请选择 1 或 2"));
-        }
-    }
-
-    @Nested
     @DisplayName("按类型筛选电影接口")
     class GetMoviesByGenreTests {
 

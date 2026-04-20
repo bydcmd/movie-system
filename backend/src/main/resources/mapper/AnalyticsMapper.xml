@@ -12,22 +12,6 @@
         LIMIT #{limit}
     </select>
 
-    <select id="selectSimilarMovies" resultType="com.movie.backend.dto.SimilarMovieDTO">
-        SELECT similar_movie_id AS similarMovieId,
-               similarity_score AS similarityScore,
-               similarity_type  AS similarityType
-        FROM stats_similar_movies
-        WHERE movie_id = #{movieId}
-        <if test="similarityType != null">
-            AND similarity_type = #{similarityType}
-        </if>
-        <if test="similarityType == null">
-            AND similarity_type IN (1, 2)
-        </if>
-        ORDER BY similarity_score DESC
-        LIMIT #{limit}
-    </select>
-
     <select id="selectUserRetention" resultType="com.movie.backend.dto.UserRetentionDTO">
         SELECT cohort_dt AS cohortDt,
                retention_day AS retentionDay,

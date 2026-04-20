@@ -5,7 +5,6 @@ import com.movie.backend.common.TrendPeriod;
 import com.movie.backend.dto.GenrePreferenceDTO;
 import com.movie.backend.dto.TrendingMovieDTO;
 import com.movie.backend.dto.UserRetentionDTO;
-import com.movie.backend.entity.Movie;
 import com.movie.backend.service.AnalyticsService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -36,24 +35,6 @@ public class AnalyticsController {
             @Min(value = 1, message = "返回数量至少为1")
             @Max(value = 100, message = "返回数量最多为100") int limit) {
         return Result.success(analyticsService.getTrendingMovies(period, limit));
-    }
-
-    @Deprecated
-    @Operation(operationId = "getSimilarMovies", summary = "相似电影（兼容入口）", description = "兼容历史路径。建议改用 /movies/{movieId}/similar。")
-    @GetMapping("/movies/{movieId}/similar")
-    public Result<List<Movie>> getSimilarMovies(
-            @Parameter(name = "movieId", description = "基准电影ID", required = true, example = "1292052")
-            @PathVariable @Min(value = 1, message = "电影ID必须大于0") Long movieId,
-            @Parameter(name = "type", description = "相似类型：1-内容相似，2-协同过滤", example = "1")
-            @RequestParam(required = false) Integer type,
-            @Parameter(name = "limit", description = "返回数量，默认10条，最多100条", example = "10")
-            @RequestParam(defaultValue = "10")
-            @Min(value = 1, message = "返回数量至少为1")
-            @Max(value = 100, message = "返回数量最多为100") int limit) {
-        if (type != null && type != 1 && type != 2) {
-            return Result.fail(400, "无效的相似类型，请选择 1 或 2");
-        }
-        return Result.success(analyticsService.getSimilarMovies(movieId, type, limit));
     }
 
     @Operation(operationId = "getUserRetention", summary = "获取用户留存分析", description = "返回用户留存数据，按群组日期和留存天数分组，数据来自离线计算后同步到 PostgreSQL 的统计表。")

@@ -21,7 +21,6 @@ declare module 'vue' {
     CommentList: typeof import('./src/components/comment/CommentList.vue')['default']
     LongReviewArticle: typeof import('./src/components/comment/LongReviewArticle.vue')['default']
     MovieCard: typeof import('./src/components/movie/MovieCard.vue')['default']
-    MovieDetailSimilarMovies: typeof import('./src/components/movie/MovieDetailSimilarMovies.vue')['default']
     MovieFavoriteFolderPickerModal: typeof import('./src/components/movie/MovieFavoriteFolderPickerModal.vue')['default']
     MoviePlaceholder: typeof import('./src/components/movie/MoviePlaceholder.vue')['default']
     NavBar: typeof import('./src/components/layout/NavBar.vue')['default']

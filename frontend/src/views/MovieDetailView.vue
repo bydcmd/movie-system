@@ -34,7 +34,6 @@ import CommentComposerModal from '@/components/comment/CommentComposerModal.vue'
 import CommentList from '@/components/comment/CommentList.vue'
 import NavBar from '@/components/layout/NavBar.vue'
 import MovieFavoriteFolderPickerModal from '@/components/movie/MovieFavoriteFolderPickerModal.vue'
-import MovieDetailSimilarMovies from '@/components/movie/MovieDetailSimilarMovies.vue'
 import MoviePlaceholder from '@/components/movie/MoviePlaceholder.vue'
 import ProfileFavoriteFolderFormModal from '@/components/profile/ProfileFavoriteFolderFormModal.vue'
 import {
@@ -57,10 +56,7 @@ import {
   useIsFavorited,
   useRemoveFavorite
 } from '@/api/endpoints/favorite-management/favorite-management'
-import {
-  useGetMovieDetail,
-  useGetSimilarMoviesByMovie
-} from '@/api/endpoints/movie-management/movie-management'
+import { useGetMovieDetail } from '@/api/endpoints/movie-management/movie-management'
 import { useGetUserRating, useUpdateRating } from '@/api/endpoints/rating-management/rating-management'
 import { useRecordViewHistory } from '@/api/endpoints/view-history-management/view-history-management'
 import {
@@ -86,7 +82,6 @@ const dialog = useDialog()
 const message = useMessage()
 const authStore = useAuthStore()
 const GUEST_COMMENT_LIMIT = 20
-const SIMILAR_MOVIES_DISPLAY_LIMIT = 20
 const movieId = computed(() => Number(route.params.id))
 const currentUserId = computed(() => authStore.user?.id ?? null)
 const isGuestMode = computed(() => !authStore.isAuthenticated)
@@ -103,8 +98,6 @@ const commentsTotal = ref(0)
 const commentsPage = ref(1)
 const commentsPageSize = ref(10)
 const commentsLoading = ref(false)
-const similarMovies = ref<Movie[]>([])
-const similarMoviesLoading = ref(false)
 const commentFilter = ref<CommentFilter>(route.query.filter === 'long' ? 'long' : 'short')
 const pendingLikeIds = ref<string[]>([])
 const pendingDeleteIds = ref<string[]>([])
@@ -160,9 +153,6 @@ const commentQueryParams = computed(() => ({
   size: commentsPageSize.value,
   type: commentTypeParam.value
 }))
-const similarMoviesQueryParams = computed(() => ({
-  limit: SIMILAR_MOVIES_DISPLAY_LIMIT
-}))
 const movieDetailQuery = useGetMovieDetail(movieId, {
   query: {
     enabled: false,
@@ -173,12 +163,6 @@ const movieDetailQuery = useGetMovieDetail(movieId, {
   }
 })
 const movieCommentsQuery = useGetMovieComments(movieId, commentQueryParams, {
-  query: {
-    enabled: false,
-    retry: false
-  }
-})
-const similarMoviesQuery = useGetSimilarMoviesByMovie(movieId, similarMoviesQueryParams, {
   query: {
     enabled: false,
     retry: false
@@ -295,28 +279,6 @@ const resolveRating = (value: unknown): number | null => {
 
 const normalizeMovieList = (value: unknown): Movie[] => {
   return Array.isArray(value) ? (value as Movie[]) : []
-}
-
-const normalizeSimilarMovieList = (value: unknown, targetMovieId: number): Movie[] => {
-  const result: Movie[] = []
-  const seenMovieIds = new Set<string>()
-  const targetMovieIdKey = String(targetMovieId)
-
-  for (const movie of normalizeMovieList(value)) {
-    const idKey = getMovieIdKey(getMovieId(movie))
-    if (!idKey || idKey === targetMovieIdKey || seenMovieIds.has(idKey)) {
-      continue
-    }
-
-    seenMovieIds.add(idKey)
-    result.push(movie)
-
-    if (result.length >= SIMILAR_MOVIES_DISPLAY_LIMIT) {
-      break
-    }
-  }
-
-  return result
 }
 
 const normalizeFavoriteFolderList = (value: unknown): FavoriteFolderVO[] => {
@@ -598,6 +560,8 @@ const navigateToPerson = (person: any) => {
   const id = getPersonId(person)
   if (id) {
     void router.push({ name: 'person-detail', params: { id } })
+  } else {
+    message.info('该影人暂无详细信息')
   }
 }
 
@@ -711,33 +675,6 @@ const loadFavoriteFolders = async () => {
     console.error('Failed to load favorite folders:', error)
     favoriteFolders.value = []
     message.error(extractErrorMessage(error) || '收藏夹加载失败，请稍后再试')
-  }
-}
-
-const fetchSimilarMovies = async () => {
-  if (!movieId.value) {
-    similarMovies.value = []
-    return
-  }
-
-  const targetMovieId = movieId.value
-  similarMoviesLoading.value = true
-  try {
-    const data = await refetchOrThrow(similarMoviesQuery)
-    if (targetMovieId !== movieId.value) {
-      return
-    }
-
-    similarMovies.value = normalizeSimilarMovieList(data, targetMovieId)
-  } catch (error) {
-    console.error('Failed to fetch similar movies:', error)
-    if (targetMovieId === movieId.value) {
-      similarMovies.value = []
-    }
-  } finally {
-    if (targetMovieId === movieId.value) {
-      similarMoviesLoading.value = false
-    }
   }
 }
 
@@ -1259,7 +1196,6 @@ const handleImageError = () => {
 
 onMounted(() => {
   fetchMovieDetail()
-  fetchSimilarMovies()
   fetchComments()
   fetchMyShortComment()
   fetchMyLongReview()
@@ -1301,7 +1237,6 @@ watch(
     currentFavoriteFolderIds.value = []
     favoriteFolderSubmitting.value = false
     fetchMovieDetail()
-    fetchSimilarMovies()
     fetchComments()
     fetchMyShortComment()
     fetchMyLongReview()
@@ -1493,7 +1428,8 @@ watch(
                         v-for="(director, idx) in movie.directors"
                         :key="getName(director) || idx"
                         size="medium"
-                        :class="{ 'cursor-pointer': getPersonId(director) }"
+                        class="transition-all duration-200"
+                        :class="{ 'cursor-pointer person-tag-interactive': getPersonId(director) }"
                         @click="navigateToPerson(director)"
                       >
                         {{ getName(director) }}
@@ -1509,7 +1445,8 @@ watch(
                         v-for="(writer, idx) in movie.writers"
                         :key="getName(writer) || idx"
                         size="medium"
-                        :class="{ 'cursor-pointer': getPersonId(writer) }"
+                        class="transition-all duration-200"
+                        :class="{ 'cursor-pointer person-tag-interactive': getPersonId(writer) }"
                         @click="navigateToPerson(writer)"
                       >
                         {{ getName(writer) }}
@@ -1525,7 +1462,8 @@ watch(
                         v-for="(actor, idx) in movie.actors.slice(0, 10)"
                         :key="getName(actor) || idx"
                         size="medium"
-                        :class="{ 'cursor-pointer': getPersonId(actor) }"
+                        class="transition-all duration-200"
+                        :class="{ 'cursor-pointer person-tag-interactive': getPersonId(actor) }"
                         @click="navigateToPerson(actor)"
                       >
                         {{ getName(actor) }}
@@ -1534,10 +1472,6 @@ watch(
                     </div>
                   </div>
                 </section>
-                <MovieDetailSimilarMovies
-                  :movies="similarMovies"
-                  :loading="similarMoviesLoading"
-                />
               </div>
               
 
@@ -1669,5 +1603,12 @@ watch(
 <style scoped>
 :deep(.n-divider--vertical) {
   background-color: rgb(51 65 85);
+}
+
+:deep(.n-tag.person-tag-interactive:hover) {
+  transform: scale(1.05);
+  background-color: #3b82f6 !important;
+  color: #fff !important;
+  border-color: #3b82f6 !important;
 }
 </style>

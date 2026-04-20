@@ -24,15 +24,6 @@ public interface AnalyticsService {
     List<TrendingMovieDTO> getTrendingMovies(TrendPeriod period, int limit);
 
     /**
-     * 获取相似电影推荐
-     *
-     * @param movieId 基准电影ID
-     * @param similarityType 相似类型，可为空（1-内容相似,2-协同过滤）
-     * @param limit 返回数量
-     */
-    List<Movie> getSimilarMovies(Long movieId, Integer similarityType, int limit);
-
-    /**
      * 获取用户留存分析数据
      *
      * @param limit 返回数量

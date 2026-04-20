@@ -2,7 +2,6 @@ package com.movie.backend.controller;
 
 import com.movie.backend.common.TrendPeriod;
 import com.movie.backend.dto.TrendingMovieDTO;
-import com.movie.backend.entity.Movie;
 import com.movie.backend.service.AnalyticsService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -11,8 +10,6 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-
-import java.util.List;
 
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -53,14 +50,4 @@ class AnalyticsControllerIntegrationTest {
                 .andExpect(jsonPath("$.data[0].rank").value(1));
     }
 
-    @Test
-    @DisplayName("兼容相似电影接口拒绝已移除的相似类型")
-    void getSimilarMovies_RejectsRemovedSimilarityType() throws Exception {
-        mockMvc.perform(get("/analytics/movies/1/similar")
-                        .param("type", "3")
-                        .param("limit", "5"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value(400))
-                .andExpect(jsonPath("$.message").value("无效的相似类型，请选择 1 或 2"));
-    }
 }

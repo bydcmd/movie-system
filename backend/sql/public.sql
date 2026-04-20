@@ -12,7 +12,7 @@
  Target Server Version : 170007 (170007)
  File Encoding         : 65001
 
- Date: 14/04/2026 14:10:59
+ Date: 20/04/2026 14:02:09
 */
 
 
@@ -187,17 +187,6 @@ CACHE 1;
 -- ----------------------------
 DROP SEQUENCE IF EXISTS "public"."stats_search_keyword_insights_1d_id_seq";
 CREATE SEQUENCE "public"."stats_search_keyword_insights_1d_id_seq" 
-INCREMENT 1
-MINVALUE  1
-MAXVALUE 9223372036854775807
-START 1
-CACHE 1;
-
--- ----------------------------
--- Sequence structure for stats_similar_movies_id_seq
--- ----------------------------
-DROP SEQUENCE IF EXISTS "public"."stats_similar_movies_id_seq";
-CREATE SEQUENCE "public"."stats_similar_movies_id_seq" 
 INCREMENT 1
 MINVALUE  1
 MAXVALUE 9223372036854775807
@@ -592,25 +581,7 @@ COMMENT ON COLUMN "public"."stats_hot_movies"."movie_id" IS '电影ID (关联 mo
 COMMENT ON COLUMN "public"."stats_hot_movies"."period_type" IS '统计周期: DAILY(今日), WEEKLY(本周), MONTHLY(本月), TOTAL(总榜)';
 COMMENT ON COLUMN "public"."stats_hot_movies"."hot_score" IS '热度分值 (加权计算后的结果)';
 COMMENT ON COLUMN "public"."stats_hot_movies"."calc_date" IS '计算日期 (例如 2023-11-11)';
-COMMENT ON TABLE "public"."stats_hot_movies" IS '电影热度统计表(离线计算结果)';
-
--- ----------------------------
--- Table structure for stats_similar_movies
--- ----------------------------
-DROP TABLE IF EXISTS "public"."stats_similar_movies";
-CREATE TABLE "public"."stats_similar_movies" (
-  "id" int8 NOT NULL DEFAULT nextval('stats_similar_movies_id_seq'::regclass),
-  "movie_id" int8 NOT NULL,
-  "similar_movie_id" int8 NOT NULL,
-  "similarity_score" float8 NOT NULL,
-  "similarity_type" int2 DEFAULT 1
-)
-;
-COMMENT ON COLUMN "public"."stats_similar_movies"."movie_id" IS '基准电影ID';
-COMMENT ON COLUMN "public"."stats_similar_movies"."similar_movie_id" IS '相似电影ID';
-COMMENT ON COLUMN "public"."stats_similar_movies"."similarity_score" IS '相似度分值';
-COMMENT ON COLUMN "public"."stats_similar_movies"."similarity_type" IS '类型: 1-内容相似(标签/演员), 2-协同过滤相似(Item-based)';
-COMMENT ON TABLE "public"."stats_similar_movies" IS '电影相似度关联表(用于详情页推荐)';
+COMMENT ON TABLE "public"."stats_hot_movies" IS '电影热度统计表(Spark离线计算结果)';
 
 -- ----------------------------
 -- Table structure for stats_user_retention
@@ -1147,14 +1118,14 @@ CREATE FUNCTION "public"."word_similarity_op"(text, text)
 -- ----------------------------
 ALTER SEQUENCE "public"."comment_likes_id_seq"
 OWNED BY "public"."comment_likes"."id";
-SELECT setval('"public"."comment_likes_id_seq"', 1152850210472950329, true);
+SELECT setval('"public"."comment_likes_id_seq"', 1152850210472952829, true);
 
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
 ALTER SEQUENCE "public"."comments_comment_id_seq"
 OWNED BY "public"."comments"."comment_id";
-SELECT setval('"public"."comments_comment_id_seq"', 1152730379458285631, true);
+SELECT setval('"public"."comments_comment_id_seq"', 1152730379458287132, true);
 
 -- ----------------------------
 -- Alter sequences owned by
@@ -1166,7 +1137,7 @@ SELECT setval('"public"."event_outbox_id_seq"', 85, true);
 -- ----------------------------
 ALTER SEQUENCE "public"."favorite_folders_id_seq"
 OWNED BY "public"."favorite_folders"."id";
-SELECT setval('"public"."favorite_folders_id_seq"', 1152491045462596108, true);
+SELECT setval('"public"."favorite_folders_id_seq"', 1152491045462596563, true);
 
 -- ----------------------------
 -- Alter sequences owned by
@@ -1220,14 +1191,14 @@ SELECT setval('"public"."regions_id_seq"', 355, true);
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
-SELECT setval('"public"."stats_genre_preference_1d_id_seq"', 218, true);
+SELECT setval('"public"."stats_genre_preference_1d_id_seq"', 335, true);
 
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
 ALTER SEQUENCE "public"."stats_hot_movies_id_seq"
 OWNED BY "public"."stats_hot_movies"."id";
-SELECT setval('"public"."stats_hot_movies_id_seq"', 4682, true);
+SELECT setval('"public"."stats_hot_movies_id_seq"', 5882, true);
 
 -- ----------------------------
 -- Alter sequences owned by
@@ -1238,13 +1209,6 @@ SELECT setval('"public"."stats_search_funnel_1d_id_seq"', 8, true);
 -- Alter sequences owned by
 -- ----------------------------
 SELECT setval('"public"."stats_search_keyword_insights_1d_id_seq"', 523, true);
-
--- ----------------------------
--- Alter sequences owned by
--- ----------------------------
-ALTER SEQUENCE "public"."stats_similar_movies_id_seq"
-OWNED BY "public"."stats_similar_movies"."id";
-SELECT setval('"public"."stats_similar_movies_id_seq"', 2669411, true);
 
 -- ----------------------------
 -- Alter sequences owned by
@@ -1264,14 +1228,14 @@ SELECT setval('"public"."stats_user_recs_id_seq"', 1, false);
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
-SELECT setval('"public"."stats_user_retention_id_seq"', 93, true);
+SELECT setval('"public"."stats_user_retention_id_seq"', 135, true);
 
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
 ALTER SEQUENCE "public"."view_history_history_id_seq"
 OWNED BY "public"."view_history"."history_id";
-SELECT setval('"public"."view_history_history_id_seq"', 1152751459502767564, true);
+SELECT setval('"public"."view_history_history_id_seq"', 1152751459502775597, true);
 
 -- ----------------------------
 -- Indexes structure for table comment_likes
@@ -1588,24 +1552,6 @@ ALTER TABLE "public"."stats_hot_movies" ADD CONSTRAINT "uk_movie_period_date" UN
 -- Primary Key structure for table stats_hot_movies
 -- ----------------------------
 ALTER TABLE "public"."stats_hot_movies" ADD CONSTRAINT "stats_hot_movies_pkey" PRIMARY KEY ("id");
-
--- ----------------------------
--- Indexes structure for table stats_similar_movies
--- ----------------------------
-CREATE INDEX "idx_similar_movies_score" ON "public"."stats_similar_movies" USING btree (
-  "movie_id" "pg_catalog"."int8_ops" ASC NULLS LAST,
-  "similarity_score" "pg_catalog"."float8_ops" DESC NULLS FIRST
-);
-
--- ----------------------------
--- Uniques structure for table stats_similar_movies
--- ----------------------------
-ALTER TABLE "public"."stats_similar_movies" ADD CONSTRAINT "uk_movie_pair" UNIQUE ("movie_id", "similar_movie_id", "similarity_type");
-
--- ----------------------------
--- Primary Key structure for table stats_similar_movies
--- ----------------------------
-ALTER TABLE "public"."stats_similar_movies" ADD CONSTRAINT "stats_similar_movies_pkey" PRIMARY KEY ("id");
 
 -- ----------------------------
 -- Indexes structure for table stats_user_retention
