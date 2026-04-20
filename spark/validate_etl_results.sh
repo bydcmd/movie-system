@@ -109,7 +109,7 @@ check_hive_count() {
 check_dw_event_fact() {
   local total_count
   local invalid_count
-  local event_type_output
+  local event_flag_output
 
   total_count="$(hive_scalar "SELECT COUNT(*) FROM dw.dw_user_event_fact_di WHERE dt='${CALC_DATE}';")"
   if [[ -z "${total_count}" || ! "${total_count}" =~ ^[0-9]+$ || "${total_count}" == "0" ]]; then
@@ -117,18 +117,18 @@ check_dw_event_fact() {
     return 1
   fi
 
-  event_type_output="$(hive -S -e "SELECT event_type, COUNT(*) FROM dw.dw_user_event_fact_di WHERE dt='${CALC_DATE}' GROUP BY event_type ORDER BY event_type;" | tr -d '\r')"
-  if [[ -z "${event_type_output}" ]]; then
-    echo "✗ DW Event Fact integrity: no event_type distribution for dt=${CALC_DATE}"
+  event_flag_output="$(hive -S -e "SELECT 'view', SUM(CASE WHEN is_view = 1 THEN 1 ELSE 0 END) FROM dw.dw_user_event_fact_di WHERE dt='${CALC_DATE}' UNION ALL SELECT 'rating', SUM(CASE WHEN is_rating = 1 THEN 1 ELSE 0 END) FROM dw.dw_user_event_fact_di WHERE dt='${CALC_DATE}' UNION ALL SELECT 'comment', SUM(CASE WHEN is_comment = 1 THEN 1 ELSE 0 END) FROM dw.dw_user_event_fact_di WHERE dt='${CALC_DATE}' UNION ALL SELECT 'comment_like', SUM(CASE WHEN is_comment_like = 1 THEN 1 ELSE 0 END) FROM dw.dw_user_event_fact_di WHERE dt='${CALC_DATE}' UNION ALL SELECT 'favorite', SUM(CASE WHEN is_favorite = 1 THEN 1 ELSE 0 END) FROM dw.dw_user_event_fact_di WHERE dt='${CALC_DATE}' UNION ALL SELECT 'watched', SUM(CASE WHEN is_watched = 1 THEN 1 ELSE 0 END) FROM dw.dw_user_event_fact_di WHERE dt='${CALC_DATE}' UNION ALL SELECT 'register', SUM(CASE WHEN is_register = 1 THEN 1 ELSE 0 END) FROM dw.dw_user_event_fact_di WHERE dt='${CALC_DATE}';" | tr -d '\r')"
+  if [[ -z "${event_flag_output}" ]]; then
+    echo "✗ DW Event Fact integrity: no event flag distribution for dt=${CALC_DATE}"
     return 1
   fi
 
-  echo "✓ DW Event Fact event types:"
+  echo "✓ DW Event Fact event flags:"
   while IFS= read -r line; do
     [[ -n "${line}" ]] && echo "  - ${line}"
-  done <<< "${event_type_output}"
+  done <<< "${event_flag_output}"
 
-  invalid_count="$(hive_scalar "SELECT COUNT(*) FROM dw.dw_user_event_fact_di WHERE dt='${CALC_DATE}' AND (event_id IS NULL OR TRIM(event_id) = '' OR event_type IS NULL OR TRIM(event_type) = '' OR event_ts IS NULL OR ((is_view = 1 OR is_rating = 1 OR is_comment = 1 OR is_comment_like = 1 OR is_favorite = 1 OR is_watched = 1) AND movie_id IS NULL) OR (is_comment_like = 1 AND comment_id IS NULL));")"
+  invalid_count="$(hive_scalar "SELECT COUNT(*) FROM dw.dw_user_event_fact_di WHERE dt='${CALC_DATE}' AND (event_ts IS NULL OR user_id IS NULL OR TRIM(user_id) = '' OR ((is_view = 1 OR is_rating = 1 OR is_comment = 1 OR is_comment_like = 1 OR is_favorite = 1 OR is_watched = 1) AND movie_id IS NULL));")"
   if [[ -z "${invalid_count}" ]]; then
     echo "✗ DW Event Fact integrity: invalid-row check returned no result"
     return 1
@@ -171,13 +171,13 @@ check_dm_hot_integrity() {
   local invalid_count
   local top_output
 
-  invalid_count="$(hive_scalar "SELECT COUNT(*) FROM dm.dm_hot_movies WHERE dt='${CALC_DATE}' AND (movie_id IS NULL OR movie_name IS NULL OR TRIM(movie_name) = '' OR period_type IS NULL OR TRIM(period_type) = '' OR rank_no <= 0 OR hot_score IS NULL OR hot_score < 0 OR view_pv < 0 OR view_uv < 0 OR rating_cnt < 0 OR comment_cnt < 0 OR comment_like_cnt < 0 OR favorite_add_cnt < 0 OR favorite_remove_cnt < 0 OR watched_cnt < 0 OR active_user_cnt < 0);")"
+  invalid_count="$(hive_scalar "SELECT COUNT(*) FROM dm.dm_hot_movies WHERE dt='${CALC_DATE}' AND (movie_id IS NULL OR period_type IS NULL OR TRIM(period_type) = '' OR hot_score IS NULL OR hot_score < 0 OR view_pv < 0 OR rating_cnt < 0 OR watched_cnt < 0);")"
   if [[ -z "${invalid_count}" ]]; then
     echo "✗ DM Hot Movies integrity: invalid-row check returned no result"
     return 1
   fi
 
-  top_output="$(hive -S -e "SELECT period_type, rank_no, movie_name, hot_score FROM dm.dm_hot_movies WHERE dt='${CALC_DATE}' ORDER BY period_type ASC, rank_no ASC LIMIT 8;" | tr -d '\r')"
+  top_output="$(hive -S -e "SELECT period_type, movie_id, hot_score FROM dm.dm_hot_movies WHERE dt='${CALC_DATE}' ORDER BY period_type ASC, hot_score DESC, movie_id ASC LIMIT 8;" | tr -d '\r')"
   if [[ -n "${top_output}" ]]; then
     echo "✓ DM Hot Movies sample rows:"
     while IFS= read -r line; do

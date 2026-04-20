@@ -7,6 +7,8 @@ Spark now targets the compact 4-table Hive warehouse:
 - `dm.dm_user_retention`
 - `dm.dm_genre_preference_1d`
 
+The compact event fact table retains only the fields consumed by the active DM pipeline.
+
 The old ODS/DWD/DWS/ADS layered flow and ItemCF recommendation job are no longer part of the default pipeline.
 
 ## Prepare config
@@ -37,7 +39,7 @@ Pipeline order:
 1. Build `dw.dw_user_event_fact_di` directly from PostgreSQL source tables.
 2. Build `dm.dm_hot_movies` from the compact event fact table.
 3. Build `dm.dm_user_retention` from the compact event fact table.
-4. Build `dm.dm_genre_preference_1d` from `dm.dm_hot_movies` and the compact event fact table.
+4. Build `dm.dm_genre_preference_1d` from `dm.dm_hot_movies` and the compact event fact table, with genre-level `view_uv` counted from distinct users in event facts.
 5. Sync the three DM result tables back to PostgreSQL statistics tables.
 
 Optional source data generation helper:
