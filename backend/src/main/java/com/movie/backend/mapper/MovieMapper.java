@@ -61,11 +61,6 @@ public interface MovieMapper {
     List<Movie> selectList(@Param("keyword") String keyword);
 
     /**
-     * Get Recommended Movies (Sorted by score)
-     */
-    List<Movie> selectRecommended(@Param("limit") int limit);
-
-    /**
      * Get Movies by Genre
      */
     List<Movie> selectByGenre(@Param("genre") String genre);

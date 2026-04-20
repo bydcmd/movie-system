@@ -296,14 +296,6 @@
         ORDER BY douban_score DESC, year DESC
     </select>
 
-    <select id="selectRecommended" resultMap="BaseResultMap">
-        SELECT movie_id, name, cover, douban_score, douban_votes, year
-        FROM movies
-        WHERE douban_score IS NOT NULL
-        ORDER BY douban_score DESC, douban_votes DESC
-        LIMIT #{limit}
-    </select>
-
     <select id="selectByGenre" resultMap="BaseResultMap">
         SELECT movie_id, name, cover, douban_score, douban_votes, year
         FROM movies m

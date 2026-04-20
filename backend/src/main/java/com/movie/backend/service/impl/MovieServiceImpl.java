@@ -144,11 +144,6 @@ public class MovieServiceImpl implements MovieService {
     }
 
     @Override
-    public List<Movie> getRecommendedMovies(int limit) {
-        return movieMapper.selectRecommended(limit);
-    }
-
-    @Override
     @SuppressWarnings("resource")
     public PageInfo<Movie> getMoviesByGenre(String genre, int page, int size) {
         PageHelper.startPage(page, size);

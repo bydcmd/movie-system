@@ -26,11 +26,6 @@ public interface MovieService {
     List<Movie> getHotMovies(int limit);
 
     /**
-     * Get Recommended Movies (By score)
-     */
-    List<Movie> getRecommendedMovies(int limit);
-
-    /**
      * Get Movies by Genre (Paged)
      */
     PageInfo<Movie> getMoviesByGenre(String genre, int page, int size);
