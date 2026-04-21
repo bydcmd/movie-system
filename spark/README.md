@@ -7,7 +7,7 @@ Spark now targets the compact 4-table Hive warehouse:
 - `dm.dm_user_retention`
 - `dm.dm_genre_preference_1d`
 
-The compact event fact table retains only the fields consumed by the active DM pipeline.
+The compact event fact table retains only the fields consumed by the active DM pipeline and excludes favorite-folder management actions.
 
 The old ODS/DWD/DWS/ADS layered flow and ItemCF recommendation job are no longer part of the default pipeline.
 
@@ -83,15 +83,4 @@ Skip PostgreSQL checks when needed:
 ```bash
 bash validate_etl_results.sh --calc-date 2026-02-25 --skip-pg
 ```
-```
-
-## Legacy files
-
-Some legacy scripts remain for reference during migration, including ODS sync, DWD snapshots, and DWS interaction aggregation. They are not called by `etl.sh` and still reference the old layered Hive tables.
-They now live under `spark/legacy/`.
-
-After compact ETL results are verified, drop old Hive tables:
-
-```bash
-hive -f hive/compact/drop_legacy_tables.hql
 ```

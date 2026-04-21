@@ -5,9 +5,9 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  bash run_dw_user_event_fact.sh [calc-date] [config-path] [snapshot-date]
+  bash run_dw_user_event_fact.sh [calc-date] [config-path]
   bash run_dw_user_event_fact.sh [config-path]
-  bash run_dw_user_event_fact.sh --calc-date YYYY-MM-DD --config conf/etl_config.json --snapshot-date YYYY-MM-DD
+  bash run_dw_user_event_fact.sh --calc-date YYYY-MM-DD --config conf/etl_config.json
 
 Description:
   Build `dw.dw_user_event_fact_di` in offline T+1 batch mode from PostgreSQL source tables.
@@ -17,12 +17,10 @@ Examples:
   bash run_dw_user_event_fact.sh 2026-03-25
   bash run_dw_user_event_fact.sh conf/etl_config.dev.json
   bash run_dw_user_event_fact.sh 2026-03-25 conf/etl_config.dev.json
-  bash run_dw_user_event_fact.sh 2026-03-25 conf/etl_config.dev.json 2026-03-24
 
 Arguments:
   calc-date      Business date to build, default: today (YYYY-MM-DD)
   config-path    Config file path, default: conf/etl_config.json
-  snapshot-date  Legacy Hive source partition date; ignored when dw_event_fact.source_mode=jdbc
 EOF
 }
 
@@ -31,7 +29,6 @@ cd "${SCRIPT_DIR}"
 
 CALC_DATE="$(date +%F)"
 CONFIG_PATH="conf/etl_config.json"
-SNAPSHOT_DATE=""
 POSITIONAL_ARGS=()
 
 is_date() {
@@ -50,10 +47,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --config)
       CONFIG_PATH="${2:-}"
-      shift 2
-      ;;
-    --snapshot-date)
-      SNAPSHOT_DATE="${2:-}"
       shift 2
       ;;
     *)
@@ -77,12 +70,9 @@ case "${#POSITIONAL_ARGS[@]}" in
     CALC_DATE="${POSITIONAL_ARGS[0]}"
     CONFIG_PATH="${POSITIONAL_ARGS[1]}"
     ;;
-  3)
-    CALC_DATE="${POSITIONAL_ARGS[0]}"
-    CONFIG_PATH="${POSITIONAL_ARGS[1]}"
-    SNAPSHOT_DATE="${POSITIONAL_ARGS[2]}"
-    ;;
   *)
+    usage
+    exit 1
     usage
     exit 1
     ;;
@@ -128,10 +118,6 @@ CMD=(
   --config "${CONFIG_PATH}"
   --calc-date "${CALC_DATE}"
 )
-
-if [[ -n "${SNAPSHOT_DATE}" ]]; then
-  CMD+=(--snapshot-date "${SNAPSHOT_DATE}")
-fi
 
 printf 'Running command:\n%s\n' "${CMD[*]}"
 "${CMD[@]}"

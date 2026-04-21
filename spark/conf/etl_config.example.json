@@ -51,7 +51,6 @@
       "users": "public.users",
       "movies": "public.movies",
       "comments": "public.comments",
-      "favorite_folders": "public.favorite_folders",
       "ratings": "public.ratings",
       "comment_likes": "public.comment_likes",
       "favorites": "public.favorites",
