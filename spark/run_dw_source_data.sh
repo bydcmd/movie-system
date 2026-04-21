@@ -27,7 +27,6 @@ Generator options:
   --movie-limit N
   --user-target N
   --new-user-target N
-  --folder-target N
   --view-target N
   --rating-target N
   --comment-target N
@@ -76,7 +75,7 @@ while [[ $# -gt 0 ]]; do
       CONFIG_PATH="${2:-}"
       shift 2
       ;;
-    --movie-limit|--user-target|--new-user-target|--folder-target|--view-target|--rating-target|--comment-target|--comment-like-target|--favorite-target|--watched-target|--lookback-days|--seed|--write-batch-size)
+    --movie-limit|--user-target|--new-user-target|--view-target|--rating-target|--comment-target|--comment-like-target|--favorite-target|--watched-target|--lookback-days|--seed|--write-batch-size)
       append_option_with_value "$1" "${2:-}"
       shift 2
       ;;

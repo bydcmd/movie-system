@@ -77,10 +77,10 @@ def build_hot_score_expr(weights: dict[str, Any]) -> Column:
         F.col("view_pv") * F.lit(float(weights.get("view_pv", 1.0)))
         + F.col("view_uv") * F.lit(float(weights.get("view_uv", 1.5)))
         + F.col("rating_cnt") * F.lit(float(weights.get("rating_cnt", 2.0)))
-        + F.col("comment_cnt") * F.lit(float(weights.get("comment_cnt", 2.0)))
+        + F.col("comment_cnt") * F.lit(float(weights.get("comment_cnt", 2.5)))
         + F.col("comment_like_cnt") * F.lit(float(weights.get("comment_like_cnt", 0.8)))
         + F.col("favorite_add_cnt") * F.lit(float(weights.get("favorite_add_cnt", 1.2)))
-        + F.col("watched_cnt") * F.lit(float(weights.get("watched_cnt", 2.5)))
+        + F.col("watched_cnt") * F.lit(float(weights.get("watched_cnt", 1.0)))
         + F.col("active_user_cnt") * F.lit(float(weights.get("active_user_cnt", 1.0)))
     )
 

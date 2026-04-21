@@ -578,7 +578,7 @@ CREATE TABLE "public"."stats_hot_movies" (
 ;
 COMMENT ON COLUMN "public"."stats_hot_movies"."id" IS '主键ID';
 COMMENT ON COLUMN "public"."stats_hot_movies"."movie_id" IS '电影ID (关联 movie 表)';
-COMMENT ON COLUMN "public"."stats_hot_movies"."period_type" IS '统计周期: DAILY(今日), WEEKLY(本周), MONTHLY(本月), TOTAL(总榜)';
+COMMENT ON COLUMN "public"."stats_hot_movies"."period_type" IS '统计周期: DAILY(今日), WEEKLY(近7天), MONTHLY(近30天), TOTAL(总榜)';
 COMMENT ON COLUMN "public"."stats_hot_movies"."hot_score" IS '热度分值 (加权计算后的结果)';
 COMMENT ON COLUMN "public"."stats_hot_movies"."calc_date" IS '计算日期 (例如 2023-11-11)';
 COMMENT ON TABLE "public"."stats_hot_movies" IS '电影热度统计表(Spark离线计算结果)';
