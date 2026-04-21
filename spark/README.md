@@ -9,8 +9,6 @@ Spark now targets the compact 4-table Hive warehouse:
 
 The compact event fact table retains only the fields consumed by the active DM pipeline and excludes favorite-folder management actions.
 
-The old ODS/DWD/DWS/ADS layered flow and ItemCF recommendation job are no longer part of the default pipeline.
-
 ## Prepare config
 
 ```bash
@@ -71,6 +69,7 @@ Example:
 
 ```bash
 bash run_dm_pg_sync.sh 2026-02-25 conf/etl_config.json --sync-types hot_movies,user_retention
+```
 
 ## Validate results
 
@@ -82,5 +81,4 @@ Skip PostgreSQL checks when needed:
 
 ```bash
 bash validate_etl_results.sh --calc-date 2026-02-25 --skip-pg
-```
 ```
